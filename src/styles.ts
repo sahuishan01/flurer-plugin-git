@@ -16,7 +16,7 @@ export const S = {
   statusMsg: { padding: "8px 12px", "border-radius": "6px", "font-size": "13px", "margin-bottom": "8px" },
   tab: { display: "flex", "align-items": "center", gap: "6px", padding: "8px 14px", "font-size": "12px", "font-weight": 500, cursor: "pointer", color: "var(--text-muted, #888)", "border-bottom": "2px solid transparent", "white-space": "nowrap" as const, transition: "color 0.15s, border-color 0.15s" },
   tabActive: { color: "var(--text-color)", "border-bottom-color": "var(--accent-color, #f59e0b)" },
-  tabBar: { display: "flex", "gap": "0", "border-bottom": "1px solid var(--border-strong)", overflow: "auto", "flex-shrink": 0 },
+  tabBar: { display: "flex", gap: "0", "border-bottom": "1px solid var(--border-strong)", overflow: "auto", "flex-shrink": 0, background: "rgba(255,255,255,0.02)" },
   input: { padding: "8px 12px", "border-radius": "6px", border: "1px solid var(--border-strong)", background: "var(--bg-color, #1a1a2e)", color: "var(--text-color)", "font-size": "13px", "box-sizing": "border-box" as const },
   select: { padding: "8px 12px", "border-radius": "6px", border: "1px solid var(--border-strong)", background: "var(--bg-color, #1a1a2e)", color: "var(--text-color)", "font-size": "13px" },
   diffAdded: { background: "rgba(34,197,94,0.06)", color: "#4ade80", "border-left": "3px solid #4ade80" },

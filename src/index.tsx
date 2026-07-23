@@ -174,7 +174,7 @@ window.registerPlugin({
   id: "git",
   name: "Git Operations",
   description: "Full-featured git panel with graph, branches, diff, stash, worktrees, and more.",
-  version: "0.3.0",
+  version: "0.3.1",
   author: "Algosculptor",
   viewRailButton: (props: any) => (
     <button
