@@ -1,5 +1,6 @@
 import { Show, type JSX } from "solid-js";
 import { useGit } from "../../context";
+import { surfaceBg } from "../../utils";
 import { S } from "../../styles";
 
 export function GitIcon(props: { size?: number }) {
@@ -111,7 +112,7 @@ export function CloseIcon(props: { size?: number }) {
 
 export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: () => void; children: JSX.Element; style?: any }) {
   const base = { ...S.btn, ...(props.size === "sm" ? { padding: "4px 10px", "font-size": "11px" } : {}) };
-  const variant = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : S.btnSecondary;
+  const variant = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : { background: surfaceBg(0.06), color: "var(--text-color)" };
   return (
     <button
       type="button"
@@ -125,7 +126,7 @@ export function Button(props: { variant?: "primary" | "secondary" | "danger"; si
 }
 
 export function Card(props: { children: JSX.Element; style?: any }) {
-  return <div style={{ ...S.card, ...props.style }}>{props.children}</div>;
+  return <div style={{ background: surfaceBg(0.04), border: "1px solid var(--border-strong)", "border-radius": "8px", padding: "16px", "margin-bottom": "12px", ...props.style }}>{props.children}</div>;
 }
 
 export function Badge(props: { variant: "staged" | "unstaged" | "untracked"; count: number }) {
@@ -135,15 +136,15 @@ export function Badge(props: { variant: "staged" | "unstaged" | "untracked"; cou
 
 export function TabBar(props: { tabs: { id: string; label: string; count?: number }[]; activeTab: string; onSelect: (id: string) => void }) {
   return (
-    <div style={S.tabBar}>
+    <div style={{ ...S.tabBar, background: surfaceBg(0.02) }}>
       {props.tabs.map((tab) => (
         <div
-          style={{ ...S.tab, ...(props.activeTab === tab.id ? S.tabActive : {}) }}
+          style={{ ...S.tab, ...(props.activeTab === tab.id ? { ...S.tabActive, background: surfaceBg(0.05) } : { background: surfaceBg(0.02) }) }}
           onClick={() => props.onSelect(tab.id)}
         >
           {tab.label}
           <Show when={tab.count !== undefined && tab.count > 0}>
-            <span style={{ ...S.badge, background: "rgba(255,255,255,0.1)", color: "var(--text-muted, #888)", padding: "1px 6px", "font-size": "10px" }}>{tab.count}</span>
+            <span style={{ ...S.badge, background: surfaceBg(0.1), color: "var(--text-muted, #888)", padding: "1px 6px", "font-size": "10px" }}>{tab.count}</span>
           </Show>
         </div>
       ))}

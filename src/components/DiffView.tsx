@@ -1,5 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { useGit } from "../context";
+import { surfaceBg } from "../utils";
 import { Card, EmptyState, Button } from "./shared";
 import { S } from "../styles";
 
@@ -76,7 +77,7 @@ export function DiffView() {
                 newLine = hunk.new_start;
                 return (
                   <div>
-                    <div style={S.diffHunkHeader}>
+                    <div style={{ ...S.diffHunkHeader, background: surfaceBg(0.05) }}>
                       @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
                     </div>
                     <For each={hunk.lines}>

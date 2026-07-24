@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { getRecentRepos, removeRecentRepo, formatTimestamp } from "../utils";
+import { getRecentRepos, removeRecentRepo, formatTimestamp, surfaceBg } from "../utils";
 import { GitIcon, FolderIcon, TrashIcon, Button } from "./shared";
 import { S } from "../styles";
 
@@ -46,7 +46,7 @@ export function DashboardView(props: DashboardViewProps) {
               <For each={repos()}>
                 {(repo) => (
                   <div
-                    style={{ ...S.repoCard, position: "relative" }}
+                    style={{ ...S.repoCard, background: surfaceBg(0.04), position: "relative" }}
                     onClick={() => handleOpen(repo.path)}
                   >
                     <FolderIcon size={20} />
@@ -77,7 +77,7 @@ export function DashboardView(props: DashboardViewProps) {
           </div>
         </Show>
 
-        <div style={S.card}>
+        <div style={{ ...S.card, background: surfaceBg(0.04) }}>
           <Show when={!showInput()}>
             <Button variant="primary" onClick={() => setShowInput(true)} style={{ width: "100%", padding: "10px", display: "flex", "align-items": "center", "justify-content": "center", gap: "8px" }}>
               <FolderIcon size={16} />

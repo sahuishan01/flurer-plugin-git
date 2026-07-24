@@ -3,6 +3,37 @@ import type { RecentRepo } from "./types";
 const RECENT_REPOS_KEY = "flurer-git-recent-repos";
 const MAX_RECENT_REPOS = 20;
 
+let _isLight: boolean | null = null;
+
+/** Detect whether Flurer's background is light or dark. */
+export function isLightBg(): boolean {
+  if (_isLight !== null) return _isLight;
+  try {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg-color").trim();
+    if (bg) {
+      const match = bg.match(/^#([0-9a-f]{6})$/i);
+      if (match) {
+        const r = parseInt(match[1].slice(0, 2), 16);
+        const g = parseInt(match[1].slice(2, 4), 16);
+        const b = parseInt(match[1].slice(4, 6), 16);
+        // Perceived luminance (sRGB coefficients)
+        _isLight = 0.299 * r + 0.587 * g + 0.114 * b > 128;
+        return _isLight;
+      }
+    }
+  } catch {}
+  // Fallback: assume dark (Flurer default)
+  _isLight = false;
+  return false;
+}
+
+/** Get surface background: white-tinted for dark, black-tinted for light. */
+export function surfaceBg(opacity = 0.04): string {
+  return isLightBg()
+    ? `rgba(0,0,0,${opacity})`
+    : `rgba(255,255,255,${opacity})`;
+}
+
 export function getRecentRepos(): RecentRepo[] {
   try {
     const raw = localStorage.getItem(RECENT_REPOS_KEY);
