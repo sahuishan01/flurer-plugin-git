@@ -283,7 +283,7 @@ export async function gitDiffCommit(repoPath: string, commitHash: string, filePa
 export async function gitGraph(repoPath: string, maxCount: number): Promise<GitGraphEntry[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, "--format=%H|%P|%s|%an|%at|%D");
+    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, "--topo-order", "--format=%H|%P|%s|%an|%at|%D");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, parentsStr, message, author, timestamp, refsStr] = line.split("|");
       const parents = parentsStr ? parentsStr.split(" ") : [];
