@@ -39,10 +39,16 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
   const rows: GraphRow[] = [];
   const edges: GraphEdge[] = [];
 
+  // Reserves a lane slot for `hash`.  If the hash is already expected in some
+  // lane, returns that lane without mutating.  Otherwise reuses a free slot
+  // (preferring the rightmost free slot so that freed lanes cluster at the end,
+  // keeping the lanes array as compact as possible).
   const allocLane = (hash: string): number => {
     const existing = lanes.indexOf(hash);
     if (existing !== -1) return existing;
-    const free = lanes.indexOf(null);
+    // XXX: lastIndexOf finds the rightmost null — this groups freed slots
+    // towards the boundary so the lanes array stays compact.
+    const free = lanes.lastIndexOf(null);
     if (free !== -1) {
       lanes[free] = hash;
       return free;
@@ -73,9 +79,24 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
       return;
     }
 
-    // first parent continues down this lane; merge parents fork into their own lanes
-    lanes[lane] = e.parents[0];
+    // First parent continues down this lane UNLESS it is already tracked
+    // by a different lane (which happens when a feature branch traces back
+    // to an earlier mainline commit).  In that case we free this lane
+    // immediately instead of holding a duplicate reservation that would
+    // stretch the branch line far down the graph — converging early is
+    // both correct (the parent is already expected) and economical.
+    const p1 = e.parents[0];
+    const existingP1 = lanes.indexOf(p1);
+    if (existingP1 !== -1 && existingP1 !== lane) {
+      lanes[lane] = null;
+    } else {
+      lanes[lane] = p1;
+    }
     edges.push({ fromRow: i, fromLane: lane, viaLane: lane, toHash: e.parents[0], toRow: null, toLane: null });
+    // Merge parents fork into their own lanes.
+    // allocLane already checks for existing reservations, so if a merge
+    // parent traces back to a commit already being tracked it reuses that
+    // slot instead of inflating.
     for (let k = 1; k < e.parents.length; k++) {
       const via = allocLane(e.parents[k]);
       edges.push({ fromRow: i, fromLane: lane, viaLane: via, toHash: e.parents[k], toRow: null, toLane: null });
