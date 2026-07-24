@@ -148,13 +148,15 @@ export function GraphView() {
 
   // Re-check scroll position after a load completes — scrolling to the bottom
   // and staying there doesn't fire a new scroll event, so the next page would
-  // never trigger without this.
+  // never trigger without this.  Also re-checks whenever graph data grows
+  // (data appended) so the auto-chain keeps going.
   createEffect(() => {
     const loading = ctx.graphLoading();
     const el = scrollRef;
+    const rowCount = data().rows.length; // track graph data changes too
     if (!loading && el && ctx.graphHasMore()) {
       const { scrollTop, scrollHeight, clientHeight } = el;
-      if (scrollHeight - scrollTop - clientHeight < 400) {
+      if (scrollHeight - scrollTop - clientHeight < 800) {
         ctx.loadMoreGraph();
       }
     }
