@@ -146,6 +146,20 @@ export function GraphView() {
     onCleanup(() => el.removeEventListener("scroll", handler));
   });
 
+  // Re-check scroll position after a load completes — scrolling to the bottom
+  // and staying there doesn't fire a new scroll event, so the next page would
+  // never trigger without this.
+  createEffect(() => {
+    const loading = ctx.graphLoading();
+    const el = scrollRef;
+    if (!loading && el && ctx.graphHasMore()) {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight - scrollTop - clientHeight < 400) {
+        ctx.loadMoreGraph();
+      }
+    }
+  });
+
   // Routes an edge: straight down when child and parent share a lane, otherwise
   // fork horizontally just below the child row and/or converge just above the parent row.
   const edgePoints = (e: GraphEdge): string => {

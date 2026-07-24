@@ -82,6 +82,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [graph, setGraph] = createSignal<GitGraphEntry[]>([]);
   const [graphHasMore, setGraphHasMore] = createSignal(true);
   const [graphLoading, setGraphLoading] = createSignal(false);
+  let graphPage = 0; // non-reactive page counter for --skip
   const [stashes, setStashes] = createSignal<GitStashEntry[]>([]);
   const [worktrees, setWorktrees] = createSignal<GitWorktree[]>([]);
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
@@ -385,9 +386,11 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     const p = repoPath();
     if (!p) return;
     setGraphLoading(true);
+    graphPage = 0;
     try {
       const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, 0);
       setGraph(g);
+      graphPage = 1;
       setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
     } catch (err) {
       showToast(`Failed to load graph: ${err}`, "error");
@@ -401,9 +404,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     if (!p || graphLoading() || !graphHasMore()) return;
     setGraphLoading(true);
     try {
-      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, graph().length);
+      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, graphPage * GRAPH_PAGE_SIZE);
       if (g.length > 0) {
         setGraph([...graph(), ...g]);
+        graphPage++;
       }
       setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
     } catch (err) {
