@@ -1,6 +1,6 @@
 import { createMemo, For, Index, Show, onMount } from "solid-js";
 import { useGit } from "../context";
-import { formatTimestamp } from "../utils";
+import { formatTimestamp, surfaceBg } from "../utils";
 import { EmptyState } from "./shared";
 import { S } from "../styles";
 
@@ -78,17 +78,18 @@ export function GraphView() {
   }
 
   return (
-    <div style={{ padding: "16px 24px" }}>
+    <div style={{ padding: "16px 24px", background: surfaceBg(0.04), height: "100%" }}>
       <Show when={rows().length === 0}>
         <EmptyState message="Loading graph..." />
       </Show>
 
       <Show when={rows().length > 0}>
-        <div style={{ overflow: "auto" }}>
+        <div style={{ overflow: "auto", background: surfaceBg(0.04) }}>
+          <div style={{ "min-width": `${graphWidth() + 700}px` }}>
           <svg
-            width={graphWidth() + 400}
+            width={graphWidth() + 700}
             height={rows().length * ROW_HEIGHT + 20}
-            style={{ "font-family": "Space Mono, monospace", "font-size": "12px" }}
+            style={{ "font-family": "Space Mono, monospace", "font-size": "12px", display: "block" }}
           >
             <Index each={rows()}>
               {(row, i) => {
@@ -137,55 +138,81 @@ export function GraphView() {
                       stroke-width="2"
                     />
 
-                    {/* Ref labels */}
+                    {/* Ref labels — rendered as badge + text */}
                     <Index each={row().refs}>
                       {(ref, ri) => (
-                        <text
-                          x={graphWidth() + 12 + ri * 80}
-                          y={y + 4}
-                          fill={laneColor(row().lane)}
-                          font-size="11"
-                          font-weight="600"
-                        >
-                          {ref()}
-                        </text>
+                        <g>
+                          <rect
+                            x={graphWidth() + 8 + ri * 120}
+                            y={y - 8}
+                            width={Math.min(ref().length * 7 + 14, 110)}
+                            height={16}
+                            rx={3}
+                            fill={laneColor(row().lane)}
+                            opacity="0.2"
+                          />
+                          <text
+                            x={graphWidth() + 15 + ri * 120}
+                            y={y + 4}
+                            fill={laneColor(row().lane)}
+                            font-size="10"
+                            font-weight="600"
+                          >
+                            {ref().length > 12 ? ref().slice(0, 12) + "…" : ref()}
+                          </text>
+                        </g>
                       )}
                     </Index>
 
                     {/* Commit hash */}
                     <text
-                      x={graphWidth() + 12 + (row().refs.length || 0) * 80}
+                      x={graphWidth() + 10 + Math.min(row().refs.length, 4) * 120}
                       y={y + 4}
                       fill="var(--accent-color, #f59e0b)"
                       font-size="11"
+                      font-family="Space Mono, monospace"
                     >
                       {row().hash.slice(0, 7)}
                     </text>
 
-                    {/* Commit message */}
-                    <text
-                      x={graphWidth() + 70 + (row().refs.length || 0) * 80}
-                      y={y + 4}
-                      fill="var(--text-color)"
-                      font-size="12"
+                    {/* Commit message — foreignObject for natural text overflow */}
+                    <foreignObject
+                      x={graphWidth() + 100 + Math.min(row().refs.length, 4) * 120}
+                      y={y - 10}
+                      width={320}
+                      height={ROW_HEIGHT - 4}
                     >
-                      {row().message.length > 60 ? row().message.slice(0, 60) + "…" : row().message}
-                    </text>
+                      <div
+                        xmlns="http://www.w3.org/1999/xhtml"
+                        style={{
+                          "font-size": "12px",
+                          color: "var(--text-color)",
+                          "line-height": `${ROW_HEIGHT - 4}px`,
+                          overflow: "hidden",
+                          "text-overflow": "ellipsis",
+                          "white-space": "nowrap",
+                        }}
+                        title={row().message}
+                      >
+                        {row().message}
+                      </div>
+                    </foreignObject>
 
                     {/* Author + time */}
                     <text
-                      x={graphWidth() + 300 + (row().refs.length || 0) * 80}
+                      x={graphWidth() + 430 + Math.min(row().refs.length, 4) * 120}
                       y={y + 4}
                       fill="var(--text-muted, #888)"
                       font-size="11"
                     >
-                      {row().author} · {formatTimestamp(row().timestamp)}
+                      {row().author.length > 18 ? row().author.slice(0, 18) + "…" : row().author} · {formatTimestamp(row().timestamp)}
                     </text>
                   </g>
                 );
               }}
             </Index>
           </svg>
+          </div>
         </div>
       </Show>
     </div>

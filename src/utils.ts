@@ -1,20 +1,23 @@
 import type { RecentRepo } from "./types";
+import { createSignal, createRoot } from "solid-js";
 
 const RECENT_REPOS_KEY = "flurer-git-recent-repos";
 const MAX_RECENT_REPOS = 20;
 
 let _isLight: boolean | null = null;
 let _bgColor: string | null = null;
-let _surfaceOpacity = 0.04;
+const [_surfaceOpacity, _setSurfaceOpacity] = createRoot(() =>
+  createSignal(0.04)
+);
 
 /** Override the surface tint opacity (0–1). Passed via plugin settings. */
 export function setSurfaceOpacity(opacity: number) {
-  _surfaceOpacity = Math.max(0, Math.min(1, opacity));
+  _setSurfaceOpacity(Math.max(0, Math.min(1, opacity)));
 }
 
 /** Get current surface tint opacity. */
 export function getSurfaceOpacity(): number {
-  return _surfaceOpacity;
+  return _surfaceOpacity();
 }
 
 /** Detect whether Flurer's background is light or dark, and cache its hex. */
