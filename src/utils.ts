@@ -4,6 +4,7 @@ const RECENT_REPOS_KEY = "flurer-git-recent-repos";
 const MAX_RECENT_REPOS = 20;
 
 let _isLight: boolean | null = null;
+let _bgColor: string | null = null;
 let _surfaceOpacity = 0.04;
 
 /** Override the surface tint opacity (0–1). Passed via plugin settings. */
@@ -16,7 +17,7 @@ export function getSurfaceOpacity(): number {
   return _surfaceOpacity;
 }
 
-/** Detect whether Flurer's background is light or dark. */
+/** Detect whether Flurer's background is light or dark, and cache its hex. */
 export function isLightBg(): boolean {
   if (_isLight !== null) return _isLight;
   try {
@@ -24,6 +25,7 @@ export function isLightBg(): boolean {
     if (bg) {
       const match = bg.match(/^#([0-9a-f]{6})$/i);
       if (match) {
+        _bgColor = bg;
         const r = parseInt(match[1].slice(0, 2), 16);
         const g = parseInt(match[1].slice(2, 4), 16);
         const b = parseInt(match[1].slice(4, 6), 16);
@@ -38,12 +40,26 @@ export function isLightBg(): boolean {
   return false;
 }
 
-/** Get surface background: white-tinted for dark, black-tinted for light. */
+function blendChannel(base: number, tint: number, opacity: number): number {
+  return Math.round(base + (tint - base) * opacity);
+}
+
+/** Get a solid surface background blended against the detected bg color.
+ *  For dark backgrounds, tints lighter. For light backgrounds, tints darker. */
 export function surfaceBg(opacity?: number): string {
   const o = opacity ?? _surfaceOpacity;
-  return isLightBg()
-    ? `rgba(0,0,0,${o})`
-    : `rgba(255,255,255,${o})`;
+  isLightBg(); // ensure _bgColor is cached
+  const hex = _bgColor || (isLightBg() ? "#f5f5f5" : "#1a1a2e");
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  if (isLightBg()) {
+    // Tint toward black (darker surface)
+    return `rgb(${blendChannel(r, 0, o)},${blendChannel(g, 0, o)},${blendChannel(b, 0, o)})`;
+  } else {
+    // Tint toward white (lighter surface)
+    return `rgb(${blendChannel(r, 255, o)},${blendChannel(g, 255, o)},${blendChannel(b, 255, o)})`;
+  }
 }
 
 export function getRecentRepos(): RecentRepo[] {
