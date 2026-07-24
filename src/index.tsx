@@ -175,11 +175,13 @@ function GitPanel(props: any) {
   );
 }
 
+declare const __VERSION__: string;
+
 window.registerPlugin({
   id: "git",
   name: "Git Operations",
   description: "Full-featured git panel with graph, branches, diff, stash, worktrees, and more.",
-  version: "0.3.2",
+  version: __VERSION__,
   author: "Algosculptor",
   viewRailButton: (props: any) => (
     <button

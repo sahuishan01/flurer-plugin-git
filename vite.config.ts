@@ -1,8 +1,14 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+
+const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8"));
 
 export default defineConfig({
+  define: {
+    __VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [solid()],
   publicDir: false,
   build: {
