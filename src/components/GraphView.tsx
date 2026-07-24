@@ -4,9 +4,9 @@ import { formatTimestamp, surfaceBg } from "../utils";
 import type { GitGraphEntry } from "../types";
 import { EmptyState } from "./shared";
 
-const LANE_W = 26;
+const LANE_W = 16;
 const ROW_H = 34;
-const DOT_R = 6;
+const DOT_R = 4.5;
 const COLORS = ["#f59e0b", "#60a5fa", "#4ade80", "#f87171", "#c084fc", "#2dd4bf", "#fb923c", "#a78bfa"];
 
 interface GraphRow extends GitGraphEntry {
@@ -147,7 +147,7 @@ export function GraphView() {
                     points={edgePoints(edge())}
                     fill="none"
                     stroke={laneColor(edge().viaLane)}
-                    stroke-width="2.5"
+                    stroke-width="2"
                     opacity="0.55"
                     stroke-linejoin="round"
                     stroke-linecap="round"
@@ -162,8 +162,8 @@ export function GraphView() {
                   const textX = graphW() + 14 + Math.min(row().refs.length, 3) * 130;
                   return (
                     <g>
-                      <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2.5" />
-                      <circle cx={cx} cy={y} r={DOT_R + 3} fill="none" stroke={color} stroke-width="1.5" opacity="0.3" />
+                      <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
+                      <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity="0.3" />
                       <Index each={row().refs}>
                         {(ref, ri) => {
                           const rx = graphW() + 8 + ri * 130;
@@ -181,7 +181,7 @@ export function GraphView() {
                       <text x={textX} y={y + 4} fill="var(--accent-color,#f59e0b)" font-size="11" font-family="Space Mono,monospace">
                         {row().hash.slice(0, 7)}
                       </text>
-                      <foreignObject x={textX + 96} y={y - 10} width="320" height={ROW_H}>
+                      <foreignObject x={textX + 78} y={y - 10} width="300" height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
@@ -197,7 +197,7 @@ export function GraphView() {
                           {row().message}
                         </div>
                       </foreignObject>
-                      <text x={textX + 426} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
+                      <text x={textX + 394} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
                         {row().author}{" · "}{formatTimestamp(row().timestamp)}
                       </text>
                     </g>
