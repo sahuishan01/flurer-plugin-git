@@ -4,6 +4,17 @@ const RECENT_REPOS_KEY = "flurer-git-recent-repos";
 const MAX_RECENT_REPOS = 20;
 
 let _isLight: boolean | null = null;
+let _surfaceOpacity = 0.04;
+
+/** Override the surface tint opacity (0–1). Passed via plugin settings. */
+export function setSurfaceOpacity(opacity: number) {
+  _surfaceOpacity = Math.max(0, Math.min(1, opacity));
+}
+
+/** Get current surface tint opacity. */
+export function getSurfaceOpacity(): number {
+  return _surfaceOpacity;
+}
 
 /** Detect whether Flurer's background is light or dark. */
 export function isLightBg(): boolean {
@@ -28,10 +39,11 @@ export function isLightBg(): boolean {
 }
 
 /** Get surface background: white-tinted for dark, black-tinted for light. */
-export function surfaceBg(opacity = 0.04): string {
+export function surfaceBg(opacity?: number): string {
+  const o = opacity ?? _surfaceOpacity;
   return isLightBg()
-    ? `rgba(0,0,0,${opacity})`
-    : `rgba(255,255,255,${opacity})`;
+    ? `rgba(0,0,0,${o})`
+    : `rgba(255,255,255,${o})`;
 }
 
 export function getRecentRepos(): RecentRepo[] {

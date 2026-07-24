@@ -1,10 +1,11 @@
-import { Show, For, createSignal, createMemo, createEffect } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onMount } from "solid-js";
 import { GitProvider } from "./context";
-import { getRecentRepos, basename } from "./utils";
+import { getRecentRepos, basename, setSurfaceOpacity } from "./utils";
 import { GitIcon, CloseIcon, PlusIcon, Button, Toast } from "./components/shared";
 import { S } from "./styles";
 import { DashboardView } from "./components/DashboardView";
 import { RepoView } from "./components/RepoView";
+import { SettingsPanel } from "./components/SettingsPanel";
 
 interface OpenTab {
   id: string;
@@ -33,6 +34,10 @@ function GitPanel(props: any) {
     const p = initialPath();
     if (p) openRepo(p);
   });
+
+  // Apply saved plugin settings on mount
+  const opacity = props.pluginSettings?.surfaceOpacity;
+  if (typeof opacity === "number") setSurfaceOpacity(opacity);
 
   const showDashboard = () => tabs().length === 0;
 
@@ -189,4 +194,5 @@ window.registerPlugin({
     </button>
   ),
   fullPanel: (props: any) => <GitPanel {...props} />,
+  settingsPanel: (props: any) => <SettingsPanel {...props} />,
 });
