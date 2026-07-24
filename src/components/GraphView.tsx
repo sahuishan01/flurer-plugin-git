@@ -1,4 +1,4 @@
-import { createMemo, Index, Show, onMount } from "solid-js";
+import { createMemo, Index, Show, onMount, createEffect, onCleanup } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp, surfaceBg } from "../utils";
 import type { GitGraphEntry } from "../types";
@@ -131,6 +131,21 @@ export function GraphView() {
   const svgH = () => data().rows.length * ROW_H + 20;
   const bottomY = () => data().rows.length * ROW_H;
 
+  // Infinite scroll: load next page when user scrolls near the bottom
+  let scrollRef: HTMLDivElement | undefined;
+  createEffect(() => {
+    const el = scrollRef;
+    if (!el) return;
+    const handler = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight - scrollTop - clientHeight < 400 && ctx.graphHasMore() && !ctx.graphLoading()) {
+        ctx.loadMoreGraph();
+      }
+    };
+    el.addEventListener("scroll", handler, { passive: true });
+    onCleanup(() => el.removeEventListener("scroll", handler));
+  });
+
   // Routes an edge: straight down when child and parent share a lane, otherwise
   // fork horizontally just below the child row and/or converge just above the parent row.
   const edgePoints = (e: GraphEdge): string => {
@@ -159,7 +174,7 @@ export function GraphView() {
         <EmptyState message="Loading graph..." />
       </Show>
       <Show when={data().rows.length > 0}>
-        <div style={{ overflow: "auto", background: surfaceBg(0.04) }}>
+        <div ref={scrollRef} style={{ overflow: "auto", background: surfaceBg(0.04), "max-height": "calc(100vh - 200px)" }}>
           <div style={{ "min-width": `${graphW() + 940}px` }}>
             <svg width={graphW() + 940} height={svgH()} style={{ display: "block" }}>
               <Index each={data().edges}>
@@ -226,6 +241,11 @@ export function GraphView() {
                 }}
               </Index>
             </svg>
+            <Show when={ctx.graphLoading()}>
+              <div style={{ padding: "12px 16px", "font-size": "12px", color: "var(--text-muted,#888)", "text-align": "center" }}>
+                Loading more commits…
+              </div>
+            </Show>
           </div>
         </div>
       </Show>

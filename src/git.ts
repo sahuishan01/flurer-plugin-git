@@ -280,10 +280,10 @@ export async function gitDiffCommit(repoPath: string, commitHash: string, filePa
 
 // ---- Graph ----
 
-export async function gitGraph(repoPath: string, maxCount: number): Promise<GitGraphEntry[]> {
+export async function gitGraph(repoPath: string, maxCount: number, skip: number = 0): Promise<GitGraphEntry[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, "--topo-order", "--format=%H|%P|%s|%an|%at|%D");
+    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H|%P|%s|%an|%at|%D");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, parentsStr, message, author, timestamp, refsStr] = line.split("|");
       const parents = parentsStr ? parentsStr.split(" ") : [];
@@ -292,7 +292,7 @@ export async function gitGraph(repoPath: string, maxCount: number): Promise<GitG
     });
   }
 
-  return invoke<GitGraphEntry[]>("git_graph", { repoPath, maxCount });
+  return invoke<GitGraphEntry[]>("git_graph", { repoPath, maxCount, skip });
 }
 
 // ---- Stash ----

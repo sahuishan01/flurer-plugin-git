@@ -18,6 +18,8 @@ interface GitContextValue {
   branches: Accessor<GitBranch[]>;
   commits: Accessor<GitCommit[]>;
   graph: Accessor<GitGraphEntry[]>;
+  graphHasMore: Accessor<boolean>;
+  graphLoading: Accessor<boolean>;
   stashes: Accessor<GitStashEntry[]>;
   worktrees: Accessor<GitWorktree[]>;
   commitDetail: Accessor<GitCommitDetail | null>;
@@ -55,6 +57,7 @@ interface GitContextValue {
   removeWorktree: (path: string) => Promise<void>;
   loadDiff: (filePath: string, mode: "staged" | "unstaged" | "commit", commitHash?: string) => Promise<void>;
   loadGraph: () => Promise<void>;
+  loadMoreGraph: () => Promise<void>;
   loadHistory: (maxCount: number) => Promise<void>;
   loadBranches: () => Promise<void>;
   loadStashes: () => Promise<void>;
@@ -77,6 +80,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [branches, setBranches] = createSignal<GitBranch[]>([]);
   const [commits, setCommits] = createSignal<GitCommit[]>([]);
   const [graph, setGraph] = createSignal<GitGraphEntry[]>([]);
+  const [graphHasMore, setGraphHasMore] = createSignal(true);
+  const [graphLoading, setGraphLoading] = createSignal(false);
   const [stashes, setStashes] = createSignal<GitStashEntry[]>([]);
   const [worktrees, setWorktrees] = createSignal<GitWorktree[]>([]);
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
@@ -136,6 +141,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setRepoPath(path);
     setActiveView("changes");
     setGraph([]);
+    setGraphHasMore(true);
+    setGraphLoading(false);
     setStashes([]);
     setWorktrees([]);
     setCommitDetail(null);
@@ -150,6 +157,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setBranches([]);
     setCommits([]);
     setGraph([]);
+    setGraphHasMore(true);
+    setGraphLoading(false);
     setStashes([]);
     setWorktrees([]);
     setCommitDetail(null);
@@ -370,14 +379,37 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     }
   }
 
+  const GRAPH_PAGE_SIZE = 200;
+
   async function loadGraph() {
     const p = repoPath();
     if (!p) return;
+    setGraphLoading(true);
     try {
-      const g = await git.gitGraph(p, 200);
+      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, 0);
       setGraph(g);
+      setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
     } catch (err) {
       showToast(`Failed to load graph: ${err}`, "error");
+    } finally {
+      setGraphLoading(false);
+    }
+  }
+
+  async function loadMoreGraph() {
+    const p = repoPath();
+    if (!p || graphLoading() || !graphHasMore()) return;
+    setGraphLoading(true);
+    try {
+      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, graph().length);
+      if (g.length > 0) {
+        setGraph([...graph(), ...g]);
+      }
+      setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
+    } catch (err) {
+      showToast(`Failed to load more graph: ${err}`, "error");
+    } finally {
+      setGraphLoading(false);
     }
   }
 
@@ -429,7 +461,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const ctx: GitContextValue = {
     activeView, switchView,
     repoPath, openRepo, backToDashboard,
-    status, branches, commits, graph, stashes, worktrees, commitDetail,
+    status, branches, commits, graph, graphHasMore, graphLoading,
+    stashes, worktrees, commitDetail,
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
     diffResult, diffMode, diffCommitHash, setDiffMode,
     loading, error, toast, shellAvailable: shellAvail,
@@ -438,7 +471,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     createBranch, deleteBranch, checkout, merge, cherryPick,
     stash, stashPop, stashDrop,
     addWorktree, removeWorktree,
-    loadDiff, loadGraph, loadHistory, loadBranches, loadStashes, loadWorktrees,
+    loadDiff, loadGraph, loadMoreGraph, loadHistory, loadBranches, loadStashes, loadWorktrees,
     showCommitDetail,
   };
 
