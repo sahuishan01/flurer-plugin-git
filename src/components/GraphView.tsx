@@ -1,4 +1,4 @@
-import { createMemo, Index, Show, onMount, createEffect, onCleanup } from "solid-js";
+import { createMemo, Index, Show, onMount } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp, surfaceBg } from "../utils";
 import type { GitGraphEntry } from "../types";
@@ -28,10 +28,7 @@ interface GraphData {
   laneCount: number;
 }
 
-// Assigns each commit a lane (column) and builds routed edges to its parents.
-// Entries must be newest-first, topologically ordered (parents after children).
 function buildGraph(entries: GitGraphEntry[]): GraphData {
-  // lanes[i] = hash of the commit expected to appear next in lane i (null = lane is free)
   const lanes: (string | null)[] = [];
   const hashRow = new Map<string, number>();
   entries.forEach((e, i) => hashRow.set(e.hash, i));
@@ -39,16 +36,16 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
   const rows: GraphRow[] = [];
   const edges: GraphEdge[] = [];
 
-  // Reserves a lane slot for `hash`.  If the hash is already expected in some
-  // lane, returns that lane without mutating.  Otherwise reuses a free slot
-  // (preferring the rightmost free slot so that freed lanes cluster at the end,
-  // keeping the lanes array as compact as possible).
+  const compactLanes = () => {
+    while (lanes.length > 0 && lanes[lanes.length - 1] === null) {
+      lanes.pop();
+    }
+  };
+
   const allocLane = (hash: string): number => {
     const existing = lanes.indexOf(hash);
     if (existing !== -1) return existing;
-    // XXX: lastIndexOf finds the rightmost null — this groups freed slots
-    // towards the boundary so the lanes array stays compact.
-    const free = lanes.lastIndexOf(null);
+    const free = lanes.indexOf(null);
     if (free !== -1) {
       lanes[free] = hash;
       return free;
@@ -66,8 +63,8 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
     let lane: number;
     if (expecting.length > 0) {
       lane = expecting[0];
-      // any other lanes waiting on this commit converge into it here
       for (let k = 1; k < expecting.length; k++) lanes[expecting[k]] = null;
+      compactLanes();
     } else {
       lane = allocLane(e.hash);
     }
@@ -76,27 +73,20 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
 
     if (e.parents.length === 0) {
       lanes[lane] = null;
+      compactLanes();
       return;
     }
 
-    // First parent continues down this lane UNLESS it is already tracked
-    // by a different lane (which happens when a feature branch traces back
-    // to an earlier mainline commit).  In that case we free this lane
-    // immediately instead of holding a duplicate reservation that would
-    // stretch the branch line far down the graph — converging early is
-    // both correct (the parent is already expected) and economical.
     const p1 = e.parents[0];
     const existingP1 = lanes.indexOf(p1);
     if (existingP1 !== -1 && existingP1 !== lane) {
       lanes[lane] = null;
+      compactLanes();
     } else {
       lanes[lane] = p1;
     }
     edges.push({ fromRow: i, fromLane: lane, viaLane: lane, toHash: e.parents[0], toRow: null, toLane: null });
-    // Merge parents fork into their own lanes.
-    // allocLane already checks for existing reservations, so if a merge
-    // parent traces back to a commit already being tracked it reuses that
-    // slot instead of inflating.
+
     for (let k = 1; k < e.parents.length; k++) {
       const via = allocLane(e.parents[k]);
       edges.push({ fromRow: i, fromLane: lane, viaLane: via, toHash: e.parents[k], toRow: null, toLane: null });
@@ -124,33 +114,47 @@ export function GraphView() {
   });
 
   const data = createMemo(() => buildGraph(ctx.graph()));
+
+  const rowMaxLanes = createMemo(() => {
+    const gData = data();
+    const maxLanes = new Array(gData.rows.length).fill(0);
+
+    gData.rows.forEach((r, i) => {
+      maxLanes[i] = Math.max(maxLanes[i], r.lane);
+    });
+
+    gData.edges.forEach((e) => {
+      const start = e.fromRow;
+      const end = e.toRow !== null ? e.toRow : gData.rows.length - 1;
+      for (let r = start; r <= end; r++) {
+        if (r < maxLanes.length) {
+          maxLanes[r] = Math.max(maxLanes[r], e.viaLane, e.fromLane);
+          if (e.toLane !== null && r === end) {
+            maxLanes[r] = Math.max(maxLanes[r], e.toLane);
+          }
+        }
+      }
+    });
+
+    return maxLanes;
+  });
+
   const laneX = (l: number) => l * LANE_W + LANE_W / 2;
   const rowY = (r: number) => r * ROW_H + ROW_H / 2;
   const laneColor = (l: number) => COLORS[l % COLORS.length];
   const graphW = () => data().laneCount * LANE_W + 8;
   const svgH = () => data().rows.length * ROW_H + 20;
   const bottomY = () => data().rows.length * ROW_H;
-
-  // The overall content width: graph lanes + ref badges + hash + message + author
   const contentW = () => graphW() + 1400;
 
-  // Scroll-to-bottom triggers next page load
-  let scrollRef: HTMLDivElement | undefined;
-  createEffect(() => {
-    const el = scrollRef;
-    if (!el) return;
-    const handler = () => {
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      if (scrollHeight - scrollTop - clientHeight < 400 && ctx.graphHasMore() && !ctx.graphLoading()) {
-        ctx.loadMoreGraph();
-      }
-    };
-    el.addEventListener("scroll", handler, { passive: true });
-    onCleanup(() => el.removeEventListener("scroll", handler));
-  });
+  function handleScroll(e: Event) {
+    const el = e.currentTarget as HTMLDivElement;
+    if (!el || ctx.graphLoading() || !ctx.graphHasMore()) return;
+    if (el.scrollTop > 50 && el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
+      ctx.loadMoreGraph();
+    }
+  }
 
-  // Routes an edge: straight down when child and parent share a lane, otherwise
-  // fork horizontally just below the child row and/or converge just above the parent row.
   const edgePoints = (e: GraphEdge): string => {
     const x1 = laneX(e.fromLane);
     const y1 = rowY(e.fromRow);
@@ -177,7 +181,10 @@ export function GraphView() {
         <EmptyState message="Loading graph..." />
       </Show>
       <Show when={data().rows.length > 0}>
-        <div ref={scrollRef} style={{ overflow: "auto", background: surfaceBg(0.04), "max-height": "calc(100vh - 200px)" }}>
+        <div
+          onScroll={handleScroll}
+          style={{ overflow: "auto", background: surfaceBg(0.04), "max-height": "calc(100vh - 200px)" }}
+        >
           <div style={{ "min-width": `${contentW()}px` }}>
             <svg width={contentW()} height={svgH()} style={{ display: "block" }}>
               <Index each={data().edges}>
@@ -198,7 +205,10 @@ export function GraphView() {
                   const y = rowY(i);
                   const cx = laneX(row().lane);
                   const color = laneColor(row().lane);
-                  const textX = graphW() + 14 + Math.min(row().refs.length, 3) * 130;
+                  const maxLane = () => rowMaxLanes()[i] ?? row().lane;
+                  const railsW = () => (maxLane() + 1) * LANE_W;
+                  const refStart = () => railsW() + 8;
+                  const textX = () => refStart() + (row().refs.length > 0 ? Math.min(row().refs.length, 3) * 130 : 0) + 6;
                   const msgW = 600;
                   return (
                     <g>
@@ -206,7 +216,7 @@ export function GraphView() {
                       <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity="0.3" />
                       <Index each={row().refs}>
                         {(ref, ri) => {
-                          const rx = graphW() + 8 + ri * 130;
+                          const rx = refStart() + ri * 130;
                           const tw = Math.min(ref().length * 7.2 + 16, 120);
                           return (
                             <g>
@@ -218,10 +228,10 @@ export function GraphView() {
                           );
                         }}
                       </Index>
-                      <text x={textX} y={y + 4} fill="var(--accent-color,#f59e0b)" font-size="11" font-family="Space Mono,monospace">
+                      <text x={textX()} y={y + 4} fill="var(--accent-color,#f59e0b)" font-size="11" font-family="Space Mono,monospace">
                         {row().hash.slice(0, 7)}
                       </text>
-                      <foreignObject x={textX + 78} y={y - 10} width={msgW} height={ROW_H}>
+                      <foreignObject x={textX() + 78} y={y - 10} width={msgW} height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
@@ -237,7 +247,7 @@ export function GraphView() {
                           {row().message}
                         </div>
                       </foreignObject>
-                      <text x={textX + 78 + msgW + 12} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
+                      <text x={textX() + 78 + msgW + 12} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
                         {row().author}{" · "}{formatTimestamp(row().timestamp)}
                       </text>
                     </g>
