@@ -36,7 +36,14 @@ export interface GitGraphEntry {
   refs: string[];
 }
 
+export interface DiffFile {
+  oldPath: string;
+  newPath: string;
+  hunks: DiffHunk[];
+}
+
 export interface GitDiff {
+  files?: DiffFile[];
   hunks: DiffHunk[];
 }
 

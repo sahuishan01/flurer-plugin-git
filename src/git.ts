@@ -223,66 +223,99 @@ export async function gitCherryPick(repoPath: string, commitHash: string): Promi
 // ---- Diff ----
 
 function parseDiff(output: string): GitDiff {
-  const hunks: DiffHunk[] = [];
-  let current: DiffHunk | null = null;
+  const files: DiffFile[] = [];
+  const allHunks: DiffHunk[] = [];
+  let currentFile: DiffFile | null = null;
+  let currentHunk: DiffHunk | null = null;
 
   for (const rawLine of output.split("\n")) {
+    if (rawLine.startsWith("diff --git ")) {
+      const match = rawLine.match(/^diff --git a\/(.*) b\/(.*)$/);
+      const oldPath = match ? match[1] : "";
+      const newPath = match ? match[2] : "";
+      currentFile = { oldPath, newPath, hunks: [] };
+      files.push(currentFile);
+      currentHunk = null;
+      continue;
+    }
+
     const hunkMatch = rawLine.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
     if (hunkMatch) {
-      current = {
+      currentHunk = {
         old_start: parseInt(hunkMatch[1], 10),
         old_lines: parseInt(hunkMatch[2] || "1", 10),
         new_start: parseInt(hunkMatch[3], 10),
         new_lines: parseInt(hunkMatch[4] || "1", 10),
         lines: [],
       };
-      hunks.push(current);
+      allHunks.push(currentHunk);
+      if (currentFile) currentFile.hunks.push(currentHunk);
       continue;
     }
-    if (current) {
+
+    if (currentHunk) {
       if (rawLine.startsWith("+")) {
-        current.lines.push({ origin: "+", content: rawLine.substring(1) });
+        currentHunk.lines.push({ origin: "+", content: rawLine.substring(1) });
       } else if (rawLine.startsWith("-")) {
-        current.lines.push({ origin: "-", content: rawLine.substring(1) });
-      } else {
-        current.lines.push({ origin: " ", content: rawLine.substring(1) || rawLine });
+        currentHunk.lines.push({ origin: "-", content: rawLine.substring(1) });
+      } else if (rawLine.startsWith(" ") || rawLine === "") {
+        currentHunk.lines.push({ origin: " ", content: rawLine.substring(1) || rawLine });
       }
     }
   }
 
-  return { hunks };
+  return { files, hunks: allHunks };
 }
 
-export async function gitDiff(repoPath: string, filePath: string): Promise<GitDiff> {
+export async function gitDiff(repoPath: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "diff", "--", filePath);
+    const args = ["diff"];
+    if (filePath && filePath !== ".") args.push("--", filePath);
+    const out = await execGit(repoPath, ...args);
     return parseDiff(out);
   }
   return invoke<GitDiff>("git_diff", { repoPath, filePath });
 }
 
-export async function gitDiffStaged(repoPath: string, filePath: string): Promise<GitDiff> {
+export async function gitDiffStaged(repoPath: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "diff", "--cached", "--", filePath);
+    const args = ["diff", "--cached"];
+    if (filePath && filePath !== ".") args.push("--", filePath);
+    const out = await execGit(repoPath, ...args);
     return parseDiff(out);
   }
   return invoke<GitDiff>("git_diff_staged", { repoPath, filePath });
 }
 
-export async function gitDiffCommit(repoPath: string, commitHash: string, filePath: string): Promise<GitDiff> {
+export async function gitDiffCommit(repoPath: string, commitHash: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
   if (Command) {
+    let out = "";
     try {
-      const out = await execGit(repoPath, "diff", `${commitHash}~1`, commitHash, "--", filePath);
-      return parseDiff(out);
+      const args = ["diff", `${commitHash}~1`, commitHash];
+      if (filePath && filePath !== ".") args.push("--", filePath);
+      out = await execGit(repoPath, ...args);
     } catch {
-      const out = await execGit(repoPath, "show", commitHash, "--", filePath);
-      return parseDiff(out);
+      const args = ["show", "--format=", commitHash];
+      if (filePath && filePath !== ".") args.push("--", filePath);
+      out = await execGit(repoPath, ...args);
     }
+    return parseDiff(out);
   }
   return invoke<GitDiff>("git_diff_commit", { repoPath, commitHash, filePath });
+}
+
+export async function gitDiffBetween(repoPath: string, fromHash: string, toHash: string, filePath: string = "."): Promise<GitDiff> {
+  const Command = getShell();
+  if (Command) {
+    const args = ["diff", fromHash, toHash];
+    if (filePath && filePath !== ".") args.push("--", filePath);
+    const out = await execGit(repoPath, ...args);
+    return parseDiff(out);
+  }
+  return invoke<GitDiff>("git_diff_between", { repoPath, fromHash, toHash, filePath });
 }
 
 // ---- Graph ----

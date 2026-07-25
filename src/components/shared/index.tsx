@@ -198,3 +198,126 @@ export function ConfirmDialog(props: { open: boolean; message: string; onConfirm
     </Show>
   );
 }
+
+export function CommitContextMenu(props: {
+  x: number;
+  y: number;
+  hash: string;
+  onClose: () => void;
+}) {
+  const ctx = useGit();
+
+  const handleDiffCurrent = () => {
+    ctx.loadDiffWithCurrent(props.hash);
+    props.onClose();
+  };
+
+  const handleCompareSelect = () => {
+    const src = ctx.compareSourceHash();
+    if (src && src !== props.hash) {
+      ctx.loadDiffCompare(src, props.hash);
+      ctx.setCompareSourceHash(null);
+    } else {
+      ctx.setCompareSourceHash(props.hash);
+    }
+    props.onClose();
+  };
+
+  const handleCopyHash = () => {
+    navigator.clipboard?.writeText(props.hash);
+    props.onClose();
+  };
+
+  const handleCheckout = () => {
+    ctx.checkout(props.hash);
+    props.onClose();
+  };
+
+  const compareLabel = () => {
+    const src = ctx.compareSourceHash();
+    if (!src) return "Select for Comparison";
+    if (src === props.hash) return "Deselect Comparison Source";
+    return `Compare with ${src.slice(0, 7)}`;
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        "z-index": 100000,
+      }}
+      onClick={props.onClose}
+      onContextMenu={(e) => { e.preventDefault(); props.onClose(); }}
+    >
+      <div
+        style={{
+          position: "fixed",
+          top: `${Math.min(props.y, window.innerHeight - 180)}px`,
+          left: `${Math.min(props.x, window.innerWidth - 220)}px`,
+          background: "var(--panel-bg, #1e1e2e)",
+          border: "1px solid var(--border-strong, rgba(255,255,255,0.1))",
+          "border-radius": "8px",
+          padding: "6px",
+          "box-shadow": "0 8px 24px rgba(0,0,0,0.5)",
+          display: "flex",
+          "flex-direction": "column",
+          gap: "2px",
+          "min-width": "200px",
+          "z-index": 100001,
+          "font-size": "12px",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={handleDiffCurrent}
+        >
+          🔍 View Diff with Current (HEAD)
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={handleCompareSelect}
+        >
+          ⚔️ {compareLabel()}
+        </button>
+        <div style={{ height: "1px", background: "var(--border-subtle, rgba(255,255,255,0.06))", margin: "4px 0" }} />
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={handleCopyHash}
+        >
+          📋 Copy Commit Hash ({props.hash.slice(0, 7)})
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={handleCheckout}
+        >
+          🌿 Checkout Commit
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const menuBtnStyle = {
+  display: "flex",
+  "align-items": "center",
+  gap: "8px",
+  padding: "8px 10px",
+  border: "none",
+  background: "transparent",
+  color: "var(--text-color, #e4e4e7)",
+  "font-size": "12px",
+  cursor: "pointer",
+  "border-radius": "4px",
+  "text-align": "left" as const,
+  width: "100%",
+  transition: "background 0.15s",
+};

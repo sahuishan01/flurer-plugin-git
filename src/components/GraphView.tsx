@@ -2,7 +2,7 @@ import { createSignal, createMemo, Index, Show, onMount } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp, surfaceBg } from "../utils";
 import type { GitGraphEntry } from "../types";
-import { EmptyState, Card, Button, CloseIcon } from "./shared";
+import { EmptyState, Card, Button, CloseIcon, CommitContextMenu } from "./shared";
 import { S } from "../styles";
 
 const LANE_W = 16;
@@ -111,6 +111,7 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
 export function GraphView() {
   const ctx = useGit();
   const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
+  const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
 
   onMount(() => {
     if (ctx.graph().length === 0) ctx.loadGraph();
@@ -160,6 +161,11 @@ export function GraphView() {
   function handleRowClick(hash: string) {
     setSelectedHash(hash);
     ctx.showCommitDetail(hash);
+  }
+
+  function handleContextMenu(e: MouseEvent, hash: string) {
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY, hash });
   }
 
   const edgePoints = (e: GraphEdge): string => {
@@ -223,6 +229,7 @@ export function GraphView() {
                     <g
                       style={{ cursor: "pointer" }}
                       onClick={() => handleRowClick(row().hash)}
+                      onContextMenu={(e) => handleContextMenu(e, row().hash)}
                     >
                       {/* Row background selection state */}
                       <rect
@@ -348,6 +355,16 @@ export function GraphView() {
             </div>
           </Card>
         </div>
+      </Show>
+
+      {/* Right-click Context Menu */}
+      <Show when={menuPos()}>
+        <CommitContextMenu
+          x={menuPos()!.x}
+          y={menuPos()!.y}
+          hash={menuPos()!.hash}
+          onClose={() => setMenuPos(null)}
+        />
       </Show>
     </div>
   );

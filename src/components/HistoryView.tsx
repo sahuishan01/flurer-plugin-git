@@ -1,13 +1,14 @@
 import { createSignal, createMemo, For, Show, onMount } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp } from "../utils";
-import { Card, EmptyState, Button } from "./shared";
+import { Card, EmptyState, Button, CommitContextMenu } from "./shared";
 import { S } from "../styles";
 
 export function HistoryView() {
   const ctx = useGit();
   const [search, setSearch] = createSignal("");
   const [loadingMore, setLoadingMore] = createSignal(false);
+  const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
 
   onMount(() => {
     if (ctx.commits().length === 0) {
@@ -41,6 +42,11 @@ export function HistoryView() {
     }
   }
 
+  function handleContextMenu(e: MouseEvent, hash: string) {
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY, hash });
+  }
+
   return (
     <div
       onScroll={handleScroll}
@@ -67,6 +73,7 @@ export function HistoryView() {
               <div
                 style={{ ...S.fileRow, padding: "8px 12px", cursor: "pointer" }}
                 onClick={() => ctx.showCommitDetail(c.hash)}
+                onContextMenu={(e) => handleContextMenu(e, c.hash)}
               >
                 <div style={{ flex: 1, overflow: "hidden" }}>
                   <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "2px" }}>
@@ -117,6 +124,16 @@ export function HistoryView() {
             </div>
           </Card>
         </div>
+      </Show>
+
+      {/* Right-click Context Menu */}
+      <Show when={menuPos()}>
+        <CommitContextMenu
+          x={menuPos()!.x}
+          y={menuPos()!.y}
+          hash={menuPos()!.hash}
+          onClose={() => setMenuPos(null)}
+        />
       </Show>
     </div>
   );
