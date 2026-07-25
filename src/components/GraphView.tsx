@@ -131,7 +131,10 @@ export function GraphView() {
   const svgH = () => data().rows.length * ROW_H + 20;
   const bottomY = () => data().rows.length * ROW_H;
 
-  // Infinite scroll: load next page when user scrolls near the bottom
+  // The overall content width: graph lanes + ref badges + hash + message + author
+  const contentW = () => graphW() + 1400;
+
+  // Scroll-to-bottom triggers next page load
   let scrollRef: HTMLDivElement | undefined;
   createEffect(() => {
     const el = scrollRef;
@@ -144,22 +147,6 @@ export function GraphView() {
     };
     el.addEventListener("scroll", handler, { passive: true });
     onCleanup(() => el.removeEventListener("scroll", handler));
-  });
-
-  // Re-check scroll position after a load completes — scrolling to the bottom
-  // and staying there doesn't fire a new scroll event, so the next page would
-  // never trigger without this.  Also re-checks whenever graph data grows
-  // (data appended) so the auto-chain keeps going.
-  createEffect(() => {
-    const loading = ctx.graphLoading();
-    const el = scrollRef;
-    const rowCount = data().rows.length; // track graph data changes too
-    if (!loading && el && ctx.graphHasMore()) {
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      if (scrollHeight - scrollTop - clientHeight < 800) {
-        ctx.loadMoreGraph();
-      }
-    }
   });
 
   // Routes an edge: straight down when child and parent share a lane, otherwise
@@ -191,8 +178,8 @@ export function GraphView() {
       </Show>
       <Show when={data().rows.length > 0}>
         <div ref={scrollRef} style={{ overflow: "auto", background: surfaceBg(0.04), "max-height": "calc(100vh - 200px)" }}>
-          <div style={{ "min-width": `${graphW() + 940}px` }}>
-            <svg width={graphW() + 940} height={svgH()} style={{ display: "block" }}>
+          <div style={{ "min-width": `${contentW()}px` }}>
+            <svg width={contentW()} height={svgH()} style={{ display: "block" }}>
               <Index each={data().edges}>
                 {(edge) => (
                   <polyline
@@ -212,6 +199,7 @@ export function GraphView() {
                   const cx = laneX(row().lane);
                   const color = laneColor(row().lane);
                   const textX = graphW() + 14 + Math.min(row().refs.length, 3) * 130;
+                  const msgW = 600;
                   return (
                     <g>
                       <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
@@ -233,7 +221,7 @@ export function GraphView() {
                       <text x={textX} y={y + 4} fill="var(--accent-color,#f59e0b)" font-size="11" font-family="Space Mono,monospace">
                         {row().hash.slice(0, 7)}
                       </text>
-                      <foreignObject x={textX + 78} y={y - 10} width="300" height={ROW_H}>
+                      <foreignObject x={textX + 78} y={y - 10} width={msgW} height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
@@ -249,7 +237,7 @@ export function GraphView() {
                           {row().message}
                         </div>
                       </foreignObject>
-                      <text x={textX + 394} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
+                      <text x={textX + 78 + msgW + 12} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
                         {row().author}{" · "}{formatTimestamp(row().timestamp)}
                       </text>
                     </g>
@@ -257,8 +245,23 @@ export function GraphView() {
                 }}
               </Index>
             </svg>
+            <Show when={ctx.graphHasMore() && !ctx.graphLoading()}>
+              <div
+                onClick={() => ctx.loadMoreGraph()}
+                style={{
+                  padding: "10px 16px",
+                  "font-size": "12px",
+                  color: "var(--accent-color,#f59e0b)",
+                  "text-align": "center",
+                  cursor: "pointer",
+                  "user-select": "none",
+                }}
+              >
+                Load older commits ↓
+              </div>
+            </Show>
             <Show when={ctx.graphLoading()}>
-              <div style={{ padding: "12px 16px", "font-size": "12px", color: "var(--text-muted,#888)", "text-align": "center" }}>
+              <div style={{ padding: "10px 16px", "font-size": "12px", color: "var(--text-muted,#888)", "text-align": "center" }}>
                 Loading more commits…
               </div>
             </Show>

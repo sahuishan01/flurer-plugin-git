@@ -17,6 +17,7 @@ interface GitContextValue {
   status: Accessor<GitStatus | null>;
   branches: Accessor<GitBranch[]>;
   commits: Accessor<GitCommit[]>;
+  historyHasMore: Accessor<boolean>;
   graph: Accessor<GitGraphEntry[]>;
   graphHasMore: Accessor<boolean>;
   graphLoading: Accessor<boolean>;
@@ -59,6 +60,7 @@ interface GitContextValue {
   loadGraph: () => Promise<void>;
   loadMoreGraph: () => Promise<void>;
   loadHistory: (maxCount: number) => Promise<void>;
+  loadMoreHistory: () => Promise<void>;
   loadBranches: () => Promise<void>;
   loadStashes: () => Promise<void>;
   loadWorktrees: () => Promise<void>;
@@ -79,6 +81,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [status, setStatus] = createSignal<GitStatus | null>(null);
   const [branches, setBranches] = createSignal<GitBranch[]>([]);
   const [commits, setCommits] = createSignal<GitCommit[]>([]);
+  const [historyHasMore, setHistoryHasMore] = createSignal(true);
+  let historyPage = 0;
   const [graph, setGraph] = createSignal<GitGraphEntry[]>([]);
   const [graphHasMore, setGraphHasMore] = createSignal(true);
   const [graphLoading, setGraphLoading] = createSignal(false);
@@ -380,7 +384,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     }
   }
 
-  const GRAPH_PAGE_SIZE = 200;
+  const GRAPH_PAGE_SIZE = 1000;
 
   async function loadGraph() {
     const p = repoPath();
@@ -417,12 +421,30 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     }
   }
 
+  const HISTORY_PAGE_SIZE = 100;
+
   async function loadHistory(maxCount: number) {
     const p = repoPath();
     if (!p) return;
+    historyPage = 0;
     try {
-      const c = await git.gitLog(p, maxCount);
+      const c = await git.gitLog(p, maxCount, 0);
       setCommits(c);
+      historyPage = 1;
+      setHistoryHasMore(c.length >= maxCount);
+    } catch {}
+  }
+
+  async function loadMoreHistory() {
+    const p = repoPath();
+    if (!p || !historyHasMore()) return;
+    try {
+      const c = await git.gitLog(p, HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE);
+      if (c.length > 0) {
+        setCommits([...commits(), ...c]);
+        historyPage++;
+      }
+      setHistoryHasMore(c.length >= HISTORY_PAGE_SIZE);
     } catch {}
   }
 
@@ -465,7 +487,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const ctx: GitContextValue = {
     activeView, switchView,
     repoPath, openRepo, backToDashboard,
-    status, branches, commits, graph, graphHasMore, graphLoading,
+    status, branches, commits, historyHasMore, graph, graphHasMore, graphLoading,
     stashes, worktrees, commitDetail,
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
     diffResult, diffMode, diffCommitHash, setDiffMode,
@@ -475,7 +497,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     createBranch, deleteBranch, checkout, merge, cherryPick,
     stash, stashPop, stashDrop,
     addWorktree, removeWorktree,
-    loadDiff, loadGraph, loadMoreGraph, loadHistory, loadBranches, loadStashes, loadWorktrees,
+    loadDiff, loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
     showCommitDetail,
   };
 

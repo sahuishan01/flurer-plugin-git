@@ -7,11 +7,10 @@ import { S } from "../styles";
 export function HistoryView() {
   const ctx = useGit();
   const [search, setSearch] = createSignal("");
-  const [limit, setLimit] = createSignal(50);
 
   onMount(() => {
     if (ctx.commits().length === 0) {
-      ctx.loadHistory(limit());
+      ctx.loadHistory(50);
     }
   });
 
@@ -25,12 +24,6 @@ export function HistoryView() {
       cm.hash.toLowerCase().includes(q)
     );
   });
-
-  function loadMore() {
-    const newLimit = limit() + 50;
-    setLimit(newLimit);
-    ctx.loadHistory(newLimit);
-  }
 
   return (
     <div style={{ padding: "16px 24px" }}>
@@ -70,9 +63,9 @@ export function HistoryView() {
           </For>
         </Card>
 
-        <Show when={filteredCommits().length >= limit()}>
+        <Show when={ctx.historyHasMore()}>
           <div style={{ "text-align": "center", "margin-top": "12px" }}>
-            <Button onClick={loadMore}>Load More</Button>
+            <Button onClick={() => ctx.loadMoreHistory()}>Load More</Button>
           </div>
         </Show>
       </Show>

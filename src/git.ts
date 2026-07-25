@@ -77,10 +77,10 @@ export async function gitRepoStatus(repoPath: string): Promise<GitStatus> {
   return invoke<GitStatus>("git_repo_status", { repoPath });
 }
 
-export async function gitLog(repoPath: string, maxCount: number): Promise<GitCommit[]> {
+export async function gitLog(repoPath: string, maxCount: number, skip: number = 0): Promise<GitCommit[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, "--format=%H|%s|%an|%at");
+    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H|%s|%an|%at");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, message, author, timestamp] = line.split("|");
       return { hash, message, author, timestamp: parseInt(timestamp, 10) };
