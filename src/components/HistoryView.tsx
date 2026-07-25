@@ -7,11 +7,25 @@ import { S } from "../styles";
 export function HistoryView() {
   const ctx = useGit();
   const [search, setSearch] = createSignal("");
+  let scrollRef: HTMLDivElement | undefined;
 
   onMount(() => {
     if (ctx.commits().length === 0) {
-      ctx.loadHistory(50);
+      ctx.loadHistory(100);
     }
+  });
+
+  createEffect(() => {
+    const el = scrollRef;
+    if (!el) return;
+    const handler = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight - scrollTop - clientHeight < 300 && ctx.historyHasMore()) {
+        ctx.loadMoreHistory();
+      }
+    };
+    el.addEventListener("scroll", handler, { passive: true });
+    onCleanup(() => el.removeEventListener("scroll", handler));
   });
 
   const filteredCommits = createMemo(() => {
@@ -26,7 +40,7 @@ export function HistoryView() {
   });
 
   return (
-    <div style={{ padding: "16px 24px" }}>
+    <div ref={scrollRef} style={{ padding: "16px 24px", height: "100%", "overflow-y": "auto" }}>
       <div style={{ "margin-bottom": "12px" }}>
         <input
           type="text"

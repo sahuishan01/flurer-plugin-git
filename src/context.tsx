@@ -125,8 +125,9 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
       setStatus(s);
       saveRecentRepo(path, s.branch);
       try {
-        const c = await git.gitLog(path, 50);
+        const c = await git.gitLog(path, 100);
         setCommits(c);
+        setHistoryHasMore(c.length >= 100);
       } catch {}
       try {
         const b = await git.gitBranches(path);
@@ -422,30 +423,32 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   }
 
   const HISTORY_PAGE_SIZE = 100;
+  let historyLoading = false;
 
-  async function loadHistory(maxCount: number) {
+  async function loadHistory(maxCount: number = 100) {
     const p = repoPath();
     if (!p) return;
-    historyPage = 0;
     try {
       const c = await git.gitLog(p, maxCount, 0);
       setCommits(c);
-      historyPage = 1;
       setHistoryHasMore(c.length >= maxCount);
     } catch {}
   }
 
   async function loadMoreHistory() {
     const p = repoPath();
-    if (!p || !historyHasMore()) return;
+    if (!p || !historyHasMore() || historyLoading) return;
+    historyLoading = true;
     try {
-      const c = await git.gitLog(p, HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE);
+      const offset = commits().length;
+      const c = await git.gitLog(p, HISTORY_PAGE_SIZE, offset);
       if (c.length > 0) {
-        setCommits([...commits(), ...c]);
-        historyPage++;
+        setCommits((prev) => [...prev, ...c]);
       }
       setHistoryHasMore(c.length >= HISTORY_PAGE_SIZE);
-    } catch {}
+    } catch {} finally {
+      historyLoading = false;
+    }
   }
 
   async function loadBranches() {

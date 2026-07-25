@@ -87,7 +87,7 @@ export async function gitRepoStatus(repoPath: string): Promise<GitStatus> {
 export async function gitLog(repoPath: string, maxCount: number, skip: number = 0): Promise<GitCommit[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H%x1f%s%x1f%an%x1f%at");
+    const out = await execGit(repoPath, "log", "--all", `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H%x1f%s%x1f%an%x1f%at");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, message, author, timestamp] = line.split("\x1f");
       return { hash, message, author, timestamp: parseInt(timestamp, 10) };
@@ -290,7 +290,7 @@ export async function gitDiffCommit(repoPath: string, commitHash: string, filePa
 export async function gitGraph(repoPath: string, maxCount: number, skip: number = 0): Promise<GitGraphEntry[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D");
+    const out = await execGit(repoPath, "log", "--all", `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, parentsStr, message, author, timestamp, refsStr] = line.split("\x1f");
       const parents = parentsStr ? parentsStr.split(" ") : [];
