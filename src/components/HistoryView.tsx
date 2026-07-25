@@ -7,7 +7,7 @@ import { S } from "../styles";
 export function HistoryView() {
   const ctx = useGit();
   const [search, setSearch] = createSignal("");
-  let scrollRef: HTMLDivElement | undefined;
+  const [loadingMore, setLoadingMore] = createSignal(false);
 
   onMount(() => {
     if (ctx.commits().length === 0) {
@@ -15,21 +15,8 @@ export function HistoryView() {
     }
   });
 
-  createEffect(() => {
-    const el = scrollRef;
-    if (!el) return;
-    const handler = () => {
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      if (scrollHeight - scrollTop - clientHeight < 300 && ctx.historyHasMore()) {
-        ctx.loadMoreHistory();
-      }
-    };
-    el.addEventListener("scroll", handler, { passive: true });
-    onCleanup(() => el.removeEventListener("scroll", handler));
-  });
-
   const filteredCommits = createMemo(() => {
-    const q = search().toLowerCase();
+    const q = search().trim().toLowerCase();
     const c = ctx.commits();
     if (!q) return c;
     return c.filter((cm) =>
@@ -39,8 +26,26 @@ export function HistoryView() {
     );
   });
 
+  async function handleLoadMore() {
+    if (loadingMore() || !ctx.historyHasMore()) return;
+    setLoadingMore(true);
+    await ctx.loadMoreHistory();
+    setLoadingMore(false);
+  }
+
+  function handleScroll(e: Event) {
+    const el = e.currentTarget as HTMLDivElement;
+    if (!el || loadingMore() || !ctx.historyHasMore()) return;
+    if (el.scrollTop > 50 && el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+      handleLoadMore();
+    }
+  }
+
   return (
-    <div ref={scrollRef} style={{ padding: "16px 24px", height: "100%", "overflow-y": "auto" }}>
+    <div
+      onScroll={handleScroll}
+      style={{ padding: "16px 24px", height: "100%", "overflow-y": "auto" }}
+    >
       <div style={{ "margin-bottom": "12px" }}>
         <input
           type="text"
@@ -78,8 +83,10 @@ export function HistoryView() {
         </Card>
 
         <Show when={ctx.historyHasMore()}>
-          <div style={{ "text-align": "center", "margin-top": "12px" }}>
-            <Button onClick={() => ctx.loadMoreHistory()}>Load More</Button>
+          <div style={{ "text-align": "center", "margin-top": "12px", "padding-bottom": "16px" }}>
+            <Button onClick={handleLoadMore} disabled={loadingMore()}>
+              {loadingMore() ? "Loading..." : "Load More"}
+            </Button>
           </div>
         </Show>
       </Show>
