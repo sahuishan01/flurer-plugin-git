@@ -1,8 +1,9 @@
-import { createMemo, Index, Show, onMount } from "solid-js";
+import { createSignal, createMemo, Index, Show, onMount } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp, surfaceBg } from "../utils";
 import type { GitGraphEntry } from "../types";
-import { EmptyState } from "./shared";
+import { EmptyState, Card, Button, CloseIcon } from "./shared";
+import { S } from "../styles";
 
 const LANE_W = 16;
 const ROW_H = 34;
@@ -109,6 +110,8 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
 
 export function GraphView() {
   const ctx = useGit();
+  const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
+
   onMount(() => {
     if (ctx.graph().length === 0) ctx.loadGraph();
   });
@@ -155,6 +158,11 @@ export function GraphView() {
     }
   }
 
+  function handleRowClick(hash: string) {
+    setSelectedHash(hash);
+    ctx.showCommitDetail(hash);
+  }
+
   const edgePoints = (e: GraphEdge): string => {
     const x1 = laneX(e.fromLane);
     const y1 = rowY(e.fromRow);
@@ -176,14 +184,14 @@ export function GraphView() {
   };
 
   return (
-    <div style={{ padding: "16px 24px", background: surfaceBg(0.04), height: "100%" }}>
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", overflow: "hidden", padding: "16px 24px", background: surfaceBg(0.04) }}>
       <Show when={data().rows.length === 0}>
         <EmptyState message="Loading graph..." />
       </Show>
       <Show when={data().rows.length > 0}>
         <div
           onScroll={handleScroll}
-          style={{ overflow: "auto", background: surfaceBg(0.04), "max-height": "calc(100vh - 200px)" }}
+          style={{ flex: 1, overflow: "auto", background: surfaceBg(0.04) }}
         >
           <div style={{ "min-width": `${contentW()}px` }}>
             <svg width={contentW()} height={svgH()} style={{ display: "block" }}>
@@ -210,10 +218,24 @@ export function GraphView() {
                   const refStart = () => railsW() + 8;
                   const textX = () => refStart() + (row().refs.length > 0 ? Math.min(row().refs.length, 3) * 130 : 0) + 6;
                   const msgW = 600;
+                  const isSelected = () => selectedHash() === row().hash;
+
                   return (
-                    <g>
+                    <g
+                      style={{ cursor: "pointer" }}
+                      onClick={() => handleRowClick(row().hash)}
+                    >
+                      {/* Interactive row background hover & selection state */}
+                      <rect
+                        x="0"
+                        y={y - ROW_H / 2}
+                        width={contentW()}
+                        height={ROW_H}
+                        fill={isSelected() ? "rgba(245, 158, 11, 0.12)" : "transparent"}
+                        style={{ transition: "fill 0.15s" }}
+                      />
                       <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
-                      <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity="0.3" />
+                      <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
                       <Index each={row().refs}>
                         {(ref, ri) => {
                           const rx = refStart() + ri * 130;
@@ -236,7 +258,8 @@ export function GraphView() {
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
                             "font-size": "12px",
-                            color: "var(--text-color)",
+                            color: isSelected() ? "var(--accent-color, #f59e0b)" : "var(--text-color)",
+                            "font-weight": isSelected() ? "600" : "400",
                             "line-height": `${ROW_H}px`,
                             overflow: "hidden",
                             "text-overflow": "ellipsis",
@@ -276,6 +299,55 @@ export function GraphView() {
               </div>
             </Show>
           </div>
+        </div>
+      </Show>
+
+      {/* Selected Commit Detail Drawer */}
+      <Show when={ctx.commitDetail()}>
+        <div style={{ "margin-top": "12px", "flex-shrink": 0 }}>
+          <Card>
+            <div style={S.cardHeader}>
+              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                <span style={{ "font-weight": 600 }}>Commit Details</span>
+                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "font-size": "12px" }}>
+                  {ctx.commitDetail()!.hash.slice(0, 7)}
+                </code>
+              </div>
+              <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                <Button size="sm" variant="primary" onClick={() => {
+                  const d = ctx.commitDetail();
+                  if (d) ctx.loadDiff(".", "commit", d.hash);
+                }}>View Diff</Button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHash(null)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-muted, #888)",
+                    cursor: "pointer",
+                    padding: "4px",
+                    display: "inline-flex",
+                    "align-items": "center",
+                  }}
+                  title="Close details"
+                >
+                  <CloseIcon size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ "font-size": "13px", "line-height": "1.5" }}>
+              <div style={{ "white-space": "pre-wrap", "font-weight": 500, "margin-bottom": "8px", color: "var(--text-color)", "word-break": "break-word" }}>
+                {ctx.commitDetail()!.message}
+              </div>
+              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "16px", "font-size": "11px", color: "var(--text-muted, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.04))", "padding-top": "8px" }}>
+                <div><strong>Author:</strong> {ctx.commitDetail()!.author} &lt;{ctx.commitDetail()!.email}&gt;</div>
+                <div><strong>Date:</strong> {formatTimestamp(ctx.commitDetail()!.timestamp)}</div>
+                <div><strong>Full Hash:</strong> <code style={{ "font-family": "Space Mono, monospace" }}>{ctx.commitDetail()!.hash}</code></div>
+              </div>
+            </div>
+          </Card>
         </div>
       </Show>
     </div>
