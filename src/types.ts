@@ -62,7 +62,7 @@ export interface GitStashEntry {
 
 export interface GitWorktree {
   path: string;
-  head: string;
+  head?: string;
   branch: string | null;
   locked: boolean;
 }

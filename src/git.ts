@@ -34,7 +34,14 @@ function parsePorcelainStatus(output: string): GitChange[] {
     if (!line || line.startsWith("##")) continue;
     const indexStatus = line[0];
     const workTreeStatus = line[1];
-    const filePath = line.substring(3);
+    let filePath = line.substring(3);
+
+    if (filePath.includes(" -> ")) {
+      const parts = filePath.split(" -> ");
+      filePath = parts[parts.length - 1].replace(/^"|"$/g, "");
+    } else {
+      filePath = filePath.replace(/^"|"$/g, "");
+    }
 
     if (indexStatus !== " " && indexStatus !== "?") {
       changes.push({ path: filePath, status: indexStatus, staged: true });
@@ -80,9 +87,9 @@ export async function gitRepoStatus(repoPath: string): Promise<GitStatus> {
 export async function gitLog(repoPath: string, maxCount: number, skip: number = 0): Promise<GitCommit[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H|%s|%an|%at");
+    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H%x1f%s%x1f%an%x1f%at");
     return out.trim().split("\n").filter(Boolean).map((line) => {
-      const [hash, message, author, timestamp] = line.split("|");
+      const [hash, message, author, timestamp] = line.split("\x1f");
       return { hash, message, author, timestamp: parseInt(timestamp, 10) };
     });
   }
@@ -147,9 +154,9 @@ export async function gitFetch(repoPath: string): Promise<void> {
 export async function gitBranches(repoPath: string): Promise<GitBranch[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "branch", "-vv", "--format=%(refname:short)|%(HEAD)|%(upstream:short)");
+    const out = await execGit(repoPath, "branch", "-vv", "--format=%(refname:short)%x1f%(HEAD)%x1f%(upstream:short)");
     return out.trim().split("\n").filter(Boolean).map((line) => {
-      const [name, isCurrent, upstream] = line.split("|");
+      const [name, isCurrent, upstream] = line.split("\x1f");
       return { name, is_current: isCurrent === "*", upstream: upstream || null };
     });
   }
@@ -283,9 +290,9 @@ export async function gitDiffCommit(repoPath: string, commitHash: string, filePa
 export async function gitGraph(repoPath: string, maxCount: number, skip: number = 0): Promise<GitGraphEntry[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H|%P|%s|%an|%at|%D");
+    const out = await execGit(repoPath, "log", `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D");
     return out.trim().split("\n").filter(Boolean).map((line) => {
-      const [hash, parentsStr, message, author, timestamp, refsStr] = line.split("|");
+      const [hash, parentsStr, message, author, timestamp, refsStr] = line.split("\x1f");
       const parents = parentsStr ? parentsStr.split(" ") : [];
       const refs = refsStr ? refsStr.split(",").map((r) => r.trim().split(" ").pop()!).filter(Boolean) : [];
       return { hash, message, author, timestamp: parseInt(timestamp, 10), parents, refs };
@@ -313,9 +320,9 @@ export async function gitStash(repoPath: string, message?: string): Promise<void
 export async function gitStashList(repoPath: string): Promise<GitStashEntry[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "stash", "list", "--format=%gd|%gs|%H|%ci");
+    const out = await execGit(repoPath, "stash", "list", "--format=%gd%x1f%gs%x1f%H%x1f%ci");
     return out.trim().split("\n").filter(Boolean).map((line, i) => {
-      const [ref, message, hash, timestamp] = line.split("|");
+      const [ref, message, hash, timestamp] = line.split("\x1f");
       const index = parseInt(ref.match(/\{(\d+)\}/)?.[1] || String(i), 10);
       return { index, message, hash, timestamp: new Date(timestamp).getTime() / 1000 };
     });
@@ -354,7 +361,7 @@ export async function gitWorktreeList(repoPath: string): Promise<GitWorktree[]> 
     for (const line of out.split("\n")) {
       if (line.startsWith("worktree ")) {
         if (current.path) worktrees.push(current as GitWorktree);
-        current = { path: line.substring(10), locked: false };
+        current = { path: line.substring(9), locked: false };
       } else if (line.startsWith("HEAD ")) {
         current.head = line.substring(5);
       } else if (line.startsWith("branch ")) {
@@ -395,8 +402,8 @@ export async function gitWorktreeRemove(repoPath: string, worktreePath: string):
 export async function gitShow(repoPath: string, commitHash: string): Promise<GitCommitDetail> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "show", "--format=%H|%s|%an|%ae|%at|%P", "--no-patch", commitHash);
-    const [hash, message, author, email, timestamp, parentHashes] = out.trim().split("|");
+    const out = await execGit(repoPath, "show", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%at%x1f%P", "--no-patch", commitHash);
+    const [hash, message, author, email, timestamp, parentHashes] = out.trim().split("\x1f");
     return {
       hash,
       message,
