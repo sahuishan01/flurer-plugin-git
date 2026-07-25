@@ -154,7 +154,7 @@ export async function gitFetch(repoPath: string): Promise<void> {
 export async function gitBranches(repoPath: string): Promise<GitBranch[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "branch", "-vv", "--format=%(refname:short)%x1f%(HEAD)%x1f%(upstream:short)");
+    const out = await execGit(repoPath, "branch", "-vv", "--format=%(refname:short)\x1f%(HEAD)\x1f%(upstream:short)");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [name, isCurrent, upstream] = line.split("\x1f");
       return { name, is_current: isCurrent === "*", upstream: upstream || null };
