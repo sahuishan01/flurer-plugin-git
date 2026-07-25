@@ -50,7 +50,7 @@ export function RepoView(props: RepoViewProps) {
   );
 
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden" }}>
+    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box" }}>
       <div style={{ ...S.section, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0 }}>
         <div style={S.toolbar}>
           <Button onClick={props.onClose} size="sm" title="Close tab">
@@ -105,7 +105,7 @@ export function RepoView(props: RepoViewProps) {
         </div>
       </Show>
 
-      <div style={{ flex: 1, overflow: "auto" }}>
+      <div style={{ flex: 1, width: "100%", overflow: "auto", "box-sizing": "border-box" }}>
         <Switch>
           <Match when={ctx.activeView() === "changes"}><ChangesView /></Match>
           <Match when={ctx.activeView() === "graph"}><GraphView /></Match>

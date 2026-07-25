@@ -148,7 +148,6 @@ export function GraphView() {
   const graphW = () => data().laneCount * LANE_W + 8;
   const svgH = () => data().rows.length * ROW_H + 20;
   const bottomY = () => data().rows.length * ROW_H;
-  const contentW = () => graphW() + 1400;
 
   function handleScroll(e: Event) {
     const el = e.currentTarget as HTMLDivElement;
@@ -184,17 +183,17 @@ export function GraphView() {
   };
 
   return (
-    <div style={{ display: "flex", "flex-direction": "column", height: "100%", overflow: "hidden", padding: "16px 24px", background: surfaceBg(0.04) }}>
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", width: "100%", overflow: "hidden", padding: "16px 20px", background: surfaceBg(0.04), "box-sizing": "border-box" }}>
       <Show when={data().rows.length === 0}>
         <EmptyState message="Loading graph..." />
       </Show>
       <Show when={data().rows.length > 0}>
         <div
           onScroll={handleScroll}
-          style={{ flex: 1, overflow: "auto", background: surfaceBg(0.04) }}
+          style={{ flex: 1, width: "100%", overflow: "auto", background: surfaceBg(0.04) }}
         >
-          <div style={{ "min-width": `${contentW()}px` }}>
-            <svg width={contentW()} height={svgH()} style={{ display: "block" }}>
+          <div style={{ width: "100%", "min-width": `${graphW() + 320}px` }}>
+            <svg width="100%" height={svgH()} style={{ display: "block" }}>
               <Index each={data().edges}>
                 {(edge) => (
                   <polyline
@@ -217,19 +216,19 @@ export function GraphView() {
                   const railsW = () => (maxLane() + 1) * LANE_W;
                   const refStart = () => railsW() + 8;
                   const textX = () => refStart() + (row().refs.length > 0 ? Math.min(row().refs.length, 3) * 130 : 0) + 6;
-                  const msgW = 600;
                   const isSelected = () => selectedHash() === row().hash;
+                  const msgLeft = () => textX() + 78;
 
                   return (
                     <g
                       style={{ cursor: "pointer" }}
                       onClick={() => handleRowClick(row().hash)}
                     >
-                      {/* Interactive row background hover & selection state */}
+                      {/* Row background selection state */}
                       <rect
                         x="0"
                         y={y - ROW_H / 2}
-                        width={contentW()}
+                        width="100%"
                         height={ROW_H}
                         fill={isSelected() ? "rgba(245, 158, 11, 0.12)" : "transparent"}
                         style={{ transition: "fill 0.15s" }}
@@ -253,7 +252,7 @@ export function GraphView() {
                       <text x={textX()} y={y + 4} fill="var(--accent-color,#f59e0b)" font-size="11" font-family="Space Mono,monospace">
                         {row().hash.slice(0, 7)}
                       </text>
-                      <foreignObject x={textX() + 78} y={y - 10} width={msgW} height={ROW_H}>
+                      <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 200}px)`} height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
@@ -270,7 +269,7 @@ export function GraphView() {
                           {row().message}
                         </div>
                       </foreignObject>
-                      <text x={textX() + 78 + msgW + 12} y={y + 4} fill="var(--text-muted,#888)" font-size="11">
+                      <text x="calc(100% - 16px)" y={y + 4} text-anchor="end" fill="var(--text-muted,#888)" font-size="11">
                         {row().author}{" · "}{formatTimestamp(row().timestamp)}
                       </text>
                     </g>

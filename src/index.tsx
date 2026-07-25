@@ -75,7 +75,7 @@ function GitPanel(props: any) {
   }
 
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden" }}>
+    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box" }}>
       {/* Tab bar — always visible when there are open repos */}
       <Show when={tabs().length > 0}>
         <div style={{ display: "flex", gap: 0, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0, "align-items": "stretch", overflow: "auto" }}>
