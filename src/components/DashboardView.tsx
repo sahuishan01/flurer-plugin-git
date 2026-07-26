@@ -1,6 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 import { getRecentRepos, removeRecentRepo, formatTimestamp, surfaceBg } from "../utils";
 import { GitIcon, FolderIcon, TrashIcon, Button } from "./shared";
+import { DirectoryPickerModal } from "./DirectoryPickerModal";
 import { S } from "../styles";
 
 type DashboardViewProps = {
@@ -11,6 +12,7 @@ export function DashboardView(props: DashboardViewProps) {
   const [repos, setRepos] = createSignal(getRecentRepos());
   const [openPath, setOpenPath] = createSignal("");
   const [showInput, setShowInput] = createSignal(false);
+  const [showPicker, setShowPicker] = createSignal(false);
 
   function handleOpen(path: string) {
     props.onOpenRepo(path);
@@ -78,15 +80,24 @@ export function DashboardView(props: DashboardViewProps) {
         </Show>
 
         <div style={{ ...S.card, background: surfaceBg(0.04) }}>
-          <Show when={!showInput()}>
-            <Button variant="primary" onClick={() => setShowInput(true)} style={{ width: "100%", padding: "10px", display: "flex", "align-items": "center", "justify-content": "center", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+            <Button
+              variant="primary"
+              onClick={() => setShowPicker(true)}
+              style={{ flex: 1, padding: "10px", display: "flex", "align-items": "center", "justify-content": "center", gap: "8px" }}
+            >
               <FolderIcon size={16} />
-              Open Repository
+              Browse Folder...
             </Button>
-          </Show>
+            <Show when={!showInput()}>
+              <Button onClick={() => setShowInput(true)} style={{ padding: "10px" }}>
+                Enter Path...
+              </Button>
+            </Show>
+          </div>
+
           <Show when={showInput()}>
-            <div>
-              <h3 style={S.sectionTitle}>Open Repository</h3>
+            <div style={{ "margin-top": "12px" }}>
               <div style={{ display: "flex", gap: "8px" }}>
                 <input
                   type="text"
@@ -111,6 +122,13 @@ export function DashboardView(props: DashboardViewProps) {
           </div>
         </Show>
       </div>
+
+      {/* Internal Folder Browser Modal */}
+      <DirectoryPickerModal
+        open={showPicker()}
+        onSelect={(path) => props.onOpenRepo(path)}
+        onClose={() => setShowPicker(false)}
+      />
     </div>
   );
 }
