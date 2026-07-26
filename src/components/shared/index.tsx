@@ -126,7 +126,7 @@ export function Button(props: { variant?: "primary" | "secondary" | "danger"; si
 }
 
 export function Card(props: { children: JSX.Element; style?: any }) {
-  return <div style={{ background: surfaceBg(0.04), border: "1px solid var(--border-strong)", "border-radius": "8px", padding: "16px", "margin-bottom": "12px", ...props.style }}>{props.children}</div>;
+  return <div style={{ background: surfaceBg(0.04), border: "1px solid var(--border-strong)", "border-radius": "8px", padding: "16px", "margin-bottom": "12px", width: "100%", "box-sizing": "border-box", ...props.style }}>{props.children}</div>;
 }
 
 export function Badge(props: { variant: "staged" | "unstaged" | "untracked"; count: number }) {
