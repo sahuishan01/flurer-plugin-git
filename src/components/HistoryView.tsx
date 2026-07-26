@@ -1,4 +1,4 @@
-import { createSignal, createMemo, For, Show, onMount } from "solid-js";
+import { createSignal, createMemo, For, Show, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp } from "../utils";
 import { Card, EmptyState, Button, CommitContextMenu } from "./shared";
@@ -9,11 +9,22 @@ export function HistoryView() {
   const [search, setSearch] = createSignal("");
   const [loadingMore, setLoadingMore] = createSignal(false);
   const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
+  let containerRef: HTMLDivElement | undefined;
 
   onMount(() => {
     if (ctx.commits().length === 0) {
       ctx.loadHistory(100);
     }
+    const el = containerRef?.parentElement ?? containerRef;
+    if (!el) return;
+    const handler = () => {
+      if (loadingMore() || !ctx.historyHasMore()) return;
+      if (el.scrollTop > 50 && el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
+        handleLoadMore();
+      }
+    };
+    el.addEventListener("scroll", handler, { passive: true });
+    onCleanup(() => el.removeEventListener("scroll", handler));
   });
 
   const filteredCommits = createMemo(() => {
@@ -34,14 +45,6 @@ export function HistoryView() {
     setLoadingMore(false);
   }
 
-  function handleScroll(e: Event) {
-    const el = e.currentTarget as HTMLDivElement;
-    if (!el || loadingMore() || !ctx.historyHasMore()) return;
-    if (el.scrollTop > 50 && el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
-      handleLoadMore();
-    }
-  }
-
   function handleContextMenu(e: MouseEvent, hash: string) {
     e.preventDefault();
     setMenuPos({ x: e.clientX, y: e.clientY, hash });
@@ -49,15 +52,11 @@ export function HistoryView() {
 
   return (
     <div
-      onScroll={handleScroll}
+      ref={containerRef}
       style={{
         padding: "16px 20px",
-        height: "100%",
         width: "100%",
         "box-sizing": "border-box",
-        "overflow-y": "auto",
-        display: "flex",
-        "flex-direction": "column",
       }}
     >
       <div style={{ "margin-bottom": "12px", width: "100%", "box-sizing": "border-box" }}>
