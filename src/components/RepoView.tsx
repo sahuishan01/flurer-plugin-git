@@ -12,8 +12,8 @@ import { StashView } from "./StashView";
 import { WorktreesView } from "./WorktreesView";
 
 const TABS = [
-  { id: "changes", label: "Changes" },
   { id: "graph", label: "Graph" },
+  { id: "changes", label: "Changes" },
   { id: "branches", label: "Branches" },
   { id: "history", label: "History" },
   { id: "diff", label: "Diff" },

@@ -152,7 +152,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
 
   function openRepo(path: string) {
     setRepoPath(path);
-    setActiveView("changes");
+    setActiveView("graph");
     setGraph([]);
     setGraphHasMore(true);
     setGraphLoading(false);
@@ -162,6 +162,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setSelectedDiffFile(null);
     setDiffResult(null);
     refresh();
+    loadGraph();
   }
 
   function backToDashboard() {
