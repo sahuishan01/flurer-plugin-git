@@ -56,10 +56,12 @@ export function HistoryView() {
       style={{
         padding: "16px 20px",
         width: "100%",
+        "max-width": "100%",
         "box-sizing": "border-box",
         display: "flex",
         "flex-direction": "column",
         "align-items": "stretch",
+        overflow: "hidden",
       }}
     >
       <div style={{ "margin-bottom": "12px", width: "100%", "box-sizing": "border-box" }}>
@@ -77,7 +79,7 @@ export function HistoryView() {
       </Show>
 
       <Show when={filteredCommits().length > 0}>
-        <Card style={{ padding: 0, width: "100%", "box-sizing": "border-box", overflow: "hidden" }}>
+        <Card style={{ padding: 0, width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden" }}>
           <For each={filteredCommits()}>
             {(c) => (
               <div
@@ -87,25 +89,25 @@ export function HistoryView() {
                   cursor: "pointer",
                   display: "flex",
                   "align-items": "center",
-                  "justify-content": "space-between",
-                  gap: "12px",
+                  gap: "10px",
                   width: "100%",
+                  "max-width": "100%",
                   "box-sizing": "border-box",
+                  "min-width": 0,
+                  overflow: "hidden",
                 }}
                 onClick={() => ctx.showCommitDetail(c.hash)}
                 onContextMenu={(e) => handleContextMenu(e, c.hash)}
               >
-                <div style={{ display: "flex", "align-items": "center", gap: "10px", flex: 1, "min-width": 0 }}>
-                  <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "font-size": "12px", "flex-shrink": 0 }}>
-                    {c.hash.slice(0, 7)}
-                  </code>
-                  <span style={{ "font-size": "13px", color: "var(--text-color)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: 1 }}>
-                    {c.message}
-                  </span>
-                </div>
-                <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", "flex-shrink": 0, "text-align": "right", "white-space": "nowrap" }}>
+                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "font-size": "12px", "flex-shrink": 0 }}>
+                  {c.hash.slice(0, 7)}
+                </code>
+                <span style={{ "font-size": "13px", color: "var(--text-color)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: 1, "min-width": 0 }}>
+                  {c.message}
+                </span>
+                <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "flex-shrink": 1, "min-width": 0, "text-align": "right", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "200px" }}>
                   {c.author} · {formatTimestamp(c.timestamp)}
-                </div>
+                </span>
               </div>
             )}
           </For>
@@ -121,8 +123,8 @@ export function HistoryView() {
       </Show>
 
       <Show when={ctx.commitDetail()}>
-        <div style={{ "margin-top": "16px", width: "100%", "box-sizing": "border-box" }}>
-          <Card style={{ width: "100%", "box-sizing": "border-box" }}>
+        <div style={{ "margin-top": "16px", width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden" }}>
+          <Card style={{ width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden" }}>
             <div style={S.cardHeader}>
               <span>Commit Detail</span>
               <Button size="sm" onClick={() => {
@@ -132,12 +134,12 @@ export function HistoryView() {
                 }
               }}>View Diff</Button>
             </div>
-            <div style={{ "font-size": "13px", "line-height": "1.5" }}>
+            <div style={{ "font-size": "13px", "line-height": "1.5", "word-break": "break-word", overflow: "hidden" }}>
               <div style={{ "margin-bottom": "4px" }}>
-                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace" }}>{ctx.commitDetail()!.hash}</code>
+                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "word-break": "break-all" }}>{ctx.commitDetail()!.hash}</code>
               </div>
               <div style={{ "font-weight": 600, "margin-bottom": "8px", "white-space": "pre-wrap", "word-break": "break-word" }}>{ctx.commitDetail()!.message}</div>
-              <div style={{ color: "var(--text-muted, #888)", "font-size": "11px" }}>
+              <div style={{ color: "var(--text-muted, #888)", "font-size": "11px", "word-break": "break-word" }}>
                 {ctx.commitDetail()!.author} &lt;{ctx.commitDetail()!.email}&gt;
               </div>
               <div style={{ color: "var(--text-muted, #888)", "font-size": "11px" }}>
