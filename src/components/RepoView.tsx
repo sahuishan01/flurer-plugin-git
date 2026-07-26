@@ -106,9 +106,9 @@ export function RepoView(props: RepoViewProps) {
       </Show>
 
       <div style={{ flex: 1, width: "100%", overflow: "auto", "box-sizing": "border-box" }}>
-        <Switch>
-          <Match when={ctx.activeView() === "changes"}><ChangesView /></Match>
+        <Switch fallback={<GraphView />}>
           <Match when={ctx.activeView() === "graph"}><GraphView /></Match>
+          <Match when={ctx.activeView() === "changes"}><ChangesView /></Match>
           <Match when={ctx.activeView() === "branches"}><BranchesView /></Match>
           <Match when={ctx.activeView() === "history"}><HistoryView /></Match>
           <Match when={ctx.activeView() === "diff"}><DiffView /></Match>

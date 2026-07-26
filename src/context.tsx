@@ -81,7 +81,7 @@ export function useGit(): GitContextValue {
 }
 
 export function GitProvider(props: ParentProps & { initialPath?: string | null }) {
-  const [activeView, setActiveView] = createSignal<GitView>("dashboard");
+  const [activeView, setActiveView] = createSignal<GitView>(props.initialPath ? "graph" : "dashboard");
   const [repoPath, setRepoPath] = createSignal<string | null>(props.initialPath ?? null);
   const [status, setStatus] = createSignal<GitStatus | null>(null);
   const [branches, setBranches] = createSignal<GitBranch[]>([]);
@@ -106,15 +106,14 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [toast, setToast] = createSignal<{ message: string; type: "success" | "error" } | null>(null);
   const [shellAvail, setShellAvail] = createSignal(false);
 
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
-
   onMount(() => {
     if (props.initialPath) {
-      setRepoPath(props.initialPath);
-      refresh();
+      openRepo(props.initialPath);
     }
     setShellAvail(git.hasShellPlugin());
   });
+
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   function showToast(message: string, type: "success" | "error") {
     setToast({ message, type });
