@@ -88,6 +88,43 @@ export function removeRecentRepo(path: string): void {
   localStorage.setItem(RECENT_REPOS_KEY, JSON.stringify(repos));
 }
 
+const OPEN_TABS_KEY = "flurer-git-open-tabs";
+const ACTIVE_TAB_KEY = "flurer-git-active-tab";
+
+export function getSavedOpenTabs(): string[] {
+  try {
+    const raw = localStorage.getItem(OPEN_TABS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveOpenTabs(paths: string[]): void {
+  try {
+    localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(paths));
+  } catch {}
+}
+
+export function getSavedActiveTab(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_TAB_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveTab(path: string | null): void {
+  try {
+    if (path) {
+      localStorage.setItem(ACTIVE_TAB_KEY, path);
+    } else {
+      localStorage.removeItem(ACTIVE_TAB_KEY);
+    }
+  } catch {}
+}
+
 export function basename(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;
