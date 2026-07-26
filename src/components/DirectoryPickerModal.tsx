@@ -2,22 +2,79 @@ import { createSignal, For, Show, onMount } from "solid-js";
 import { surfaceBg } from "../utils";
 import { FolderIcon, CloseIcon, Button } from "./shared";
 
+interface DiskVolume {
+  driveLetter: string;
+  volumeName: string;
+  fileSystem: string;
+  totalSpace: number;
+  freeSpace: number;
+}
+
+interface PhysicalDisk {
+  index: number;
+  model: string;
+  volumes: DiskVolume[];
+}
+
+interface QuickAccessEntry {
+  label: string;
+  path: string;
+}
+
 export function DirectoryPickerModal(props: {
   open: boolean;
   initialPath?: string;
   onSelect: (path: string) => void;
   onClose: () => void;
 }) {
-  const [currentPath, setCurrentPath] = createSignal(props.initialPath || "/home/opc");
+  const [currentPath, setCurrentPath] = createSignal(props.initialPath || "");
   const [items, setItems] = createSignal<{ name: string; is_dir: boolean; path: string }[]>([]);
+  const [drives, setDrives] = createSignal<DiskVolume[]>([]);
+  const [quickAccess, setQuickAccess] = createSignal<QuickAccessEntry[]>([]);
   const [loading, setLoading] = createSignal(false);
 
+  async function loadDrivesAndQuickAccess() {
+    if (!window.TauriCore?.invoke) return;
+    try {
+      const topo = await window.TauriCore.invoke<PhysicalDisk[]>("get_disk_topology");
+      if (Array.isArray(topo)) {
+        const vols: DiskVolume[] = [];
+        topo.forEach((d) => {
+          if (d.volumes) vols.push(...d.volumes);
+        });
+        setDrives(vols);
+        if (!currentPath() && vols.length > 0) {
+          loadDir(vols[0].driveLetter || "C:\\");
+        }
+      }
+    } catch {}
+
+    try {
+      const qa = await window.TauriCore.invoke<QuickAccessEntry[]>("get_quick_access");
+      if (Array.isArray(qa)) {
+        setQuickAccess(qa);
+        if (!currentPath() && qa.length > 0) {
+          loadDir(qa[0].path);
+        }
+      }
+    } catch {}
+
+    if (!currentPath()) {
+      loadDir("/home/opc");
+    }
+  }
+
   async function loadDir(dirPath: string) {
+    if (!dirPath) return;
     setLoading(true);
     setCurrentPath(dirPath);
     try {
       if (window.TauriCore?.invoke) {
-        const res = await window.TauriCore.invoke<any[]>("list_directory", { path: dirPath });
+        const res = await window.TauriCore.invoke<any[]>("list_directory", {
+          path: dirPath,
+          sortKey: "name",
+          sortDirection: "ascending",
+        });
         if (Array.isArray(res)) {
           const dirs = res
             .filter((item) => item.is_dir || item.isDir)
@@ -39,7 +96,8 @@ export function DirectoryPickerModal(props: {
 
   onMount(() => {
     if (props.open) {
-      loadDir(currentPath());
+      loadDrivesAndQuickAccess();
+      if (props.initialPath) loadDir(props.initialPath);
     }
   });
 
@@ -47,6 +105,7 @@ export function DirectoryPickerModal(props: {
     const p = currentPath();
     const parent = p.substring(0, Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")));
     if (parent) loadDir(parent);
+    else if (p.includes(":") && !p.endsWith("\\")) loadDir(`${p.split(":")[0]}:\\`);
     else if (p !== "/") loadDir("/");
   }
 
@@ -75,9 +134,10 @@ export function DirectoryPickerModal(props: {
             background: "var(--panel-bg, #1a1a2e)",
             border: "1px solid var(--border-strong, rgba(255,255,255,0.15))",
             "border-radius": "12px",
-            width: "560px",
+            width: "680px",
             "max-width": "95vw",
-            "max-height": "80vh",
+            height: "520px",
+            "max-height": "85vh",
             display: "flex",
             "flex-direction": "column",
             overflow: "hidden",
@@ -100,77 +160,161 @@ export function DirectoryPickerModal(props: {
             </button>
           </div>
 
-          {/* Navigation Bar */}
-          <div style={{ padding: "10px 18px", background: surfaceBg(0.04), "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", display: "flex", "align-items": "center", gap: "8px" }}>
-            <Button size="sm" onClick={handleNavigateUp} disabled={currentPath() === "/"}>
-              ↑ Up
-            </Button>
-            <input
-              type="text"
-              value={currentPath()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") loadDir((e.currentTarget as HTMLInputElement).value);
-              }}
-              style={{
-                flex: 1,
-                padding: "6px 10px",
-                "font-size": "12px",
-                "font-family": "Space Mono, monospace",
-                background: "var(--panel-bg, #1a1a2e)",
-                border: "1px solid var(--border-strong, rgba(255,255,255,0.15))",
-                color: "var(--text-color, #e4e4e7)",
-                "border-radius": "4px",
-              }}
-            />
-          </div>
-
-          {/* Subdirectories List */}
-          <div style={{ flex: 1, "overflow-y": "auto", padding: "8px 12px", "min-height": "240px" }}>
-            <Show when={loading()}>
-              <div style={{ padding: "20px", "text-align": "center", color: "var(--text-muted, #888)", "font-size": "13px" }}>
-                Loading directories...
-              </div>
-            </Show>
-            <Show when={!loading() && items().length === 0}>
-              <div style={{ padding: "20px", "text-align": "center", color: "var(--text-muted, #888)", "font-size": "13px" }}>
-                No subdirectories found.
-              </div>
-            </Show>
-            <For each={items()}>
-              {(item) => (
-                <div
-                  style={{
-                    display: "flex",
-                    "align-items": "center",
-                    gap: "10px",
-                    padding: "8px 10px",
-                    "border-radius": "6px",
-                    cursor: "pointer",
-                    "font-size": "13px",
-                    transition: "background 0.15s",
-                    color: "var(--text-color)",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = surfaceBg(0.08); }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                  onDblClick={() => loadDir(item.path)}
-                  onClick={() => setCurrentPath(item.path)}
-                >
-                  <FolderIcon size={16} />
-                  <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                    {item.name}
-                  </span>
-                  <Button size="sm" onClick={(e) => { e.stopPropagation(); loadDir(item.path); }}>
-                    Enter
-                  </Button>
+          {/* Body: Sidebar + File View */}
+          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            {/* Disks & Quick Access Sidebar */}
+            <div style={{ width: "190px", "border-right": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", background: surfaceBg(0.02), padding: "12px 8px", display: "flex", "flex-direction": "column", gap: "16px", "overflow-y": "auto", "flex-shrink": 0 }}>
+              {/* Disks Section */}
+              <Show when={drives().length > 0}>
+                <div>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-muted, #888)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", padding: "0 6px" }}>
+                    Drives & Volumes
+                  </div>
+                  <For each={drives()}>
+                    {(vol) => (
+                      <div
+                        style={{
+                          display: "flex",
+                          "align-items": "center",
+                          gap: "8px",
+                          padding: "6px 8px",
+                          "border-radius": "6px",
+                          cursor: "pointer",
+                          "font-size": "12px",
+                          color: currentPath().startsWith(vol.driveLetter) ? "var(--accent-color, #f59e0b)" : "var(--text-color)",
+                          background: currentPath().startsWith(vol.driveLetter) ? surfaceBg(0.08) : "transparent",
+                          transition: "background 0.15s",
+                        }}
+                        onClick={() => loadDir(vol.driveLetter)}
+                      >
+                        💾 <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "font-weight": 500 }}>
+                          {vol.volumeName ? `${vol.volumeName} (${vol.driveLetter})` : vol.driveLetter}
+                        </span>
+                      </div>
+                    )}
+                  </For>
                 </div>
-              )}
-            </For>
+              </Show>
+
+              {/* Quick Access Section */}
+              <Show when={quickAccess().length > 0}>
+                <div>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-muted, #888)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", padding: "0 6px" }}>
+                    Quick Access
+                  </div>
+                  <For each={quickAccess()}>
+                    {(qa) => (
+                      <div
+                        style={{
+                          display: "flex",
+                          "align-items": "center",
+                          gap: "8px",
+                          padding: "6px 8px",
+                          "border-radius": "6px",
+                          cursor: "pointer",
+                          "font-size": "12px",
+                          color: currentPath() === qa.path ? "var(--accent-color, #f59e0b)" : "var(--text-color)",
+                          background: currentPath() === qa.path ? surfaceBg(0.08) : "transparent",
+                          transition: "background 0.15s",
+                        }}
+                        onClick={() => loadDir(qa.path)}
+                      >
+                        <FolderIcon size={14} />
+                        <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {qa.label}
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              {/* Fallback Root shortcut if no drives detected */}
+              <Show when={drives().length === 0 && quickAccess().length === 0}>
+                <div>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-muted, #888)", "text-transform": "uppercase", "margin-bottom": "6px", padding: "0 6px" }}>
+                    Shortcuts
+                  </div>
+                  <div style={{ padding: "6px 8px", cursor: "pointer", "font-size": "12px" }} onClick={() => loadDir("/")}>📁 Root (/)</div>
+                </div>
+              </Show>
+            </div>
+
+            {/* Directory Explorer Pane */}
+            <div style={{ flex: 1, display: "flex", "flex-direction": "column", overflow: "hidden" }}>
+              {/* Path Navigation Bar */}
+              <div style={{ padding: "10px 14px", background: surfaceBg(0.04), "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", display: "flex", "align-items": "center", gap: "8px" }}>
+                <Button size="sm" onClick={handleNavigateUp}>
+                  ↑ Up
+                </Button>
+                <input
+                  type="text"
+                  value={currentPath()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") loadDir((e.currentTarget as HTMLInputElement).value);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "6px 10px",
+                    "font-size": "12px",
+                    "font-family": "Space Mono, monospace",
+                    background: "var(--panel-bg, #1a1a2e)",
+                    border: "1px solid var(--border-strong, rgba(255,255,255,0.15))",
+                    color: "var(--text-color, #e4e4e7)",
+                    "border-radius": "4px",
+                  }}
+                />
+              </div>
+
+              {/* Items List */}
+              <div style={{ flex: 1, "overflow-y": "auto", padding: "8px 12px" }}>
+                <Show when={loading()}>
+                  <div style={{ padding: "20px", "text-align": "center", color: "var(--text-muted, #888)", "font-size": "13px" }}>
+                    Loading directories...
+                  </div>
+                </Show>
+                <Show when={!loading() && items().length === 0}>
+                  <div style={{ padding: "20px", "text-align": "center", color: "var(--text-muted, #888)", "font-size": "13px" }}>
+                    No subdirectories found in this folder.
+                  </div>
+                </Show>
+                <For each={items()}>
+                  {(item) => (
+                    <div
+                      style={{
+                        display: "flex",
+                        "align-items": "center",
+                        gap: "10px",
+                        padding: "8px 10px",
+                        "border-radius": "6px",
+                        cursor: "pointer",
+                        "font-size": "13px",
+                        transition: "background 0.15s",
+                        color: "var(--text-color)",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = surfaceBg(0.08); }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                      onDblClick={() => loadDir(item.path)}
+                      onClick={() => setCurrentPath(item.path)}
+                    >
+                      <FolderIcon size={16} />
+                      <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {item.name}
+                      </span>
+                      <Button size="sm" onClick={(e) => { e.stopPropagation(); loadDir(item.path); }}>
+                        Enter
+                      </Button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
           </div>
 
           {/* Footer */}
           <div style={{ padding: "12px 18px", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", display: "flex", "align-items": "center", "justify-content": "space-between", background: surfaceBg(0.02) }}>
-            <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "280px" }}>
-              {currentPath()}
+            <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "360px" }}>
+              Selected: {currentPath()}
             </span>
             <div style={{ display: "flex", gap: "8px" }}>
               <Button onClick={props.onClose}>Cancel</Button>
