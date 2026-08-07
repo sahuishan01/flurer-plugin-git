@@ -4,12 +4,25 @@ import { surfaceBg } from "../utils";
 import { Card, EmptyState, Button } from "./shared";
 import { S } from "../styles";
 
+function formatHashLabel(str?: string | null): string {
+  if (!str) return "";
+  if (str.includes("~")) {
+    const [h, rest] = str.split("~");
+    return `${h.slice(0, 7)}~${rest}`;
+  }
+  if (str.length > 7 && !str.includes(" ")) {
+    return str.slice(0, 7);
+  }
+  return str;
+}
+
 export function DiffView() {
   const ctx = useGit();
 
   const diff = createMemo(() => ctx.diffResult());
   const commitHash = createMemo(() => ctx.diffCommitHash());
-  const compareTo = createMemo(() => ctx.diffCompareCommits()?.to);
+  const compareFrom = createMemo(() => formatHashLabel(ctx.diffCompareCommits()?.from));
+  const compareTo = createMemo(() => formatHashLabel(ctx.diffCompareCommits()?.to));
 
   // Normalize selected file path (strip leading ./ if present)
   const normSelectedFile = createMemo(() => {
@@ -55,7 +68,7 @@ export function DiffView() {
             {ctx.selectedDiffFile() ?? (commitHash() ? `Commit: ${commitHash()?.slice(0, 7)}` : "All Changes")}
           </span>
           <span style={{ "font-size": "11px", padding: "2px 8px", "border-radius": "4px", background: ctx.diffMode() === "staged" ? "rgba(34,197,94,0.2)" : ctx.diffMode() === "unstaged" ? "rgba(59,130,246,0.2)" : "rgba(168,85,247,0.2)", color: ctx.diffMode() === "staged" ? "#4ade80" : ctx.diffMode() === "unstaged" ? "#60a5fa" : "#c084fc", "font-weight": 600 }}>
-            {ctx.diffMode() === "commit" ? "vs Previous Commit" : ctx.diffMode()} {compareTo() ? `(${ctx.diffCompareCommits()?.from.slice(0, 7)} ↔ ${compareTo()})` : ""}
+            {ctx.diffMode() === "commit" ? "vs Previous Commit" : ctx.diffMode()} {compareTo() ? `(${compareFrom()} ↔ ${compareTo()})` : ""}
           </span>
         </div>
 
