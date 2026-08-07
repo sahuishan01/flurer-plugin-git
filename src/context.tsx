@@ -1,4 +1,4 @@
-import { createContext, useContext, createSignal, onMount, type Accessor, type JSX, type ParentProps } from "solid-js";
+import { createContext, useContext, createSignal, createMemo, onMount, type Accessor, type JSX, type ParentProps } from "solid-js";
 import { saveRecentRepo } from "./utils";
 import * as git from "./git";
 import type {
