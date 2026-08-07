@@ -315,28 +315,47 @@ export function GraphView() {
                         </g>
                       </Show>
 
-                      {/* Commit Message */}
-                      <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 320}px)`} height={ROW_H}>
+                      {/* Commit Message + Author/Committer/Time Meta */}
+                      <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 24}px)`} height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
-                            "font-size": "12px",
-                            color: isSelected() ? "var(--accent-default, var(--accent-color, #f59e0b))" : "var(--text-primary, var(--text-color))",
-                            "font-weight": isSelected() ? "600" : "400",
-                            "text-shadow": "var(--text-shadow)",
-                            "line-height": `${ROW_H}px`,
-                            overflow: "hidden",
-                            "text-overflow": "ellipsis",
-                            "white-space": "nowrap",
+                            display: "flex",
+                            "align-items": "center",
+                            gap: "10px",
+                            width: "100%",
+                            height: "100%",
                           }}
-                          title={row().message}
                         >
-                          {row().message}
+                          <div
+                            style={{
+                              flex: 1,
+                              "min-width": 0,
+                              "font-size": "12px",
+                              color: isSelected() ? "var(--accent-default, var(--accent-color, #f59e0b))" : "var(--text-primary, var(--text-color))",
+                              "font-weight": isSelected() ? "600" : "400",
+                              "text-shadow": "var(--text-shadow)",
+                              "white-space": "nowrap",
+                              overflow: "hidden",
+                              "text-overflow": "ellipsis",
+                            }}
+                            title={row().message}
+                          >
+                            {row().message}
+                          </div>
+                          <div
+                            style={{
+                              flex: "0 0 auto",
+                              "white-space": "nowrap",
+                              "font-size": "11px",
+                              color: "var(--text-secondary, #c0c0c0)",
+                              "text-shadow": "var(--text-shadow)",
+                            }}
+                          >
+                            {row().author}{row().committer && row().committer !== row().author ? ` · ${row().committer}` : ""}{" · "}{formatTimestamp(row().timestamp)}
+                          </div>
                         </div>
                       </foreignObject>
-                      <text x="calc(100% - 16px)" y={y + 4} text-anchor="end" fill="var(--text-secondary, #c0c0c0)" font-size="11" style={{ "text-shadow": "var(--text-shadow)" }}>
-                        {row().author}{row().committer && row().committer !== row().author ? ` · ${row().committer}` : ""}{" · "}{formatTimestamp(row().timestamp)}
-                      </text>
                     </g>
                   );
                 }}

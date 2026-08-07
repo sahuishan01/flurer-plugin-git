@@ -37,7 +37,7 @@ The diff-section bugfixes were implemented and released as **v0.12.2** in the pl
 |------|--------|
 | `src/git.ts` | `gitGraph` format now includes committer: `%H%x1f%P%x1f%s%x1f%an%x1f%cn%x1f%at%x1f%D`, parsed into `committer` on each entry |
 | `src/types.ts` | `GitGraphEntry` gains optional `committer?: string` |
-| `src/components/GraphView.tsx` | Commit row meta shows `author · committer · time`; committer only when it differs from author; message column reserves more width |
+| `src/components/GraphView.tsx` | Commit row meta shows `author · committer · time`; committer only when it differs from author; message + meta merged into a single HTML flex row inside the `foreignObject` (replaces fragile SVG `text x="calc(100% - 16px)"` that could vanish in WebView) so the name/timestamp is always visible |
 | `src/context.tsx` | `selectedBranches` persisted per repo — restored on `openRepo`, saved via `persistBranchSelection` on every change |
 | `src/utils.ts` | New `getSavedBranchSelection(path)` / `saveBranchSelection(path, branches)` localStorage helpers (`flurer-git-branch-selection`) |
 
