@@ -16,7 +16,9 @@ async function execGit(repoPath: string, ...args: string[]): Promise<string> {
   const Command = getShell();
   if (Command) {
     const result = await Command.create("git", ["-C", repoPath, ...args]).execute({ windowsHide: true });
-    if (result.code !== 0) {
+    // Exit code 0: success / no diffs
+    // Exit code 1: differences found (standard git diff exit code)
+    if (result.code !== 0 && result.code !== 1) {
       throw new Error(result.stderr.trim() || `git exited with code ${result.code}`);
     }
     return result.stdout;
@@ -304,7 +306,14 @@ export async function gitDiff(repoPath: string, filePath: string = "."): Promise
   if (Command) {
     const args = ["diff"];
     if (filePath && filePath !== ".") args.push("--", filePath);
-    const out = await execGit(repoPath, ...args);
+    let out = await execGit(repoPath, ...args);
+
+    // Fallback for untracked files: git diff --no-index /dev/null <filePath>
+    if ((!out || !out.trim()) && filePath && filePath !== ".") {
+      try {
+        out = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", filePath);
+      } catch {}
+    }
     return parseDiff(out);
   }
   return invoke<GitDiff>("git_diff", { repoPath, filePath });

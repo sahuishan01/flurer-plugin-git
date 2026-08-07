@@ -37,17 +37,18 @@ export function DiffView() {
     const sel = normSelectedFile();
     if (d.files && d.files.length > 0) {
       if (sel) {
-        return d.files.filter((f) => {
+        const filtered = d.files.filter((f) => {
           const np = (f.newPath || "").replace(/^\.\//, "");
           const op = (f.oldPath || "").replace(/^\.\//, "");
-          return np === sel || op === sel;
+          return np === sel || op === sel || np.endsWith("/" + sel) || op.endsWith("/" + sel) || sel.endsWith("/" + np) || sel.endsWith("/" + op);
         });
+        if (filtered.length > 0) return filtered;
       }
       return d.files;
     }
-    // Fallback if files is empty but hunks exist
+    // Fallback if files array is empty but hunks exist
     if (d.hunks && d.hunks.length > 0) {
-      return [{ newPath: sel || "Diff", oldPath: "", hunks: d.hunks }];
+      return [{ newPath: sel || "Diff Output", oldPath: "", hunks: d.hunks }];
     }
     return [];
   });
