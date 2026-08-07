@@ -208,11 +208,11 @@ export function GraphView() {
                     <marker
                       id={`merge-arrow-${idx}`}
                       viewBox="0 0 10 10"
-                      refX="6"
+                      refX="5"
                       refY="5"
                       markerWidth="7"
                       markerHeight="7"
-                      orient="auto"
+                      orient="auto-start-reverse"
                     >
                       <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={color()} />
                     </marker>
@@ -235,7 +235,7 @@ export function GraphView() {
                       opacity={isMerge() ? "0.95" : "0.55"}
                       stroke-linejoin="round"
                       stroke-linecap="round"
-                      marker-end={isMerge() ? markerId() : undefined}
+                      marker-start={isMerge() ? markerId() : undefined}
                     />
                   );
                 }}
@@ -384,7 +384,10 @@ export function GraphView() {
                 }}>View Diff</Button>
                 <button
                   type="button"
-                  onClick={() => setSelectedHash(null)}
+                  onClick={() => {
+                    ctx.closeCommitDetail();
+                    setSelectedHash(null);
+                  }}
                   style={{
                     background: "transparent",
                     border: "none",

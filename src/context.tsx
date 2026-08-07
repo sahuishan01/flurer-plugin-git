@@ -70,6 +70,7 @@ interface GitContextValue {
   loadStashes: () => Promise<void>;
   loadWorktrees: () => Promise<void>;
   showCommitDetail: (hash: string) => Promise<void>;
+  closeCommitDetail: () => void;
 }
 
 const GitContext = createContext<GitContextValue>();
@@ -528,6 +529,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     } catch {}
   }
 
+  function closeCommitDetail() {
+    setCommitDetail(null);
+  }
+
   const ctx: GitContextValue = {
     activeView, switchView,
     repoPath, openRepo, backToDashboard,
@@ -542,7 +547,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     stash, stashPop, stashDrop,
     addWorktree, removeWorktree,
     loadDiff, loadDiffCompare, loadDiffWithCurrent, loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
-    showCommitDetail,
+    showCommitDetail, closeCommitDetail,
   };
 
   return <GitContext.Provider value={ctx}>{props.children}</GitContext.Provider>;
