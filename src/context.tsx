@@ -1,5 +1,5 @@
 import { createContext, useContext, createSignal, createMemo, onMount, type Accessor, type JSX, type ParentProps } from "solid-js";
-import { saveRecentRepo } from "./utils";
+import { saveRecentRepo, getSavedBranchSelection, saveBranchSelection } from "./utils";
 import * as git from "./git";
 import type {
   GitView, GitStatus, GitCommit, GitBranch, GitGraphEntry,
@@ -176,6 +176,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
 
   function openRepo(path: string) {
     setRepoPath(path);
+    const saved = getSavedBranchSelection(path);
+    setSelectedBranches(saved ?? ["all"]);
     setActiveView("graph");
     setGraph([]);
     setGraphHasMore(true);
@@ -555,28 +557,35 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     }
   }
 
-  function selectAllBranches() {
-    setSelectedBranches(["all"]);
-    refreshHistoryAndGraph(["all"]);
+function selectAllBranches() {
+  setSelectedBranches(["all"]);
+  persistBranchSelection(["all"]);
+  refreshHistoryAndGraph(["all"]);
+}
+
+function persistBranchSelection(branches: string[]) {
+  const p = repoPath();
+  if (p) saveBranchSelection(p, branches);
+}
+
+function toggleBranchSelection(branchName: string) {
+  if (branchName === "all") {
+    selectAllBranches();
+    return;
   }
 
-  function toggleBranchSelection(branchName: string) {
-    if (branchName === "all") {
-      selectAllBranches();
-      return;
-    }
-
-    const current = selectedBranches().filter((b) => b !== "all");
-    let next: string[];
-    if (current.includes(branchName)) {
-      next = current.filter((b) => b !== branchName);
-      if (next.length === 0) next = ["all"];
-    } else {
-      next = [...current, branchName];
-    }
-    setSelectedBranches(next);
-    refreshHistoryAndGraph(next);
+  const current = selectedBranches().filter((b) => b !== "all");
+  let next: string[];
+  if (current.includes(branchName)) {
+    next = current.filter((b) => b !== branchName);
+    if (next.length === 0) next = ["all"];
+  } else {
+    next = [...current, branchName];
   }
+  setSelectedBranches(next);
+  persistBranchSelection(next);
+  refreshHistoryAndGraph(next);
+}
 
   async function refreshHistoryAndGraph(branchesToUse?: string[]) {
     await loadGraph(branchesToUse);

@@ -316,7 +316,7 @@ export function GraphView() {
                       </Show>
 
                       {/* Commit Message */}
-                      <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 200}px)`} height={ROW_H}>
+                      <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 320}px)`} height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
@@ -335,7 +335,7 @@ export function GraphView() {
                         </div>
                       </foreignObject>
                       <text x="calc(100% - 16px)" y={y + 4} text-anchor="end" fill="var(--text-secondary, #c0c0c0)" font-size="11" style={{ "text-shadow": "var(--text-shadow)" }}>
-                        {row().author}{" · "}{formatTimestamp(row().timestamp)}
+                        {row().author}{row().committer && row().committer !== row().author ? ` · ${row().committer}` : ""}{" · "}{formatTimestamp(row().timestamp)}
                       </text>
                     </g>
                   );

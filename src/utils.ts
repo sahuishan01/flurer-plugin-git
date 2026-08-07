@@ -125,6 +125,32 @@ export function saveActiveTab(path: string | null): void {
   } catch {}
 }
 
+const BRANCH_SELECT_KEY = "flurer-git-branch-selection";
+
+/** Load the saved branch filter selection for a given repo path. */
+export function getSavedBranchSelection(path: string): string[] | null {
+  try {
+    const raw = localStorage.getItem(BRANCH_SELECT_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    const sel = map?.[path];
+    if (Array.isArray(sel)) return sel;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the branch filter selection for a given repo path. */
+export function saveBranchSelection(path: string, branches: string[]): void {
+  try {
+    const raw = localStorage.getItem(BRANCH_SELECT_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[path] = branches;
+    localStorage.setItem(BRANCH_SELECT_KEY, JSON.stringify(map));
+  } catch {}
+}
+
 export function basename(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;
