@@ -207,8 +207,18 @@ export function CommitContextMenu(props: {
 }) {
   const ctx = useGit();
 
+  const handleDiffPrevious = () => {
+    ctx.loadDiff(".", "commit", props.hash);
+    props.onClose();
+  };
+
   const handleDiffCurrent = () => {
     ctx.loadDiffWithCurrent(props.hash);
+    props.onClose();
+  };
+
+  const handleDiffWorkingTree = () => {
+    ctx.loadDiffWithWorkingTree(props.hash);
     props.onClose();
   };
 
@@ -256,8 +266,8 @@ export function CommitContextMenu(props: {
       <div
         style={{
           position: "fixed",
-          top: `${Math.min(props.y, window.innerHeight - 180)}px`,
-          left: `${Math.min(props.x, window.innerWidth - 220)}px`,
+          top: `${Math.min(props.y, window.innerHeight - 240)}px`,
+          left: `${Math.min(props.x, window.innerWidth - 240)}px`,
           background: "var(--glass-bg, rgba(32, 32, 32, 0.85))",
           border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.12))",
           "border-radius": "8px",
@@ -267,7 +277,7 @@ export function CommitContextMenu(props: {
           display: "flex",
           "flex-direction": "column",
           gap: "2px",
-          "min-width": "200px",
+          "min-width": "220px",
           "z-index": 100001,
           "font-size": "12px",
         }}
@@ -276,10 +286,25 @@ export function CommitContextMenu(props: {
         <button
           type="button"
           style={menuBtnStyle}
+          onClick={handleDiffPrevious}
+        >
+          ⏮️ Diff with Previous Commit
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
           onClick={handleDiffCurrent}
         >
-          🔍 View Diff with Current (HEAD)
+          📍 Diff with HEAD
         </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={handleDiffWorkingTree}
+        >
+          📝 Diff with Working Tree
+        </button>
+        <div style={{ height: "1px", background: "var(--border-subtle, rgba(255,255,255,0.08))", margin: "4px 0" }} />
         <button
           type="button"
           style={menuBtnStyle}
@@ -293,7 +318,7 @@ export function CommitContextMenu(props: {
           style={menuBtnStyle}
           onClick={handleCopyHash}
         >
-          📋 Copy Commit Hash ({props.hash.slice(0, 7)})
+          📋 Copy Hash ({props.hash.slice(0, 7)})
         </button>
         <button
           type="button"
@@ -469,6 +494,131 @@ export function BranchMultiSelect() {
         </div>
       </Show>
     </div>
+  );
+}
+
+const modalOptionStyle = {
+  padding: "12px 14px",
+  background: "var(--control-bg, rgba(255, 255, 255, 0.05))",
+  border: "var(--control-border, 1px solid rgba(255, 255, 255, 0.1))",
+  "border-radius": "8px",
+  cursor: "pointer",
+  transition: "all 0.15s ease",
+};
+
+export function DiffCompareModal() {
+  const ctx = useGit();
+  const hash = () => ctx.diffPromptHash();
+
+  return (
+    <Show when={hash()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.55)",
+          "backdrop-filter": "blur(8px)",
+          "z-index": 99999,
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          padding: "16px",
+        }}
+        onClick={() => ctx.closeDiffPrompt()}
+      >
+        <div
+          style={{
+            background: "var(--glass-bg, rgba(30, 30, 30, 0.95))",
+            border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.16))",
+            "border-radius": "12px",
+            padding: "20px 24px",
+            width: "100%",
+            "max-width": "460px",
+            "box-shadow": "var(--glass-shadow, 0 16px 40px rgba(0,0,0,0.6))",
+            "backdrop-filter": "var(--glass-blur, blur(24px))",
+            display: "flex",
+            "flex-direction": "column",
+            gap: "16px",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <span style={{ "font-size": "15px", "font-weight": 700, color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>
+                Compare Commit Diff
+              </span>
+              <code style={{ color: "var(--accent-default, #f59e0b)", "font-family": "Space Mono, monospace", "font-size": "12px" }}>
+                {hash()!.slice(0, 7)}
+              </code>
+            </div>
+            <button
+              type="button"
+              style={{ background: "transparent", border: "none", color: "var(--text-muted, #888)", cursor: "pointer", padding: "4px" }}
+              onClick={() => ctx.closeDiffPrompt()}
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
+
+          <div style={{ "font-size": "12px", color: "var(--text-secondary, #aaa)" }}>
+            Select target to compare commit <code style={{ color: "var(--accent-default, #f59e0b)" }}>{hash()!.slice(0, 7)}</code> against:
+          </div>
+
+          <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
+            {/* Option 1: Previous Commit */}
+            <div
+              style={modalOptionStyle}
+              onClick={() => {
+                const h = hash()!;
+                ctx.closeDiffPrompt();
+                ctx.loadDiff(".", "commit", h);
+              }}
+            >
+              <div style={{ "font-size": "13px", "font-weight": 600, color: "var(--text-primary, var(--text-color))" }}>
+                ⏮️ Previous Commit ({hash()!.slice(0, 7)}~1 ↔ {hash()!.slice(0, 7)})
+              </div>
+              <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", "margin-top": "2px" }}>
+                Show changes introduced specifically by this commit relative to its parent.
+              </div>
+            </div>
+
+            {/* Option 2: Current HEAD */}
+            <div
+              style={modalOptionStyle}
+              onClick={() => {
+                const h = hash()!;
+                ctx.closeDiffPrompt();
+                ctx.loadDiffWithCurrent(h);
+              }}
+            >
+              <div style={{ "font-size": "13px", "font-weight": 600, color: "var(--text-primary, var(--text-color))" }}>
+                📍 Current HEAD ({hash()!.slice(0, 7)} ↔ HEAD)
+              </div>
+              <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", "margin-top": "2px" }}>
+                Show differences between this commit and the current checked-out branch commit.
+              </div>
+            </div>
+
+            {/* Option 3: Working Tree */}
+            <div
+              style={modalOptionStyle}
+              onClick={() => {
+                const h = hash()!;
+                ctx.closeDiffPrompt();
+                ctx.loadDiffWithWorkingTree(h);
+              }}
+            >
+              <div style={{ "font-size": "13px", "font-weight": 600, color: "var(--text-primary, var(--text-color))" }}>
+                📝 Working Tree ({hash()!.slice(0, 7)} ↔ Uncommitted Changes)
+              </div>
+              <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", "margin-top": "2px" }}>
+                Show differences between this commit and your active working directory.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
   );
 }
 

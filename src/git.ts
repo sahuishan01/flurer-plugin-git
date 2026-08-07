@@ -326,6 +326,17 @@ export async function gitDiffBetween(repoPath: string, fromHash: string, toHash:
   return invoke<GitDiff>("git_diff_between", { repoPath, fromHash, toHash, filePath });
 }
 
+export async function gitDiffCommitWithWorkingTree(repoPath: string, commitHash: string, filePath: string = "."): Promise<GitDiff> {
+  const Command = getShell();
+  if (Command) {
+    const args = ["diff", commitHash];
+    if (filePath && filePath !== ".") args.push("--", filePath);
+    const out = await execGit(repoPath, ...args);
+    return parseDiff(out);
+  }
+  return invoke<GitDiff>("git_diff_between", { repoPath, fromHash: commitHash, toHash: "", filePath });
+}
+
 // ---- Graph ----
 
 export async function gitGraph(

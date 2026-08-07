@@ -380,7 +380,7 @@ export function GraphView() {
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
                 <Button size="sm" variant="primary" onClick={() => {
                   const d = ctx.commitDetail();
-                  if (d) ctx.loadDiff(".", "commit", d.hash);
+                  if (d) ctx.openDiffPrompt(d.hash);
                 }}>View Diff</Button>
                 <button
                   type="button"

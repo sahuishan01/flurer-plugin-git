@@ -1,7 +1,7 @@
 import { Show, Switch, Match, createMemo } from "solid-js";
 import { useGit } from "../context";
 import { basename } from "../utils";
-import { GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon, BranchIcon, Button, TabBar, BranchMultiSelect } from "./shared";
+import { GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon, BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
 import { DiffView } from "./DiffView";
@@ -117,6 +117,7 @@ export function RepoView(props: RepoViewProps) {
           <Match when={ctx.activeView() === "worktrees"}><WorktreesView /></Match>
         </Switch>
       </div>
+      <DiffCompareModal />
     </div>
   );
 }

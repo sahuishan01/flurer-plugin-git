@@ -131,7 +131,7 @@ export function HistoryView() {
               <Button size="sm" onClick={() => {
                 const d = ctx.commitDetail();
                 if (d) {
-                  ctx.loadDiff(".", "commit", d.hash);
+                  ctx.openDiffPrompt(d.hash);
                 }
               }}>View Diff</Button>
             </div>

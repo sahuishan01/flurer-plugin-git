@@ -62,6 +62,10 @@ interface GitContextValue {
   loadDiff: (filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string) => Promise<void>;
   loadDiffCompare: (fromHash: string, toHash: string, filePath?: string) => Promise<void>;
   loadDiffWithCurrent: (commitHash: string, filePath?: string) => Promise<void>;
+  loadDiffWithWorkingTree: (commitHash: string, filePath?: string) => Promise<void>;
+  diffPromptHash: Accessor<string | null>;
+  openDiffPrompt: (hash: string) => void;
+  closeDiffPrompt: () => void;
   loadGraph: () => Promise<void>;
   loadMoreGraph: () => Promise<void>;
   loadHistory: (maxCount: number) => Promise<void>;
@@ -112,6 +116,16 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [diffCommitHash, setDiffCommitHash] = createSignal<string | null>(null);
   const [compareSourceHash, setCompareSourceHash] = createSignal<string | null>(null);
   const [diffCompareCommits, setDiffCompareCommits] = createSignal<{ from: string; to: string } | null>(null);
+  const [diffPromptHash, setDiffPromptHash] = createSignal<string | null>(null);
+
+  function openDiffPrompt(hash: string) {
+    setDiffPromptHash(hash);
+  }
+
+  function closeDiffPrompt() {
+    setDiffPromptHash(null);
+  }
+
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [toast, setToast] = createSignal<{ message: string; type: "success" | "error" } | null>(null);
@@ -437,6 +451,23 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     }
   }
 
+  async function loadDiffWithWorkingTree(commitHash: string, filePath: string = ".") {
+    setSelectedDiffFile(filePath === "." ? null : filePath);
+    setDiffMode("compare");
+    setDiffCommitHash(commitHash);
+    setDiffCompareCommits({ from: commitHash, to: "Working Tree" });
+    setDiffResult(null);
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const diff = await git.gitDiffCommitWithWorkingTree(p, commitHash, filePath);
+      setDiffResult(diff);
+      if (activeView() !== "diff") setActiveView("diff");
+    } catch (err) {
+      showToast(`Failed to load diff with working tree: ${err}`, "error");
+    }
+  }
+
   const GRAPH_PAGE_SIZE = 1000;
 
   async function loadGraph(overrideBranches?: string[]) {
@@ -587,7 +618,9 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     createBranch, deleteBranch, checkout, merge, cherryPick,
     stash, stashPop, stashDrop,
     addWorktree, removeWorktree,
-    loadDiff, loadDiffCompare, loadDiffWithCurrent, loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
+    loadDiff, loadDiffCompare, loadDiffWithCurrent, loadDiffWithWorkingTree,
+    diffPromptHash, openDiffPrompt, closeDiffPrompt,
+    loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
     showCommitDetail, closeCommitDetail,
   };
 
