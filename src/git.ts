@@ -239,12 +239,14 @@ function parseDiff(output: string): GitDiff {
     return { files: [], hunks: [] };
   }
 
-  const lines = output.split("\n");
+  // Normalize CRLF to LF so Windows diff output matches regexes
+  const lines = output.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
 
-    if (rawLine.startsWith("diff --git ")) {
-      const cleanLine = rawLine.substring("diff --git ".length).trim();
+    if (rawLine.startsWith("diff --git ") || rawLine.startsWith("diff --no-index ")) {
+      const prefix = rawLine.startsWith("diff --git ") ? "diff --git " : "diff --no-index ";
+      const cleanLine = rawLine.substring(prefix.length).trim();
       let oldPath = "";
       let newPath = "";
       const match = cleanLine.match(/^(?:"?a\/(.*?)"?)\s+(?:"?b\/(.*?)"?)$/);
@@ -283,7 +285,7 @@ function parseDiff(output: string): GitDiff {
     }
 
     if (currentHunk) {
-      if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ")) {
+      if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ") || rawLine.startsWith("new file mode")) {
         continue;
       }
       if (rawLine.startsWith("+")) {
@@ -308,7 +310,15 @@ export async function gitDiff(repoPath: string, filePath: string = "."): Promise
     if (filePath && filePath !== ".") args.push("--", filePath);
     let out = await execGit(repoPath, ...args);
 
-    // Fallback for untracked files: git diff --no-index /dev/null <filePath>
+    // Fallback 1: If empty and specific file requested, check staged diff
+    if ((!out || !out.trim()) && filePath && filePath !== ".") {
+      try {
+        const stagedArgs = ["diff", "--cached", "--", filePath];
+        out = await execGit(repoPath, ...stagedArgs);
+      } catch {}
+    }
+
+    // Fallback 2: If still empty and specific file requested, check untracked file via --no-index
     if ((!out || !out.trim()) && filePath && filePath !== ".") {
       try {
         out = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", filePath);
@@ -324,7 +334,15 @@ export async function gitDiffStaged(repoPath: string, filePath: string = "."): P
   if (Command) {
     const args = ["diff", "--cached"];
     if (filePath && filePath !== ".") args.push("--", filePath);
-    const out = await execGit(repoPath, ...args);
+    let out = await execGit(repoPath, ...args);
+
+    // Fallback: If empty and specific file requested, check unstaged diff
+    if ((!out || !out.trim()) && filePath && filePath !== ".") {
+      try {
+        const unstagedArgs = ["diff", "--", filePath];
+        out = await execGit(repoPath, ...unstagedArgs);
+      } catch {}
+    }
     return parseDiff(out);
   }
   return invoke<GitDiff>("git_diff_staged", { repoPath, filePath });
