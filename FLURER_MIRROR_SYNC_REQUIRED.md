@@ -37,7 +37,7 @@ The diff-section bugfixes were implemented and released as **v0.12.2** in the pl
 |------|--------|
 | `src/git.ts` | `gitGraph` format now includes committer: `%H%x1f%P%x1f%s%x1f%an%x1f%cn%x1f%at%x1f%D`, parsed into `committer` on each entry |
 | `src/types.ts` | `GitGraphEntry` gains optional `committer?: string` |
-| `src/components/GraphView.tsx` | Commit row meta shows `author · committer · time`; committer only when it differs from author; message + meta merged into a single HTML flex row inside the `foreignObject` (replaces fragile SVG `text x="calc(100% - 16px)"` that could vanish in WebView) so the name/timestamp is always visible |
+| `src/components/GraphView.tsx` | Major graph redesign — CSS-injected responsive rules (injected `<style id="flurer-git-graph-css">` with hover glow + `@media` breakpoints at 1100/780/620px to hide refs/meta/hash on narrow windows); SVG layer now only draws lanes/edges/dots; labels are HTML flex rows: roomy hash → pill branch refs (full names, `+N more`, gradient merge badge `← a ➔ b` highlighted with glow) → ellipsizing message → `author · committer · time`; rows are rounded (8px) with inset accent bar on selection and hover tint; load-more is a centered pill |
 | `src/context.tsx` | `selectedBranches` persisted per repo — restored on `openRepo`, saved via `persistBranchSelection` on every change |
 | `src/utils.ts` | New `getSavedBranchSelection(path)` / `saveBranchSelection(path, branches)` localStorage helpers (`flurer-git-branch-selection`) |
 
