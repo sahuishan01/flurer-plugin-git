@@ -398,6 +398,11 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setSelectedDiffFile(filePath === "." ? null : filePath);
     setDiffMode(mode);
     setDiffCommitHash(commitHash ?? null);
+    if (mode === "commit" && commitHash) {
+      setDiffCompareCommits({ from: `${commitHash.slice(0, 7)}~1`, to: commitHash.slice(0, 7) });
+    } else if (mode === "staged" || mode === "unstaged") {
+      setDiffCompareCommits(null);
+    }
     setDiffResult(null);
     const p = repoPath();
     if (!p) return;

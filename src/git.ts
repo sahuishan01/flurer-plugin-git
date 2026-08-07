@@ -7,11 +7,8 @@ import type {
 let shellAvailable: boolean | null = null;
 
 function getShell() {
-  if (shellAvailable === null) {
-    shellAvailable = !!(window as any).__TAURI__?.shell?.Command || !!(window as any).TauriShell?.Command;
-  }
-  if (!shellAvailable) return null;
-  const shell = (window as any).__TAURI__?.shell || (window as any).TauriShell;
+  const win = window as any;
+  const shell = win.TauriShell || win.__TAURI_PLUGIN_SHELL__ || win.__TAURI__?.shell;
   return shell?.Command || null;
 }
 
@@ -329,7 +326,7 @@ export async function gitDiffCommit(repoPath: string, commitHash: string, filePa
   if (Command) {
     let out = "";
     try {
-      const args = ["show", "--patch", "--format=", commitHash];
+      const args = ["show", "-m", "--patch", "--format=", commitHash];
       if (filePath && filePath !== ".") args.push("--", filePath);
       out = await execGit(repoPath, ...args);
     } catch {
