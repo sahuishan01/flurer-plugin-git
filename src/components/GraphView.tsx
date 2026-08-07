@@ -8,6 +8,7 @@ import { S } from "../styles";
 const LANE_W = 16;
 const ROW_H = 34;
 const DOT_R = 4.5;
+const LEGEND_H = 34;
 const COLORS = ["#f59e0b", "#60a5fa", "#4ade80", "#f87171", "#c084fc", "#2dd4bf", "#fb923c", "#a78bfa"];
 
 const GRAPH_CSS_ID = "flurer-git-graph-css";
@@ -19,9 +20,11 @@ const GRAPH_CSS = `
 .flurer-git-merge{box-shadow:0 0 14px rgba(96,205,255,.18);}
 .flurer-git-loadmore{transition:background .15s ease, border-color .15s ease, transform .15s ease;}
 .flurer-git-loadmore:hover{background:var(--control-bg, rgba(255,255,255,0.06));transform:translateY(-1px);}
-@media (max-width:1100px){.flurer-git-refs{display:none!important;}}
-@media (max-width:780px){.flurer-git-meta{display:none!important;}}
-@media (max-width:620px){.flurer-git-hash{display:none!important;}}
+.flurer-git-lanechip{transition:filter .15s ease;}
+.flurer-git-lanechip:hover{filter:brightness(1.15);}
+@media (max-width:640px){.flurer-git-meta{display:none!important;}}
+@media (max-width:480px){.flurer-git-refs{display:none!important;}}
+@media (max-width:360px){.flurer-git-hash{display:none!important;}}
 `;
 
 interface GraphRow extends GitGraphEntry {
@@ -43,6 +46,7 @@ interface GraphData {
   rows: GraphRow[];
   edges: GraphEdge[];
   laneCount: number;
+  laneLabels: (string | null)[];
 }
 
 function buildGraph(entries: GitGraphEntry[]): GraphData {
@@ -121,7 +125,20 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
     }
   }
 
-  return { rows, edges, laneCount };
+  const laneLabels: (string | null)[] = new Array(laneCount).fill(null);
+  for (const r of rows) {
+    if (laneLabels[r.lane] === null) {
+      for (const ref of r.refs) {
+        const name = ref.replace("HEAD -> ", "").replace("HEAD, ", "");
+        if (name && !name.startsWith("refs/") && !name.startsWith("tag:") && !name.startsWith("*")) {
+          laneLabels[r.lane] = name;
+          break;
+        }
+      }
+    }
+  }
+
+  return { rows, edges, laneCount, laneLabels };
 }
 
 function lighten(hex: string, alpha: number): string {
@@ -145,11 +162,12 @@ export function GraphView() {
 
   const data = createMemo(() => buildGraph(ctx.graph()));
   const laneW = () => data().laneCount * LANE_W;
-  const svgH = () => data().rows.length * ROW_H;
-  const bottomY = () => data().rows.length * ROW_H;
+  const rowsH = () => data().rows.length * ROW_H;
+  const svgH = () => LEGEND_H + rowsH() + ROW_H;
+  const bottomY = () => LEGEND_H + data().rows.length * ROW_H;
 
   const laneX = (l: number) => l * LANE_W + LANE_W / 2;
-  const rowY = (r: number) => r * ROW_H + ROW_H / 2;
+  const rowY = (r: number) => LEGEND_H + r * ROW_H + ROW_H / 2;
   const laneColor = (l: number) => COLORS[l % COLORS.length];
 
   function handleScroll(e: Event) {
@@ -187,6 +205,10 @@ export function GraphView() {
       pts.push(`${vx},${joinY}`, `${x2},${joinY}`);
     }
     pts.push(`${x2},${y2}`);
+
+    if (e.toRow === null) {
+      pts.push(`${x2 + 5},${y2}`);
+    }
     return pts.join(" ");
   };
 
@@ -198,8 +220,22 @@ export function GraphView() {
       <Show when={data().rows.length > 0}>
         <div onScroll={handleScroll} style={{ flex: 1, width: "100%", overflow: "auto", background: surfaceBg(0.04) }}>
           <div class="flurer-git-tree" style={{ width: "100%", "min-width": `calc(${laneW()}px + 220px)`, position: "relative", height: `${svgH()}px` }}>
+            {/* Legend: lane → branch name */}
+            <div class="flurer-git-legend" style={{ position: "absolute", left: 0, top: 0, width: "100%", height: `${LEGEND_H}px`, display: "flex", "align-items": "center", gap: "8px", padding: `0 14px 0 ${laneW() + 10}px`, "box-sizing": "border-box", overflow: "hidden", "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))" }}>
+              <For each={data().laneLabels}>
+                {(label, idx) => (
+                  <Show when={label()}>
+                    <span class="flurer-git-lanechip" style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "3px 10px", "border-radius": "999px", "font-size": "10.5px", "font-weight": 600, "font-family": "Space Mono,monospace", background: lighten(laneColor(idx()), 0.14), border: `1px solid ${lighten(laneColor(idx()), 0.4)}`, color: laneColor(idx()), "white-space": "nowrap", cursor: "default" }}>
+                      <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: laneColor(idx()), display: "inline-block", "flex-shrink": 0 }} />
+                      {label()}
+                    </span>
+                  </Show>
+                )}
+              </For>
+            </div>
+
             {/* Graph lanes layer (edges + dots) */}
-            <svg width={laneW()} height={svgH()} style={{ position: "absolute", left: 0, top: 0, display: "block" }}>
+            <svg width={laneW()} height={svgH()} style={{ position: "absolute", left: 0, top: `${LEGEND_H}px`, display: "block" }}>
               <defs>
                 <Index each={COLORS}>
                   {(color, idx) => (
@@ -266,7 +302,7 @@ export function GraphView() {
             </svg>
 
             {/* Row layer (hash • refs • merge • message • meta) */}
-            <div style={{ position: "absolute", inset: 0, "overflow": "hidden" }}>
+            <div style={{ position: "absolute", left: 0, right: 0, top: `${LEGEND_H}px`, bottom: 0, "overflow": "hidden" }}>
               <Index each={data().rows}>
                 {(row, i) => {
                   const isSelected = () => selectedHash() === row().hash;
