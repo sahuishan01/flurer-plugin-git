@@ -40,6 +40,7 @@ export interface DiffFile {
   oldPath: string;
   newPath: string;
   hunks: DiffHunk[];
+  binary?: boolean;
 }
 
 export interface GitDiff {

@@ -394,7 +394,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     await loadWorktrees();
   }
 
+  let diffReqId = 0;
+
   async function loadDiff(filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string) {
+    const myReq = ++diffReqId;
     setSelectedDiffFile(filePath === "." ? null : filePath);
     setDiffMode(mode);
     setDiffCommitHash(commitHash ?? null);
@@ -415,14 +418,17 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
       } else {
         diff = await git.gitDiff(p, filePath);
       }
+      if (myReq !== diffReqId) return;
       setDiffResult(diff);
       if (activeView() !== "diff") setActiveView("diff");
     } catch (err) {
+      if (myReq !== diffReqId) return;
       showToast(`Failed to load diff: ${err}`, "error");
     }
   }
 
   async function loadDiffCompare(fromHash: string, toHash: string, filePath: string = ".") {
+    const myReq = ++diffReqId;
     setSelectedDiffFile(filePath === "." ? null : filePath);
     setDiffMode("compare");
     setDiffCommitHash(toHash);
@@ -432,14 +438,17 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     if (!p) return;
     try {
       const diff = await git.gitDiffBetween(p, fromHash, toHash, filePath);
+      if (myReq !== diffReqId) return;
       setDiffResult(diff);
       if (activeView() !== "diff") setActiveView("diff");
     } catch (err) {
+      if (myReq !== diffReqId) return;
       showToast(`Failed to load diff comparison: ${err}`, "error");
     }
   }
 
   async function loadDiffWithCurrent(commitHash: string, filePath: string = ".") {
+    const myReq = ++diffReqId;
     setSelectedDiffFile(filePath === "." ? null : filePath);
     setDiffMode("compare");
     setDiffCommitHash(commitHash);
@@ -449,14 +458,17 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     if (!p) return;
     try {
       const diff = await git.gitDiffBetween(p, commitHash, "HEAD", filePath);
+      if (myReq !== diffReqId) return;
       setDiffResult(diff);
       if (activeView() !== "diff") setActiveView("diff");
     } catch (err) {
+      if (myReq !== diffReqId) return;
       showToast(`Failed to load diff with current: ${err}`, "error");
     }
   }
 
   async function loadDiffWithWorkingTree(commitHash: string, filePath: string = ".") {
+    const myReq = ++diffReqId;
     setSelectedDiffFile(filePath === "." ? null : filePath);
     setDiffMode("compare");
     setDiffCommitHash(commitHash);
@@ -466,9 +478,11 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     if (!p) return;
     try {
       const diff = await git.gitDiffCommitWithWorkingTree(p, commitHash, filePath);
+      if (myReq !== diffReqId) return;
       setDiffResult(diff);
       if (activeView() !== "diff") setActiveView("diff");
     } catch (err) {
+      if (myReq !== diffReqId) return;
       showToast(`Failed to load diff with working tree: ${err}`, "error");
     }
   }

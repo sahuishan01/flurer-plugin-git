@@ -12,10 +12,18 @@ function getShell() {
   return shell?.Command || null;
 }
 
+function stripAnsi(output: string): string {
+  // eslint-disable-next-line no-control-regex
+  return output.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+}
+
 async function execGit(repoPath: string, ...args: string[]): Promise<string> {
   const Command = getShell();
   if (Command) {
-    const result = await Command.create("git", ["-C", repoPath, ...args]).execute({ windowsHide: true });
+    // -c color.ui=never guarantees machine-readable output regardless of the
+    // user's global git config (color.ui=always would otherwise inject ANSI
+    // escape codes that break every diff parser).
+    const result = await Command.create("git", ["-C", repoPath, "-c", "color.ui=never", ...args]).execute({ windowsHide: true });
     // Exit code 0: success / no diffs
     // Exit code 1: differences found (standard git diff exit code)
     if (result.code !== 0 && result.code !== 1) {
@@ -239,8 +247,9 @@ function parseDiff(output: string): GitDiff {
     return { files: [], hunks: [] };
   }
 
-  // Normalize CRLF to LF so Windows diff output matches regexes
-  const lines = output.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  // Normalize CRLF to LF so Windows diff output matches regexes,
+  // and strip any residual ANSI escape sequences
+  const lines = stripAnsi(output).replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
 
@@ -260,9 +269,14 @@ function parseDiff(output: string): GitDiff {
           newPath = parts[1].replace(/^"?b\//, "").replace(/^"|"$/g, "");
         }
       }
-      currentFile = { oldPath, newPath, hunks: [] };
+      currentFile = { oldPath, newPath, hunks: [], binary: false };
       files.push(currentFile);
       currentHunk = null;
+      continue;
+    }
+
+    if (currentFile && rawLine.startsWith("Binary files ")) {
+      currentFile.binary = true;
       continue;
     }
 
@@ -277,30 +291,41 @@ function parseDiff(output: string): GitDiff {
       };
       allHunks.push(currentHunk);
       if (!currentFile) {
-        currentFile = { oldPath: "", newPath: "", hunks: [] };
+        currentFile = { oldPath: "", newPath: "", hunks: [], binary: false };
         files.push(currentFile);
       }
       currentFile.hunks.push(currentHunk);
       continue;
     }
 
-    if (currentHunk) {
-      if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ") || rawLine.startsWith("new file mode")) {
-        continue;
+if (currentHunk) {
+        if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ") || rawLine.startsWith("new file mode") || rawLine.startsWith("new file") || rawLine.startsWith("deleted file")) {
+          continue;
+        }
+        // "\ No newline at end of file" marker — annotation, not a code line
+        if (rawLine.startsWith("\\")) {
+          continue;
+        }
+        if (rawLine.startsWith("+")) {
+          currentHunk.lines.push({ origin: "+", content: rawLine.substring(1) });
+        } else if (rawLine.startsWith("-")) {
+          currentHunk.lines.push({ origin: "-", content: rawLine.substring(1) });
+        } else if (rawLine.startsWith(" ")) {
+          currentHunk.lines.push({ origin: " ", content: rawLine.substring(1) });
+        }
       }
-      if (rawLine.startsWith("+")) {
-        currentHunk.lines.push({ origin: "+", content: rawLine.substring(1) });
-      } else if (rawLine.startsWith("-")) {
-        currentHunk.lines.push({ origin: "-", content: rawLine.substring(1) });
-      } else if (rawLine.startsWith(" ") || rawLine === "") {
-        currentHunk.lines.push({ origin: " ", content: rawLine.substring(1) || rawLine });
-      } else if (rawLine.startsWith("\\")) {
-        currentHunk.lines.push({ origin: " ", content: rawLine });
-      }
-    }
   }
 
   return { files, hunks: allHunks };
+}
+
+export async function gitUntrackedFiles(repoPath: string): Promise<string[]> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(repoPath, "ls-files", "--others", "--exclude-standard");
+    return out.trim().split("\n").filter(Boolean);
+  }
+  return invoke<string[]>("git_untracked_files", { repoPath });
 }
 
 export async function gitDiff(repoPath: string, filePath: string = "."): Promise<GitDiff> {
@@ -324,7 +349,24 @@ export async function gitDiff(repoPath: string, filePath: string = "."): Promise
         out = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", filePath);
       } catch {}
     }
-    return parseDiff(out);
+    const parsed = parseDiff(out);
+
+    // "All changes" mode: git diff never includes untracked files, so append
+    // their /dev/null diffs so they show up in the diff section too
+    if (!filePath || filePath === ".") {
+      try {
+        const untracked = await gitUntrackedFiles(repoPath);
+        for (const u of untracked) {
+          try {
+            const uOut = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", u);
+            const uParsed = parseDiff(uOut);
+            parsed.files.push(...uParsed.files);
+            parsed.hunks.push(...uParsed.hunks);
+          } catch {}
+        }
+      } catch {}
+    }
+    return parsed;
   }
   return invoke<GitDiff>("git_diff", { repoPath, filePath });
 }

@@ -55,7 +55,7 @@ export function DiffView() {
 
   const hasContent = createMemo(() => {
     const fList = filesToDisplay();
-    return fList.some((f) => f.hunks && f.hunks.length > 0);
+    return fList.some((f) => f.binary || (f.hunks && f.hunks.length > 0));
   });
 
   return (
@@ -186,9 +186,15 @@ export function DiffView() {
                 <Show when={fileItem.newPath || fileItem.oldPath}>
                   <div style={{ padding: "8px 12px", background: surfaceBg(0.08), "font-weight": 600, "font-size": "13px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid var(--border-strong)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                     <span>📄 {fileItem.newPath || fileItem.oldPath}</span>
-                    <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-weight": 400 }}>{fileItem.hunks.length} hunks</span>
+                    <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-weight": 400 }}>{fileItem.binary ? "binary" : `${fileItem.hunks.length} hunks`}</span>
                   </div>
                 </Show>
+                <Show when={fileItem.binary}>
+                  <div style={{ padding: "18px 14px", "font-size": "12px", color: "var(--text-muted, #888)", "text-align": "center", "font-family": "Space Mono, monospace" }}>
+                    Binary file — content cannot be previewed. (It differs across the selected targets.)
+                  </div>
+                </Show>
+                <Show when={!fileItem.binary}>
                 <For each={fileItem.hunks}>
                   {(hunk) => {
                     let oldLine = hunk.old_start;
@@ -216,6 +222,7 @@ export function DiffView() {
                     );
                   }}
                 </For>
+                </Show>
               </Card>
             )}
           </For>
