@@ -11,6 +11,39 @@ export function DiffView() {
   const commitHash = createMemo(() => ctx.diffCommitHash());
   const compareTo = createMemo(() => ctx.diffCompareCommits()?.to);
 
+  // Normalize selected file path (strip leading ./ if present)
+  const normSelectedFile = createMemo(() => {
+    const f = ctx.selectedDiffFile();
+    if (!f) return null;
+    return f.replace(/^\.\//, "");
+  });
+
+  const filesToDisplay = createMemo(() => {
+    const d = diff();
+    if (!d) return [];
+    const sel = normSelectedFile();
+    if (d.files && d.files.length > 0) {
+      if (sel) {
+        return d.files.filter((f) => {
+          const np = (f.newPath || "").replace(/^\.\//, "");
+          const op = (f.oldPath || "").replace(/^\.\//, "");
+          return np === sel || op === sel;
+        });
+      }
+      return d.files;
+    }
+    // Fallback if files is empty but hunks exist
+    if (d.hunks && d.hunks.length > 0) {
+      return [{ newPath: sel || "Diff", oldPath: "", hunks: d.hunks }];
+    }
+    return [];
+  });
+
+  const hasContent = createMemo(() => {
+    const fList = filesToDisplay();
+    return fList.some((f) => f.hunks && f.hunks.length > 0);
+  });
+
   return (
     <div style={{ padding: "16px 24px" }}>
       <div style={{ "margin-bottom": "14px", display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "10px" }}>
@@ -87,8 +120,8 @@ export function DiffView() {
         </Show>
       </div>
 
-      {/* File Selection List for Multi-file Diffs */}
-      <Show when={!ctx.selectedDiffFile() && diff()?.files && diff()!.files!.length > 0}>
+      {/* File Selection List for Multi-file Diffs when no single file is selected */}
+      <Show when={!normSelectedFile() && diff()?.files && diff()!.files!.length > 1}>
         <Card style={{ "margin-bottom": "16px" }}>
           <div style={S.cardHeader}>
             <span>Changed Files ({diff()!.files!.length})</span>
@@ -105,7 +138,7 @@ export function DiffView() {
                   </span>
                   {f.newPath || f.oldPath}
                 </span>
-                <Button size="sm">Inspect Diff</Button>
+                <Button size="sm">Inspect File</Button>
               </div>
             )}
           </For>
@@ -114,69 +147,65 @@ export function DiffView() {
 
       {/* Render Diff Hunks */}
       <Show when={diff()}>
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <For each={diff()!.files && ctx.selectedDiffFile() ? diff()!.files!.filter(f => (f.newPath || f.oldPath) === ctx.selectedDiffFile()) : (diff()!.files ?? [{ newPath: "", oldPath: "", hunks: diff()!.hunks }])}>
-            {(fileItem) => {
-              let oldLine = 0;
-              let newLine = 0;
-              return (
-                <div>
-                  <Show when={fileItem.newPath || fileItem.oldPath}>
-                    <div style={{ padding: "8px 12px", background: surfaceBg(0.08), "font-weight": 600, "font-size": "13px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid var(--border-strong)" }}>
-                      📄 {fileItem.newPath || fileItem.oldPath}
-                    </div>
-                  </Show>
-                  <For each={fileItem.hunks}>
-                    {(hunk) => {
-                      oldLine = hunk.old_start;
-                      newLine = hunk.new_start;
-                      return (
-                        <div>
-                          <div style={{ ...S.diffHunkHeader, background: surfaceBg(0.05) }}>
-                            @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
-                          </div>
-                          <For each={hunk.lines}>
-                            {(line) => {
-                              const old = line.origin !== "+" ? oldLine++ : null;
-                              const newL = line.origin !== "-" ? newLine++ : null;
-                              const style = line.origin === "+" ? S.diffAdded : line.origin === "-" ? S.diffRemoved : S.diffContext;
-                              return (
-                                <div style={{ ...S.diffLine, ...style }}>
-                                  <span style={S.diffGutter}>{old ?? ""}</span>
-                                  <span style={S.diffGutter}>{newL ?? ""}</span>
-                                  <span style={{ flex: 1, "white-space": "pre-wrap", "word-break": "break-all" }}>{line.content}</span>
-                                </div>
-                              );
-                            }}
-                          </For>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </div>
-              );
-            }}
-          </For>
-          <Show when={diff()!.hunks.length === 0 && (!diff()!.files || diff()!.files!.length === 0)}>
-            <div style={{ padding: "28px 20px", "text-align": "center" }}>
-              <div style={{ "font-size": "14px", "font-weight": 600, color: "var(--text-primary, var(--text-color))", "margin-bottom": "6px", "text-shadow": "var(--text-shadow)" }}>
-                No differences found
-              </div>
-              <div style={{ "font-size": "12px", color: "var(--text-muted, #888)", "margin-bottom": "16px" }}>
-                {commitHash()
-                  ? `There are no code changes between commit ${commitHash()?.slice(0, 7)} and ${compareTo() || "target"}.`
-                  : "No diff changes found for this selection."}
-              </div>
-              <Show when={commitHash()}>
-                <div style={{ display: "flex", gap: "8px", "justify-content": "center", "flex-wrap": "wrap" }}>
-                  <Button size="sm" onClick={() => ctx.loadDiff(".", "commit", commitHash()!)}>⏮️ Compare vs Previous Commit</Button>
-                  <Button size="sm" onClick={() => ctx.loadDiffWithCurrent(commitHash()!)}>📍 Compare vs HEAD</Button>
-                  <Button size="sm" onClick={() => ctx.loadDiffWithWorkingTree(commitHash()!)}>📝 Compare vs Working Tree</Button>
-                </div>
-              </Show>
+        <Show when={hasContent()} fallback={
+          <Card style={{ padding: "28px 20px", "text-align": "center" }}>
+            <div style={{ "font-size": "14px", "font-weight": 600, color: "var(--text-primary, var(--text-color))", "margin-bottom": "6px", "text-shadow": "var(--text-shadow)" }}>
+              No differences found
             </div>
-          </Show>
-        </Card>
+            <div style={{ "font-size": "12px", color: "var(--text-muted, #888)", "margin-bottom": "16px" }}>
+              {commitHash()
+                ? `There are no code changes between commit ${commitHash()?.slice(0, 7)} and ${compareTo() || "target"}.`
+                : "No diff changes found for this selection."}
+            </div>
+            <Show when={commitHash()}>
+              <div style={{ display: "flex", gap: "8px", "justify-content": "center", "flex-wrap": "wrap" }}>
+                <Button size="sm" onClick={() => ctx.loadDiff(".", "commit", commitHash()!)}>⏮️ Compare vs Previous Commit</Button>
+                <Button size="sm" onClick={() => ctx.loadDiffWithCurrent(commitHash()!)}>📍 Compare vs HEAD</Button>
+                <Button size="sm" onClick={() => ctx.loadDiffWithWorkingTree(commitHash()!)}>📝 Compare vs Working Tree</Button>
+              </div>
+            </Show>
+          </Card>
+        }>
+          <For each={filesToDisplay()}>
+            {(fileItem) => (
+              <Card style={{ padding: 0, overflow: "hidden", "margin-bottom": "16px" }}>
+                <Show when={fileItem.newPath || fileItem.oldPath}>
+                  <div style={{ padding: "8px 12px", background: surfaceBg(0.08), "font-weight": 600, "font-size": "13px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid var(--border-strong)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                    <span>📄 {fileItem.newPath || fileItem.oldPath}</span>
+                    <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-weight": 400 }}>{fileItem.hunks.length} hunks</span>
+                  </div>
+                </Show>
+                <For each={fileItem.hunks}>
+                  {(hunk) => {
+                    let oldLine = hunk.old_start;
+                    let newLine = hunk.new_start;
+                    return (
+                      <div>
+                        <div style={{ ...S.diffHunkHeader, background: surfaceBg(0.05) }}>
+                          @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                        </div>
+                        <For each={hunk.lines}>
+                          {(line) => {
+                            const old = line.origin !== "+" ? oldLine++ : null;
+                            const newL = line.origin !== "-" ? newLine++ : null;
+                            const style = line.origin === "+" ? S.diffAdded : line.origin === "-" ? S.diffRemoved : S.diffContext;
+                            return (
+                              <div style={{ ...S.diffLine, ...style }}>
+                                <span style={S.diffGutter}>{old ?? ""}</span>
+                                <span style={S.diffGutter}>{newL ?? ""}</span>
+                                <span style={{ flex: 1, "white-space": "pre-wrap", "word-break": "break-all" }}>{line.content}</span>
+                              </div>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    );
+                  }}
+                </For>
+              </Card>
+            )}
+          </For>
+        </Show>
       </Show>
 
       <Show when={!diff()}>

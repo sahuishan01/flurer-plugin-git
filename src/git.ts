@@ -236,11 +236,29 @@ function parseDiff(output: string): GitDiff {
   let currentFile: DiffFile | null = null;
   let currentHunk: DiffHunk | null = null;
 
-  for (const rawLine of output.split("\n")) {
+  if (!output || !output.trim()) {
+    return { files: [], hunks: [] };
+  }
+
+  const lines = output.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+
     if (rawLine.startsWith("diff --git ")) {
-      const match = rawLine.match(/^diff --git a\/(.*) b\/(.*)$/);
-      const oldPath = match ? match[1] : "";
-      const newPath = match ? match[2] : "";
+      const cleanLine = rawLine.substring("diff --git ".length).trim();
+      let oldPath = "";
+      let newPath = "";
+      const match = cleanLine.match(/^(?:"?a\/(.*?)"?)\s+(?:"?b\/(.*?)"?)$/);
+      if (match) {
+        oldPath = match[1].replace(/^"|"$/g, "");
+        newPath = match[2].replace(/^"|"$/g, "");
+      } else {
+        const parts = cleanLine.split(" ");
+        if (parts.length >= 2) {
+          oldPath = parts[0].replace(/^"?a\//, "").replace(/^"|"$/g, "");
+          newPath = parts[1].replace(/^"?b\//, "").replace(/^"|"$/g, "");
+        }
+      }
       currentFile = { oldPath, newPath, hunks: [] };
       files.push(currentFile);
       currentHunk = null;
@@ -257,17 +275,26 @@ function parseDiff(output: string): GitDiff {
         lines: [],
       };
       allHunks.push(currentHunk);
-      if (currentFile) currentFile.hunks.push(currentHunk);
+      if (!currentFile) {
+        currentFile = { oldPath: "", newPath: "", hunks: [] };
+        files.push(currentFile);
+      }
+      currentFile.hunks.push(currentHunk);
       continue;
     }
 
     if (currentHunk) {
+      if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ")) {
+        continue;
+      }
       if (rawLine.startsWith("+")) {
         currentHunk.lines.push({ origin: "+", content: rawLine.substring(1) });
       } else if (rawLine.startsWith("-")) {
         currentHunk.lines.push({ origin: "-", content: rawLine.substring(1) });
       } else if (rawLine.startsWith(" ") || rawLine === "") {
         currentHunk.lines.push({ origin: " ", content: rawLine.substring(1) || rawLine });
+      } else if (rawLine.startsWith("\\")) {
+        currentHunk.lines.push({ origin: " ", content: rawLine });
       }
     }
   }
@@ -302,11 +329,11 @@ export async function gitDiffCommit(repoPath: string, commitHash: string, filePa
   if (Command) {
     let out = "";
     try {
-      const args = ["diff", `${commitHash}~1`, commitHash];
+      const args = ["show", "--patch", "--format=", commitHash];
       if (filePath && filePath !== ".") args.push("--", filePath);
       out = await execGit(repoPath, ...args);
     } catch {
-      const args = ["show", "--format=", commitHash];
+      const args = ["diff", `${commitHash}~1`, commitHash];
       if (filePath && filePath !== ".") args.push("--", filePath);
       out = await execGit(repoPath, ...args);
     }
