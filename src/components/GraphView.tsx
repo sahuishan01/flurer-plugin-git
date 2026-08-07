@@ -224,10 +224,10 @@ export function GraphView() {
             <div class="flurer-git-legend" style={{ position: "absolute", left: 0, top: 0, width: "100%", height: `${LEGEND_H}px`, display: "flex", "align-items": "center", gap: "8px", padding: `0 14px 0 ${laneW() + 10}px`, "box-sizing": "border-box", overflow: "hidden", "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))" }}>
               <For each={data().laneLabels}>
                 {(label, idx) => (
-                  <Show when={label()}>
+                  <Show when={label}>
                     <span class="flurer-git-lanechip" style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "3px 10px", "border-radius": "999px", "font-size": "10.5px", "font-weight": 600, "font-family": "Space Mono,monospace", background: lighten(laneColor(idx()), 0.14), border: `1px solid ${lighten(laneColor(idx()), 0.4)}`, color: laneColor(idx()), "white-space": "nowrap", cursor: "default" }}>
                       <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: laneColor(idx()), display: "inline-block", "flex-shrink": 0 }} />
-                      {label()}
+                      {label}
                     </span>
                   </Show>
                 )}
