@@ -71,6 +71,10 @@ interface GitContextValue {
   loadWorktrees: () => Promise<void>;
   showCommitDetail: (hash: string) => Promise<void>;
   closeCommitDetail: () => void;
+  selectedBranches: Accessor<string[]>;
+  isAllBranchesSelected: Accessor<boolean>;
+  toggleBranchSelection: (branchName: string) => void;
+  selectAllBranches: () => void;
 }
 
 const GitContext = createContext<GitContextValue>();
@@ -95,6 +99,12 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   let graphPage = 0; // non-reactive page counter for --skip
   const [stashes, setStashes] = createSignal<GitStashEntry[]>([]);
   const [worktrees, setWorktrees] = createSignal<GitWorktree[]>([]);
+  const [selectedBranches, setSelectedBranches] = createSignal<string[]>(["all"]);
+
+  const isAllBranchesSelected = createMemo(() => {
+    const sb = selectedBranches();
+    return sb.length === 0 || sb.includes("all");
+  });
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
   const [selectedDiffFile, setSelectedDiffFile] = createSignal<string | null>(null);
   const [diffResult, setDiffResult] = createSignal<GitDiff | null>(null);
@@ -429,13 +439,14 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
 
   const GRAPH_PAGE_SIZE = 1000;
 
-  async function loadGraph() {
+  async function loadGraph(overrideBranches?: string[]) {
     const p = repoPath();
     if (!p) return;
+    const bList = overrideBranches ?? selectedBranches();
     setGraphLoading(true);
     graphPage = 0;
     try {
-      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, 0);
+      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, 0, bList);
       setGraph(g);
       graphPage = 1;
       setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
@@ -451,7 +462,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     if (!p || graphLoading() || !graphHasMore()) return;
     setGraphLoading(true);
     try {
-      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, graphPage * GRAPH_PAGE_SIZE);
+      const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, graphPage * GRAPH_PAGE_SIZE, selectedBranches());
       if (g.length > 0) {
         setGraph([...graph(), ...g]);
         graphPage++;
@@ -467,11 +478,12 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const HISTORY_PAGE_SIZE = 100;
   let historyLoading = false;
 
-  async function loadHistory(maxCount: number = 100) {
+  async function loadHistory(maxCount: number = 100, overrideBranches?: string[]) {
     const p = repoPath();
     if (!p) return;
+    const bList = overrideBranches ?? selectedBranches();
     try {
-      const c = await git.gitLog(p, maxCount, 0);
+      const c = await git.gitLog(p, maxCount, 0, bList);
       setCommits(c);
       setHistoryHasMore(c.length >= maxCount);
     } catch {}
@@ -483,7 +495,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     historyLoading = true;
     try {
       const offset = commits().length;
-      const c = await git.gitLog(p, HISTORY_PAGE_SIZE, offset);
+      const c = await git.gitLog(p, HISTORY_PAGE_SIZE, offset, selectedBranches());
       if (c.length > 0) {
         setCommits((prev) => [...prev, ...c]);
       }
@@ -491,6 +503,34 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     } catch {} finally {
       historyLoading = false;
     }
+  }
+
+  function selectAllBranches() {
+    setSelectedBranches(["all"]);
+    refreshHistoryAndGraph(["all"]);
+  }
+
+  function toggleBranchSelection(branchName: string) {
+    if (branchName === "all") {
+      selectAllBranches();
+      return;
+    }
+
+    const current = selectedBranches().filter((b) => b !== "all");
+    let next: string[];
+    if (current.includes(branchName)) {
+      next = current.filter((b) => b !== branchName);
+      if (next.length === 0) next = ["all"];
+    } else {
+      next = [...current, branchName];
+    }
+    setSelectedBranches(next);
+    refreshHistoryAndGraph(next);
+  }
+
+  async function refreshHistoryAndGraph(branchesToUse?: string[]) {
+    await loadGraph(branchesToUse);
+    await loadHistory(100, branchesToUse);
   }
 
   async function loadBranches() {
@@ -538,6 +578,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     repoPath, openRepo, backToDashboard,
     status, branches, commits, historyHasMore, graph, graphHasMore, graphLoading,
     stashes, worktrees, commitDetail,
+    selectedBranches, isAllBranchesSelected, toggleBranchSelection, selectAllBranches,
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
     diffResult, diffMode, diffCommitHash, compareSourceHash, setCompareSourceHash, diffCompareCommits, setDiffMode,
     loading, error, toast, shellAvailable: shellAvail,

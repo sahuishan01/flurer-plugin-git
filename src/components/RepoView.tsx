@@ -1,7 +1,7 @@
 import { Show, Switch, Match, createMemo } from "solid-js";
 import { useGit } from "../context";
 import { basename } from "../utils";
-import { GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon, BranchIcon, Button, TabBar } from "./shared";
+import { GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon, BranchIcon, Button, TabBar, BranchMultiSelect } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
 import { DiffView } from "./DiffView";
@@ -71,6 +71,7 @@ export function RepoView(props: RepoViewProps) {
                     <span style={{ opacity: 0.7, "font-weight": 400 }}>↑{s().ahead} ↓{s().behind}</span>
                   </Show>
                 </span>
+                <BranchMultiSelect />
                 <Button variant="secondary" size="sm" onClick={ctx.pull} disabled={ctx.loading()}>
                   <PullIcon size={14} /> Pull
                 </Button>

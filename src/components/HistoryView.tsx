@@ -1,7 +1,7 @@
 import { createSignal, createMemo, For, Show, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
 import { formatTimestamp } from "../utils";
-import { Card, EmptyState, Button, CommitContextMenu } from "./shared";
+import { Card, EmptyState, Button, CommitContextMenu, BranchMultiSelect } from "./shared";
 import { S } from "../styles";
 
 export function HistoryView() {
@@ -64,14 +64,15 @@ export function HistoryView() {
         overflow: "hidden",
       }}
     >
-      <div style={{ "margin-bottom": "12px", width: "100%", "box-sizing": "border-box" }}>
+      <div style={{ display: "flex", gap: "10px", "align-items": "center", "margin-bottom": "12px", width: "100%", "box-sizing": "border-box" }}>
         <input
           type="text"
           placeholder="Search commits..."
           value={search()}
           onInput={(e) => setSearch(e.currentTarget.value)}
-          style={{ ...S.input, width: "100%", "box-sizing": "border-box" }}
+          style={{ ...S.input, flex: 1, "box-sizing": "border-box" }}
         />
+        <BranchMultiSelect />
       </div>
 
       <Show when={filteredCommits().length === 0}>

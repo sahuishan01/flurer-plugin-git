@@ -1,4 +1,4 @@
-import { Show, type JSX } from "solid-js";
+import { Show, For, createSignal, createMemo, type JSX } from "solid-js";
 import { useGit } from "../../context";
 import { surfaceBg } from "../../utils";
 import { S } from "../../styles";
@@ -323,4 +323,152 @@ const menuBtnStyle = {
   width: "100%",
   transition: "background 0.15s",
 };
+
+export function BranchMultiSelect() {
+  const ctx = useGit();
+  const [open, setOpen] = createSignal(false);
+
+  const labelText = createMemo(() => {
+    if (ctx.isAllBranchesSelected()) return "Branches: All";
+    const selected = ctx.selectedBranches().filter((b) => b !== "all");
+    if (selected.length === 1) return `Branch: ${selected[0]}`;
+    return `Branches: (${selected.length}) ${selected.join(", ")}`;
+  });
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        style={{
+          display: "inline-flex",
+          "align-items": "center",
+          gap: "6px",
+          padding: "5px 12px",
+          background: "var(--control-bg, rgba(255, 255, 255, 0.08))",
+          border: "var(--control-border, 1px solid rgba(255, 255, 255, 0.12))",
+          "border-radius": "16px",
+          "font-size": "12px",
+          "font-weight": 600,
+          color: "var(--text-primary, var(--text-color))",
+          "text-shadow": "var(--text-shadow)",
+          cursor: "pointer",
+          transition: "all 0.15s ease",
+          "backdrop-filter": "blur(8px)",
+        }}
+        onClick={() => setOpen(!open())}
+        title="Filter graph & history by specific branches"
+      >
+        <BranchIcon size={14} />
+        <span style={{ "max-width": "180px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+          {labelText()}
+        </span>
+        <span style={{ "font-size": "10px", opacity: 0.7 }}>{open() ? "▲" : "▼"}</span>
+      </button>
+
+      <Show when={open()}>
+        {/* Backdrop overlay for closing dropdown */}
+        <div
+          style={{ position: "fixed", inset: 0, "z-index": 99990 }}
+          onClick={() => setOpen(false)}
+        />
+
+        {/* Dropdown Menu */}
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            background: "var(--glass-bg, rgba(32, 32, 32, 0.92))",
+            border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.14))",
+            "border-radius": "8px",
+            padding: "8px",
+            "box-shadow": "var(--glass-shadow, 0 12px 32px rgba(0,0,0,0.5))",
+            "backdrop-filter": "var(--glass-blur, blur(24px))",
+            "min-width": "220px",
+            "max-width": "300px",
+            "max-height": "320px",
+            "overflow-y": "auto",
+            "z-index": 99991,
+            display: "flex",
+            "flex-direction": "column",
+            gap: "4px",
+            "font-size": "12px",
+          }}
+        >
+          <div style={{ "font-size": "11px", "font-weight": 700, color: "var(--text-secondary, #888)", "text-transform": "uppercase", padding: "4px 8px", "letter-spacing": "0.5px" }}>
+            Filter History by Branch
+          </div>
+
+          {/* "All" Option */}
+          <div
+            style={{
+              display: "flex",
+              "align-items": "center",
+              gap: "8px",
+              padding: "6px 8px",
+              "border-radius": "6px",
+              cursor: "pointer",
+              background: ctx.isAllBranchesSelected() ? "var(--accent-bg-soft, rgba(96, 205, 255, 0.15))" : "transparent",
+              color: ctx.isAllBranchesSelected() ? "var(--accent-default, #60cdff)" : "var(--text-primary, var(--text-color))",
+              "font-weight": ctx.isAllBranchesSelected() ? 600 : 400,
+              transition: "background 0.15s",
+            }}
+            onClick={() => {
+              ctx.selectAllBranches();
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={ctx.isAllBranchesSelected()}
+              readOnly
+              style={{ cursor: "pointer" }}
+            />
+            <span style={{ flex: 1 }}>All Branches (--all)</span>
+          </div>
+
+          <div style={{ height: "1px", background: "var(--glass-border, rgba(255, 255, 255, 0.08))", margin: "4px 0" }} />
+
+          {/* Individual Branches */}
+          <For each={ctx.branches()}>
+            {(b) => {
+              const isSelected = () => !ctx.isAllBranchesSelected() && ctx.selectedBranches().includes(b.name);
+              return (
+                <div
+                  style={{
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "8px",
+                    padding: "6px 8px",
+                    "border-radius": "6px",
+                    cursor: "pointer",
+                    background: isSelected() ? "var(--accent-bg-soft, rgba(96, 205, 255, 0.15))" : "transparent",
+                    color: isSelected() ? "var(--accent-default, #60cdff)" : "var(--text-primary, var(--text-color))",
+                    "font-weight": isSelected() ? 600 : 400,
+                    transition: "background 0.15s",
+                  }}
+                  onClick={() => {
+                    ctx.toggleBranchSelection(b.name);
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected()}
+                    readOnly
+                    style={{ cursor: "pointer" }}
+                  />
+                  <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    {b.name}
+                  </span>
+                  <Show when={b.is_current}>
+                    <span style={{ "font-size": "10px", padding: "1px 5px", "border-radius": "4px", background: "rgba(34,197,94,0.2)", color: "#4ade80" }}>current</span>
+                  </Show>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
 

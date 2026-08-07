@@ -84,17 +84,25 @@ export async function gitRepoStatus(repoPath: string): Promise<GitStatus> {
   return invoke<GitStatus>("git_repo_status", { repoPath });
 }
 
-export async function gitLog(repoPath: string, maxCount: number, skip: number = 0): Promise<GitCommit[]> {
+export async function gitLog(
+  repoPath: string,
+  maxCount: number,
+  skip: number = 0,
+  selectedBranches?: string[]
+): Promise<GitCommit[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", "--all", `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H%x1f%s%x1f%an%x1f%at");
+    const branchArgs = (!selectedBranches || selectedBranches.length === 0 || selectedBranches.includes("all"))
+      ? ["--all"]
+      : selectedBranches;
+    const out = await execGit(repoPath, "log", ...branchArgs, `--max-count=${maxCount}`, `--skip=${skip}`, "--format=%H%x1f%s%x1f%an%x1f%at");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, message, author, timestamp] = line.split("\x1f");
       return { hash, message, author, timestamp: parseInt(timestamp, 10) };
     });
   }
 
-  return invoke<GitCommit[]>("git_log", { repoPath, maxCount });
+  return invoke<GitCommit[]>("git_log", { repoPath, maxCount, skip, selectedBranches: selectedBranches ?? null });
 }
 
 export async function gitStage(repoPath: string, filePath: string): Promise<void> {
@@ -320,10 +328,18 @@ export async function gitDiffBetween(repoPath: string, fromHash: string, toHash:
 
 // ---- Graph ----
 
-export async function gitGraph(repoPath: string, maxCount: number, skip: number = 0): Promise<GitGraphEntry[]> {
+export async function gitGraph(
+  repoPath: string,
+  maxCount: number,
+  skip: number = 0,
+  selectedBranches?: string[]
+): Promise<GitGraphEntry[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "log", "--all", `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D");
+    const branchArgs = (!selectedBranches || selectedBranches.length === 0 || selectedBranches.includes("all"))
+      ? ["--all"]
+      : selectedBranches;
+    const out = await execGit(repoPath, "log", ...branchArgs, `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D");
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, parentsStr, message, author, timestamp, refsStr] = line.split("\x1f");
       const parents = parentsStr ? parentsStr.split(" ") : [];
@@ -332,7 +348,7 @@ export async function gitGraph(repoPath: string, maxCount: number, skip: number 
     });
   }
 
-  return invoke<GitGraphEntry[]>("git_graph", { repoPath, maxCount, skip });
+  return invoke<GitGraphEntry[]>("git_graph", { repoPath, maxCount, skip, selectedBranches: selectedBranches ?? null });
 }
 
 // ---- Stash ----
