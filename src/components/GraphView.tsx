@@ -21,6 +21,8 @@ interface GraphEdge {
   toHash: string;
   toRow: number | null;
   toLane: number | null;
+  isMergeBranch: boolean;
+  parentIndex: number;
 }
 
 interface GraphData {
@@ -86,11 +88,11 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
     } else {
       lanes[lane] = p1;
     }
-    edges.push({ fromRow: i, fromLane: lane, viaLane: lane, toHash: e.parents[0], toRow: null, toLane: null });
+    edges.push({ fromRow: i, fromLane: lane, viaLane: lane, toHash: e.parents[0], toRow: null, toLane: null, isMergeBranch: false, parentIndex: 0 });
 
     for (let k = 1; k < e.parents.length; k++) {
       const via = allocLane(e.parents[k]);
-      edges.push({ fromRow: i, fromLane: lane, viaLane: via, toHash: e.parents[k], toRow: null, toLane: null });
+      edges.push({ fromRow: i, fromLane: lane, viaLane: via, toHash: e.parents[k], toRow: null, toLane: null, isMergeBranch: true, parentIndex: k });
     }
   });
 
@@ -198,20 +200,45 @@ export function GraphView() {
           onScroll={handleScroll}
           style={{ flex: 1, width: "100%", overflow: "auto", background: surfaceBg(0.04) }}
         >
-          <div style={{ width: "100%", "min-width": `${graphW() + 320}px` }}>
+          <div style={{ width: "100%", "min-width": `${graphW() + 340}px` }}>
             <svg width="100%" height={svgH()} style={{ display: "block" }}>
+              <defs>
+                <Index each={COLORS}>
+                  {(color, idx) => (
+                    <marker
+                      id={`merge-arrow-${idx}`}
+                      viewBox="0 0 10 10"
+                      refX="6"
+                      refY="5"
+                      markerWidth="7"
+                      markerHeight="7"
+                      orient="auto"
+                    >
+                      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={color()} />
+                    </marker>
+                  )}
+                </Index>
+              </defs>
               <Index each={data().edges}>
-                {(edge) => (
-                  <polyline
-                    points={edgePoints(edge())}
-                    fill="none"
-                    stroke={laneColor(edge().viaLane)}
-                    stroke-width="2"
-                    opacity="0.55"
-                    stroke-linejoin="round"
-                    stroke-linecap="round"
-                  />
-                )}
+                {(edge) => {
+                  const isMerge = () => edge().isMergeBranch || edge().parentIndex > 0;
+                  const strokeCol = () => laneColor(edge().viaLane);
+                  const markerId = () => `url(#merge-arrow-${edge().viaLane % COLORS.length})`;
+
+                  return (
+                    <polyline
+                      points={edgePoints(edge())}
+                      fill="none"
+                      stroke={strokeCol()}
+                      stroke-width={isMerge() ? "2.5" : "2"}
+                      stroke-dasharray={isMerge() ? "5,3" : "none"}
+                      opacity={isMerge() ? "0.95" : "0.55"}
+                      stroke-linejoin="round"
+                      stroke-linecap="round"
+                      marker-end={isMerge() ? markerId() : undefined}
+                    />
+                  );
+                }}
               </Index>
               <Index each={data().rows}>
                 {(row, i) => {
@@ -223,7 +250,8 @@ export function GraphView() {
                   const refStart = () => railsW() + 8;
                   const textX = () => refStart() + (row().refs.length > 0 ? Math.min(row().refs.length, 3) * 130 : 0) + 6;
                   const isSelected = () => selectedHash() === row().hash;
-                  const msgLeft = () => textX() + 78;
+                  const isMergeCommit = () => row().parents.length > 1;
+                  const msgLeft = () => textX() + (isMergeCommit() ? 202 : 78);
 
                   return (
                     <g
@@ -237,18 +265,33 @@ export function GraphView() {
                         y={y - ROW_H / 2}
                         width="100%"
                         height={ROW_H}
-                        fill={isSelected() ? "rgba(245, 158, 11, 0.12)" : "transparent"}
+                        fill={isSelected() ? "rgba(245, 158, 11, 0.14)" : "transparent"}
                         style={{ transition: "fill 0.15s" }}
                       />
-                      <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
-                      <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
+
+                      {/* Merge Node vs Standard Node Visuals */}
+                      <Show when={isMergeCommit()}>
+                        <circle cx={cx} cy={y} r={DOT_R + 4.5} fill="rgba(96, 205, 255, 0.25)" stroke={color} stroke-width="1.5" />
+                        <polygon
+                          points={`${cx},${y - DOT_R - 2} ${cx + DOT_R + 2},${y} ${cx},${y + DOT_R + 2} ${cx - DOT_R - 2},${y}`}
+                          fill="var(--accent-default, #60cdff)"
+                          stroke="var(--option-bg, #000)"
+                          stroke-width="1.5"
+                        />
+                      </Show>
+                      <Show when={!isMergeCommit()}>
+                        <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
+                        <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
+                      </Show>
+
+                      {/* Branch / Tag Reference Badges */}
                       <Index each={row().refs}>
                         {(ref, ri) => {
                           const rx = refStart() + ri * 130;
                           const tw = Math.min(ref().length * 7.2 + 16, 120);
                           return (
                             <g>
-                              <rect x={rx} y={y - 9} width={tw} height={18} rx={4} fill={color} opacity="0.18" />
+                              <rect x={rx} y={y - 9} width={tw} height={18} rx={4} fill={color} opacity="0.22" stroke={color} stroke-width="1" />
                               <text x={rx + 8} y={y + 4} fill={color} font-size="10" font-weight="700" font-family="Space Mono,monospace">
                                 {ref().length > 14 ? ref().slice(0, 14) + "…" : ref()}
                               </text>
@@ -256,16 +299,31 @@ export function GraphView() {
                           );
                         }}
                       </Index>
-                      <text x={textX()} y={y + 4} fill="var(--accent-color,#f59e0b)" font-size="11" font-family="Space Mono,monospace">
+
+                      {/* Commit Hash Label */}
+                      <text x={textX()} y={y + 4} fill="var(--accent-default, var(--accent-color,#f59e0b))" font-size="11" font-family="Space Mono,monospace" style={{ "text-shadow": "var(--text-shadow)" }}>
                         {row().hash.slice(0, 7)}
                       </text>
+
+                      {/* Merge Commit Explicit Directional Badge */}
+                      <Show when={isMergeCommit()}>
+                        <g>
+                          <rect x={textX() + 65} y={y - 9} width="128" height="17" rx="4" fill="rgba(96, 205, 255, 0.22)" stroke="rgba(96, 205, 255, 0.45)" />
+                          <text x={textX() + 71} y={y + 3} fill="var(--accent-default, #60cdff)" font-size="10" font-weight="700" font-family="Space Mono,monospace" style={{ "text-shadow": "var(--text-shadow)" }}>
+                            🔀 MERGE ({row().parents[1].slice(0, 5)}➔{row().parents[0].slice(0, 5)})
+                          </text>
+                        </g>
+                      </Show>
+
+                      {/* Commit Message */}
                       <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 200}px)`} height={ROW_H}>
                         <div
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
                             "font-size": "12px",
-                            color: isSelected() ? "var(--accent-color, #f59e0b)" : "var(--text-color)",
+                            color: isSelected() ? "var(--accent-default, var(--accent-color, #f59e0b))" : "var(--text-primary, var(--text-color))",
                             "font-weight": isSelected() ? "600" : "400",
+                            "text-shadow": "var(--text-shadow)",
                             "line-height": `${ROW_H}px`,
                             overflow: "hidden",
                             "text-overflow": "ellipsis",
@@ -276,7 +334,7 @@ export function GraphView() {
                           {row().message}
                         </div>
                       </foreignObject>
-                      <text x="calc(100% - 16px)" y={y + 4} text-anchor="end" fill="var(--text-muted,#888)" font-size="11">
+                      <text x="calc(100% - 16px)" y={y + 4} text-anchor="end" fill="var(--text-secondary, #c0c0c0)" font-size="11" style={{ "text-shadow": "var(--text-shadow)" }}>
                         {row().author}{" · "}{formatTimestamp(row().timestamp)}
                       </text>
                     </g>
@@ -290,7 +348,7 @@ export function GraphView() {
                 style={{
                   padding: "10px 16px",
                   "font-size": "12px",
-                  color: "var(--accent-color,#f59e0b)",
+                  color: "var(--accent-default, var(--accent-color,#f59e0b))",
                   "text-align": "center",
                   cursor: "pointer",
                   "user-select": "none",
@@ -300,7 +358,7 @@ export function GraphView() {
               </div>
             </Show>
             <Show when={ctx.graphLoading()}>
-              <div style={{ padding: "10px 16px", "font-size": "12px", color: "var(--text-muted,#888)", "text-align": "center" }}>
+              <div style={{ padding: "10px 16px", "font-size": "12px", color: "var(--text-secondary,#888)", "text-align": "center" }}>
                 Loading more commits…
               </div>
             </Show>
@@ -314,8 +372,8 @@ export function GraphView() {
           <Card>
             <div style={S.cardHeader}>
               <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                <span style={{ "font-weight": 600 }}>Commit Details</span>
-                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "font-size": "12px" }}>
+                <span style={{ "font-weight": 600, color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>Commit Details</span>
+                <code style={{ color: "var(--accent-default, var(--accent-color, #f59e0b))", "font-family": "Space Mono, monospace", "font-size": "12px" }}>
                   {ctx.commitDetail()!.hash.slice(0, 7)}
                 </code>
               </div>
@@ -330,7 +388,7 @@ export function GraphView() {
                   style={{
                     background: "transparent",
                     border: "none",
-                    color: "var(--text-muted, #888)",
+                    color: "var(--text-secondary, #888)",
                     cursor: "pointer",
                     padding: "4px",
                     display: "inline-flex",
@@ -344,10 +402,30 @@ export function GraphView() {
             </div>
 
             <div style={{ "font-size": "13px", "line-height": "1.5" }}>
-              <div style={{ "white-space": "pre-wrap", "font-weight": 500, "margin-bottom": "8px", color: "var(--text-color)", "word-break": "break-word" }}>
+              <div style={{ "white-space": "pre-wrap", "font-weight": 500, "margin-bottom": "8px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", "word-break": "break-word" }}>
                 {ctx.commitDetail()!.message}
               </div>
-              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "16px", "font-size": "11px", color: "var(--text-muted, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.04))", "padding-top": "8px" }}>
+
+              {/* Explicit Merge Breakdown Box */}
+              <Show when={ctx.commitDetail()!.parent_hashes.length > 1}>
+                <div style={{ background: "var(--accent-bg-soft, rgba(96, 205, 255, 0.12))", border: "1px solid var(--accent-border, rgba(96, 205, 255, 0.3))", padding: "10px 14px", "border-radius": "6px", margin: "10px 0", "box-shadow": "0 2px 8px rgba(0,0,0,0.15)" }}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "6px", "font-weight": 600, "font-size": "12px", color: "var(--accent-default, #60cdff)", "text-shadow": "var(--text-shadow)" }}>
+                    🔀 Merge Commit Breakdown
+                  </div>
+                  <div style={{ "font-size": "12px", margin: "6px 0 2px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap" }}>
+                    <span>Merging <strong>Source Branch</strong></span>
+                    <code style={{ background: "rgba(74, 222, 128, 0.2)", color: "#4ade80", padding: "2px 6px", "border-radius": "4px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                      {ctx.commitDetail()!.parent_hashes[1].slice(0, 7)}
+                    </code>
+                    <span style={{ "font-weight": 700 }}>➔ Into Target/Base Branch</span>
+                    <code style={{ background: "rgba(96, 165, 250, 0.2)", color: "#60a5fa", padding: "2px 6px", "border-radius": "4px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                      {ctx.commitDetail()!.parent_hashes[0].slice(0, 7)}
+                    </code>
+                  </div>
+                </div>
+              </Show>
+
+              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "16px", "font-size": "11px", color: "var(--text-secondary, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", "padding-top": "8px" }}>
                 <div><strong>Author:</strong> {ctx.commitDetail()!.author} &lt;{ctx.commitDetail()!.email}&gt;</div>
                 <div><strong>Date:</strong> {formatTimestamp(ctx.commitDetail()!.timestamp)}</div>
                 <div><strong>Full Hash:</strong> <code style={{ "font-family": "Space Mono, monospace" }}>{ctx.commitDetail()!.hash}</code></div>

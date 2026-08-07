@@ -112,7 +112,7 @@ export function CloseIcon(props: { size?: number }) {
 
 export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: () => void; children: JSX.Element; style?: any }) {
   const base = { ...S.btn, ...(props.size === "sm" ? { padding: "4px 10px", "font-size": "11px" } : {}) };
-  const variant = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : { background: surfaceBg(0.06), color: "var(--text-color)" };
+  const variant = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : S.btnSecondary;
   return (
     <button
       type="button"
@@ -126,7 +126,7 @@ export function Button(props: { variant?: "primary" | "secondary" | "danger"; si
 }
 
 export function Card(props: { children: JSX.Element; style?: any }) {
-  return <div style={{ background: surfaceBg(0.04), border: "1px solid var(--border-strong)", "border-radius": "8px", padding: "16px", "margin-bottom": "12px", width: "100%", "box-sizing": "border-box", ...props.style }}>{props.children}</div>;
+  return <div style={{ ...S.card, width: "100%", "box-sizing": "border-box", ...props.style }}>{props.children}</div>;
 }
 
 export function Badge(props: { variant: "staged" | "unstaged" | "untracked"; count: number }) {
@@ -136,15 +136,15 @@ export function Badge(props: { variant: "staged" | "unstaged" | "untracked"; cou
 
 export function TabBar(props: { tabs: { id: string; label: string; count?: number }[]; activeTab: string; onSelect: (id: string) => void }) {
   return (
-    <div style={{ ...S.tabBar, background: surfaceBg(0.02) }}>
+    <div style={S.tabBar}>
       {props.tabs.map((tab) => (
         <div
-          style={{ ...S.tab, ...(props.activeTab === tab.id ? { ...S.tabActive, background: surfaceBg(0.05) } : { background: surfaceBg(0.02) }) }}
+          style={{ ...S.tab, ...(props.activeTab === tab.id ? S.tabActive : {}) }}
           onClick={() => props.onSelect(tab.id)}
         >
           {tab.label}
           <Show when={tab.count !== undefined && tab.count > 0}>
-            <span style={{ ...S.badge, background: surfaceBg(0.1), color: "var(--text-muted, #888)", padding: "1px 6px", "font-size": "10px" }}>{tab.count}</span>
+            <span style={{ ...S.badge, background: "var(--control-bg, rgba(255,255,255,0.12))", color: "var(--text-secondary, #c0c0c0)", padding: "1px 6px", "font-size": "10px" }}>{tab.count}</span>
           </Show>
         </div>
       ))}
@@ -178,7 +178,7 @@ export function Spinner(props: { size?: number }) {
   const size = props.size ?? 20;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
-      <circle cx="12" cy="12" r="10" fill="none" stroke="var(--text-muted, #888)" stroke-width="2" stroke-dasharray="31.4 31.4" />
+      <circle cx="12" cy="12" r="10" fill="none" stroke="var(--text-secondary, #888)" stroke-width="2" stroke-dasharray="31.4 31.4" />
     </svg>
   );
 }
@@ -186,9 +186,9 @@ export function Spinner(props: { size?: number }) {
 export function ConfirmDialog(props: { open: boolean; message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
   return (
     <Show when={props.open}>
-      <div style={{ position: "fixed", inset: "0", background: "rgba(0,0,0,0.5)", display: "flex", "align-items": "center", "justify-content": "center", "z-index": 10000 }} onClick={props.onCancel}>
-        <div style={{ background: "var(--panel-bg)", border: "1px solid var(--border-strong)", "border-radius": "8px", padding: "20px", "max-width": "360px", width: "90%" }} onClick={(e) => e.stopPropagation()}>
-          <div style={{ "font-size": "14px", "margin-bottom": "16px", color: "var(--text-color)" }}>{props.message}</div>
+      <div style={{ position: "fixed", inset: "0", background: "rgba(0,0,0,0.6)", "backdrop-filter": "blur(8px)", display: "flex", "align-items": "center", "justify-content": "center", "z-index": 10000 }} onClick={props.onCancel}>
+        <div style={{ ...S.card, "max-width": "360px", width: "90%", padding: "20px" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ "font-size": "14px", "margin-bottom": "16px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>{props.message}</div>
           <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
             <Button onClick={props.onCancel}>Cancel</Button>
             <Button variant={props.danger ? "danger" : "primary"} onClick={props.onConfirm}>Confirm</Button>
@@ -258,11 +258,12 @@ export function CommitContextMenu(props: {
           position: "fixed",
           top: `${Math.min(props.y, window.innerHeight - 180)}px`,
           left: `${Math.min(props.x, window.innerWidth - 220)}px`,
-          background: "var(--panel-bg, #1e1e2e)",
-          border: "1px solid var(--border-strong, rgba(255,255,255,0.1))",
+          background: "var(--glass-bg, rgba(32, 32, 32, 0.85))",
+          border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.12))",
           "border-radius": "8px",
           padding: "6px",
-          "box-shadow": "0 8px 24px rgba(0,0,0,0.5)",
+          "box-shadow": "var(--glass-shadow, 0 8px 24px rgba(0,0,0,0.5))",
+          "backdrop-filter": "var(--glass-blur, blur(20px))",
           display: "flex",
           "flex-direction": "column",
           gap: "2px",
@@ -286,7 +287,7 @@ export function CommitContextMenu(props: {
         >
           ⚔️ {compareLabel()}
         </button>
-        <div style={{ height: "1px", background: "var(--border-subtle, rgba(255,255,255,0.06))", margin: "4px 0" }} />
+        <div style={{ height: "1px", background: "var(--border-subtle, rgba(255,255,255,0.08))", margin: "4px 0" }} />
         <button
           type="button"
           style={menuBtnStyle}
@@ -313,7 +314,8 @@ const menuBtnStyle = {
   padding: "8px 10px",
   border: "none",
   background: "transparent",
-  color: "var(--text-color, #e4e4e7)",
+  color: "var(--text-primary, var(--text-color, #e4e4e7))",
+  "text-shadow": "var(--text-shadow)",
   "font-size": "12px",
   cursor: "pointer",
   "border-radius": "4px",
@@ -321,3 +323,4 @@ const menuBtnStyle = {
   width: "100%",
   transition: "background 0.15s",
 };
+

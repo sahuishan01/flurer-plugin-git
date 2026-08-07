@@ -48,24 +48,24 @@ export function DashboardView(props: DashboardViewProps) {
               <For each={repos()}>
                 {(repo) => (
                   <div
-                    style={{ ...S.repoCard, background: surfaceBg(0.04), position: "relative" }}
+                    style={{ ...S.repoCard, position: "relative" }}
                     onClick={() => handleOpen(repo.path)}
                   >
                     <FolderIcon size={20} />
                     <div style={{ flex: 1, overflow: "hidden" }}>
-                      <div style={{ "font-weight": 600, "font-size": "14px", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>{repo.name}</div>
-                      <div style={{ "font-size": "12px", color: "var(--text-muted, #888)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
+                      <div style={{ "font-weight": 600, "font-size": "14px", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>{repo.name}</div>
+                      <div style={{ "font-size": "12px", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
                         {repo.path}
                         <Show when={repo.branch}>
-                          <span style={{ "margin-left": "8px", color: "var(--accent-color, #f59e0b)" }}>{repo.branch}</span>
+                          <span style={{ "margin-left": "8px", color: "var(--accent-default, var(--accent-color, #f59e0b))" }}>{repo.branch}</span>
                         </Show>
                       </div>
                     </div>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-shrink": 0 }}>
-                      <span style={{ "font-size": "11px", color: "var(--text-muted, #888)" }}>{formatTimestamp(repo.lastOpened / 1000)}</span>
+                      <span style={{ "font-size": "11px", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)" }}>{formatTimestamp(repo.lastOpened / 1000)}</span>
                       <button
                         type="button"
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted, #888)", padding: "4px" }}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary, #888)", padding: "4px" }}
                         title="Remove from list"
                         onClick={(e) => { e.stopPropagation(); handleRemove(repo.path); }}
                       >
@@ -79,7 +79,7 @@ export function DashboardView(props: DashboardViewProps) {
           </div>
         </Show>
 
-        <div style={{ ...S.card, background: surfaceBg(0.04) }}>
+        <div style={S.card}>
           <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
             <Button
               variant="primary"

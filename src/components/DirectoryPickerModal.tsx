@@ -131,8 +131,9 @@ export function DirectoryPickerModal(props: {
       >
         <div
           style={{
-            background: "var(--panel-bg, #1a1a2e)",
-            border: "1px solid var(--border-strong, rgba(255,255,255,0.15))",
+            background: "var(--glass-bg, rgba(32, 32, 32, 0.85))",
+            border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.12))",
+            "backdrop-filter": "var(--glass-blur, blur(24px))",
             "border-radius": "12px",
             width: "680px",
             "max-width": "95vw",
@@ -141,20 +142,20 @@ export function DirectoryPickerModal(props: {
             display: "flex",
             "flex-direction": "column",
             overflow: "hidden",
-            "box-shadow": "0 16px 40px rgba(0, 0, 0, 0.6)",
+            "box-shadow": "var(--glass-shadow, 0 16px 40px rgba(0, 0, 0, 0.6))",
           }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div style={{ padding: "14px 18px", "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+          <div style={{ padding: "14px 18px", "border-bottom": "var(--glass-border, 1px solid rgba(255,255,255,0.08))", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
             <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
               <FolderIcon size={18} />
-              <span style={{ "font-weight": 600, "font-size": "14px", color: "var(--text-color)" }}>Select Repository Directory</span>
+              <span style={{ "font-weight": 600, "font-size": "14px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>Select Repository Directory</span>
             </div>
             <button
               type="button"
               onClick={props.onClose}
-              style={{ background: "none", border: "none", color: "var(--text-muted, #888)", cursor: "pointer", padding: "4px", display: "inline-flex", "align-items": "center" }}
+              style={{ background: "none", border: "none", color: "var(--text-secondary, #888)", cursor: "pointer", padding: "4px", display: "inline-flex", "align-items": "center" }}
             >
               <CloseIcon size={16} />
             </button>
@@ -163,11 +164,11 @@ export function DirectoryPickerModal(props: {
           {/* Body: Sidebar + File View */}
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
             {/* Disks & Quick Access Sidebar */}
-            <div style={{ width: "190px", "border-right": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", background: surfaceBg(0.02), padding: "12px 8px", display: "flex", "flex-direction": "column", gap: "16px", "overflow-y": "auto", "flex-shrink": 0 }}>
+            <div style={{ width: "190px", "border-right": "var(--glass-border, 1px solid rgba(255,255,255,0.08))", background: "var(--acrylic-bg, rgba(0,0,0,0.15))", padding: "12px 8px", display: "flex", "flex-direction": "column", gap: "16px", "overflow-y": "auto", "flex-shrink": 0 }}>
               {/* Disks Section */}
               <Show when={drives().length > 0}>
                 <div>
-                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-muted, #888)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", padding: "0 6px" }}>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", padding: "0 6px" }}>
                     Drives & Volumes
                   </div>
                   <For each={drives()}>
@@ -181,8 +182,9 @@ export function DirectoryPickerModal(props: {
                           "border-radius": "6px",
                           cursor: "pointer",
                           "font-size": "12px",
-                          color: currentPath().startsWith(vol.driveLetter) ? "var(--accent-color, #f59e0b)" : "var(--text-color)",
-                          background: currentPath().startsWith(vol.driveLetter) ? surfaceBg(0.08) : "transparent",
+                          color: currentPath().startsWith(vol.driveLetter) ? "var(--accent-default, var(--accent-color, #60cdff))" : "var(--text-primary, var(--text-color))",
+                          "text-shadow": "var(--text-shadow)",
+                          background: currentPath().startsWith(vol.driveLetter) ? "var(--accent-bg-soft, rgba(96,205,255,0.12))" : "transparent",
                           transition: "background 0.15s",
                         }}
                         onClick={() => loadDir(vol.driveLetter)}
@@ -199,7 +201,7 @@ export function DirectoryPickerModal(props: {
               {/* Quick Access Section */}
               <Show when={quickAccess().length > 0}>
                 <div>
-                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-muted, #888)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", padding: "0 6px" }}>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", padding: "0 6px" }}>
                     Quick Access
                   </div>
                   <For each={quickAccess()}>
@@ -213,8 +215,9 @@ export function DirectoryPickerModal(props: {
                           "border-radius": "6px",
                           cursor: "pointer",
                           "font-size": "12px",
-                          color: currentPath() === qa.path ? "var(--accent-color, #f59e0b)" : "var(--text-color)",
-                          background: currentPath() === qa.path ? surfaceBg(0.08) : "transparent",
+                          color: currentPath() === qa.path ? "var(--accent-default, var(--accent-color, #60cdff))" : "var(--text-primary, var(--text-color))",
+                          "text-shadow": "var(--text-shadow)",
+                          background: currentPath() === qa.path ? "var(--accent-bg-soft, rgba(96,205,255,0.12))" : "transparent",
                           transition: "background 0.15s",
                         }}
                         onClick={() => loadDir(qa.path)}
@@ -232,10 +235,10 @@ export function DirectoryPickerModal(props: {
               {/* Fallback Root shortcut if no drives detected */}
               <Show when={drives().length === 0 && quickAccess().length === 0}>
                 <div>
-                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-muted, #888)", "text-transform": "uppercase", "margin-bottom": "6px", padding: "0 6px" }}>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "text-transform": "uppercase", "margin-bottom": "6px", padding: "0 6px" }}>
                     Shortcuts
                   </div>
-                  <div style={{ padding: "6px 8px", cursor: "pointer", "font-size": "12px" }} onClick={() => loadDir("/")}>📁 Root (/)</div>
+                  <div style={{ padding: "6px 8px", cursor: "pointer", "font-size": "12px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }} onClick={() => loadDir("/")}>📁 Root (/)</div>
                 </div>
               </Show>
             </div>
@@ -243,7 +246,7 @@ export function DirectoryPickerModal(props: {
             {/* Directory Explorer Pane */}
             <div style={{ flex: 1, display: "flex", "flex-direction": "column", overflow: "hidden" }}>
               {/* Path Navigation Bar */}
-              <div style={{ padding: "10px 14px", background: surfaceBg(0.04), "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", display: "flex", "align-items": "center", gap: "8px" }}>
+              <div style={{ padding: "10px 14px", background: "var(--control-bg, rgba(0,0,0,0.15))", "border-bottom": "var(--glass-border, 1px solid rgba(255,255,255,0.08))", display: "flex", "align-items": "center", gap: "8px" }}>
                 <Button size="sm" onClick={handleNavigateUp}>
                   ↑ Up
                 </Button>
@@ -257,10 +260,11 @@ export function DirectoryPickerModal(props: {
                     flex: 1,
                     padding: "6px 10px",
                     "font-size": "12px",
-                    "font-family": "Space Mono, monospace",
-                    background: "var(--panel-bg, #1a1a2e)",
-                    border: "1px solid var(--border-strong, rgba(255,255,255,0.15))",
-                    color: "var(--text-color, #e4e4e7)",
+                    "font-family": "var(--fluent-font, Space Mono, monospace)",
+                    background: "var(--control-bg, var(--text-backplate, rgba(0,0,0,0.35)))",
+                    border: "var(--control-border, 1px solid rgba(255,255,255,0.12))",
+                    color: "var(--text-primary, var(--text-color))",
+                    "text-shadow": "var(--text-shadow)",
                     "border-radius": "4px",
                   }}
                 />
@@ -269,12 +273,12 @@ export function DirectoryPickerModal(props: {
               {/* Items List */}
               <div style={{ flex: 1, "overflow-y": "auto", padding: "8px 12px" }}>
                 <Show when={loading()}>
-                  <div style={{ padding: "20px", "text-align": "center", color: "var(--text-muted, #888)", "font-size": "13px" }}>
+                  <div style={{ padding: "20px", "text-align": "center", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "font-size": "13px" }}>
                     Loading directories...
                   </div>
                 </Show>
                 <Show when={!loading() && items().length === 0}>
-                  <div style={{ padding: "20px", "text-align": "center", color: "var(--text-muted, #888)", "font-size": "13px" }}>
+                  <div style={{ padding: "20px", "text-align": "center", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "font-size": "13px" }}>
                     No subdirectories found in this folder.
                   </div>
                 </Show>
@@ -290,9 +294,10 @@ export function DirectoryPickerModal(props: {
                         cursor: "pointer",
                         "font-size": "13px",
                         transition: "background 0.15s",
-                        color: "var(--text-color)",
+                        color: "var(--text-primary, var(--text-color))",
+                        "text-shadow": "var(--text-shadow)",
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = surfaceBg(0.08); }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--control-hover-bg, rgba(255,255,255,0.1))"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                       onDblClick={() => loadDir(item.path)}
                       onClick={() => setCurrentPath(item.path)}
@@ -312,8 +317,8 @@ export function DirectoryPickerModal(props: {
           </div>
 
           {/* Footer */}
-          <div style={{ padding: "12px 18px", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", display: "flex", "align-items": "center", "justify-content": "space-between", background: surfaceBg(0.02) }}>
-            <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "360px" }}>
+          <div style={{ padding: "12px 18px", "border-top": "var(--glass-border, 1px solid rgba(255,255,255,0.08))", display: "flex", "align-items": "center", "justify-content": "space-between", background: "var(--control-bg, rgba(0,0,0,0.15))" }}>
+            <span style={{ "font-size": "11px", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "font-family": "var(--fluent-font, Space Mono, monospace)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "360px" }}>
               Selected: {currentPath()}
             </span>
             <div style={{ display: "flex", gap: "8px" }}>
