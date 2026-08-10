@@ -126,6 +126,29 @@ export function saveActiveTab(path: string | null): void {
 }
 
 const BRANCH_SELECT_KEY = "flurer-git-branch-selection";
+const ACTIVE_VIEW_KEY = "flurer-git-active-view";
+
+/** Load the saved active view for a given repo path. */
+export function getSavedActiveView(path: string): string | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_VIEW_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return map?.[path] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the active view for a given repo path. */
+export function saveActiveView(path: string, view: string): void {
+  try {
+    const raw = localStorage.getItem(ACTIVE_VIEW_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[path] = view;
+    localStorage.setItem(ACTIVE_VIEW_KEY, JSON.stringify(map));
+  } catch {}
+}
 
 /** Load the saved branch filter selection for a given repo path. */
 export function getSavedBranchSelection(path: string): string[] | null {

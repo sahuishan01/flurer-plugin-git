@@ -1,5 +1,5 @@
 import { createContext, useContext, createSignal, createMemo, onMount, type Accessor, type JSX, type ParentProps } from "solid-js";
-import { saveRecentRepo, getSavedBranchSelection, saveBranchSelection } from "./utils";
+import { saveRecentRepo, getSavedBranchSelection, saveBranchSelection, getSavedActiveView, saveActiveView } from "./utils";
 import * as git from "./git";
 import type {
   GitView, GitStatus, GitCommit, GitBranch, GitGraphEntry,
@@ -178,7 +178,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setRepoPath(path);
     const saved = getSavedBranchSelection(path);
     setSelectedBranches(saved ?? ["all"]);
-    setActiveView("graph");
+    const savedView = getSavedActiveView(path) as GitView | null;
+    setActiveView(savedView || "graph");
     setGraph([]);
     setGraphHasMore(true);
     setGraphLoading(false);
@@ -211,6 +212,8 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setActiveView(view);
     setSelectedDiffFile(null);
     setDiffResult(null);
+    const p = repoPath();
+    if (p) saveActiveView(p, view);
   }
 
   async function stage(path: string) {
