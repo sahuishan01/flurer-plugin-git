@@ -20,27 +20,6 @@ interface QuickAccessEntry {
   path: string;
 }
 
-interface LsblkDevice {
-  name: string;
-  model?: string;
-  size?: string;
-  mountpoint?: string;
-  fstype?: string;
-  rm?: boolean;
-  children?: LsblkDevice[];
-}
-
-function flattenMounts(dev: LsblkDevice): LsblkDevice[] {
-  const out: LsblkDevice[] = [];
-  if (dev.mountpoint && dev.mountpoint !== "[SWAP]") out.push(dev);
-  if (dev.children) {
-    for (const child of dev.children) {
-      out.push(...flattenMounts(child));
-    }
-  }
-  return out;
-}
-
 export function DirectoryPickerModal(props: {
   open: boolean;
   initialPath?: string;
@@ -71,41 +50,41 @@ export function DirectoryPickerModal(props: {
       }
     } catch {}
 
-    // Linux/macOS fallback: discover mounts via shell
+    // Linux/macOS fallback: probe common mount points via list_directory
     if (drives().length === 0) {
       try {
         const isWin = navigator.platform.includes("Win");
-        if (!isWin) {
-          const win = window as any;
-          const Command = win.TauriShell?.Command || win.__TAURI_PLUGIN_SHELL__?.Command || win.__TAURI__?.shell?.Command;
-          if (Command) {
-            const result = await Command.create("sh", ["-c", "lsblk -Jpo NAME,SIZE,MOUNTPOINT,FSTYPE,RM"]).execute({ windowsHide: true });
-            const stdout = typeof result.stdout === "string" ? result.stdout : "";
-            if (stdout) {
-              const blk = JSON.parse(stdout);
-              const vols: DiskVolume[] = [];
-              if (Array.isArray(blk?.blockdevices)) {
-                for (const dev of blk.blockdevices) {
-                  const mounts = flattenMounts(dev);
-                  for (const m of mounts) {
-                    if (!m.mountpoint || m.mountpoint === "[SWAP]") continue;
-                    vols.push({
-                      driveLetter: m.mountpoint,
-                      volumeName: m.label || dev.model || dev.name || m.mountpoint,
-                      fileSystem: m.fstype || "",
-                      totalSpace: m.size ? parseInt(m.size, 10) || 0 : 0,
+        if (!isWin && window.TauriCore?.invoke) {
+          const candidates = ["/home", "/mnt", "/media", "/run/media", "/Volumes", "/opt", "/data"];
+          const found: DiskVolume[] = [];
+          for (const p of candidates) {
+            try {
+              const res = await window.TauriCore.invoke<any[]>("list_directory", {
+                path: p,
+                sortKey: "name",
+                sortDirection: "ascending",
+              });
+              if (Array.isArray(res) && res.length > 0) {
+                for (const item of res) {
+                  if (item.is_dir || item.isDir) {
+                    const fullPath = item.path || `${p}/${item.name}`.replace(/\/+/g, "/");
+                    found.push({
+                      driveLetter: fullPath,
+                      volumeName: item.name,
+                      fileSystem: "",
+                      totalSpace: 0,
                       freeSpace: 0,
                     });
                   }
                 }
               }
-              if (vols.length > 0) {
-                setDrives(vols);
-                if (!currentPath()) {
-                  const home = vols.find((v) => v.driveLetter.startsWith("/home"));
-                  loadDir(home ? home.driveLetter : vols[0].driveLetter);
-                }
-              }
+            } catch {}
+          }
+          if (found.length > 0) {
+            setDrives(found);
+            if (!currentPath()) {
+              const home = found.find((v) => v.driveLetter.startsWith("/home"));
+              loadDir(home ? home.driveLetter : found[0].driveLetter);
             }
           }
         }
