@@ -79,7 +79,7 @@ export function DirectoryPickerModal(props: {
           const win = window as any;
           const Command = win.TauriShell?.Command || win.__TAURI_PLUGIN_SHELL__?.Command || win.__TAURI__?.shell?.Command;
           if (Command) {
-            const result = await Command.create("lsblk", ["-Jpo", "NAME,SIZE,MOUNTPOINT,FSTYPE,RM"]).execute({ windowsHide: true });
+            const result = await Command.create("sh", ["-c", "lsblk -Jpo NAME,SIZE,MOUNTPOINT,FSTYPE,RM"]).execute({ windowsHide: true });
             const stdout = typeof result.stdout === "string" ? result.stdout : "";
             if (stdout) {
               const blk = JSON.parse(stdout);
