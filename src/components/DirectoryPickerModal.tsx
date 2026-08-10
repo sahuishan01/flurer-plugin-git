@@ -20,6 +20,27 @@ interface QuickAccessEntry {
   path: string;
 }
 
+interface LsblkDevice {
+  name: string;
+  model?: string;
+  size?: string;
+  mountpoint?: string;
+  fstype?: string;
+  rm?: boolean;
+  children?: LsblkDevice[];
+}
+
+function flattenMounts(dev: LsblkDevice): LsblkDevice[] {
+  const out: LsblkDevice[] = [];
+  if (dev.mountpoint && dev.mountpoint !== "[SWAP]") out.push(dev);
+  if (dev.children) {
+    for (const child of dev.children) {
+      out.push(...flattenMounts(child));
+    }
+  }
+  return out;
+}
+
 export function DirectoryPickerModal(props: {
   open: boolean;
   initialPath?: string;
@@ -34,9 +55,11 @@ export function DirectoryPickerModal(props: {
 
   async function loadDrivesAndQuickAccess() {
     if (!window.TauriCore?.invoke) return;
+
+    // Try Windows disk topology first
     try {
       const topo = await window.TauriCore.invoke<PhysicalDisk[]>("get_disk_topology");
-      if (Array.isArray(topo)) {
+      if (Array.isArray(topo) && topo.length > 0) {
         const vols: DiskVolume[] = [];
         topo.forEach((d) => {
           if (d.volumes) vols.push(...d.volumes);
@@ -48,6 +71,45 @@ export function DirectoryPickerModal(props: {
       }
     } catch {}
 
+    // Linux/macOS fallback: discover mounts via shell
+    if (drives().length === 0) {
+      try {
+        const isWin = navigator.platform.includes("Win");
+        if (!isWin && window.TauriShell?.execute) {
+          const result = await window.TauriShell.execute("lsblk", ["-Jpo", "NAME,SIZE,MOUNTPOINT,FSTYPE,RM"]);
+          const stdout = typeof result.stdout === "string" ? result.stdout : "";
+          if (stdout) {
+            const blk = JSON.parse(stdout);
+            const vols: DiskVolume[] = [];
+            if (Array.isArray(blk?.blockdevices)) {
+              for (const dev of blk.blockdevices) {
+                const mounts = flattenMounts(dev);
+                for (const m of mounts) {
+                  if (!m.mountpoint || m.mountpoint === "[SWAP]") continue;
+                  vols.push({
+                    driveLetter: m.mountpoint,
+                    volumeName: m.label || dev.model || dev.name || m.mountpoint,
+                    fileSystem: m.fstype || "",
+                    totalSpace: m.size ? parseInt(m.size, 10) || 0 : 0,
+                    freeSpace: 0,
+                  });
+                }
+              }
+            }
+            if (vols.length > 0) {
+              setDrives(vols);
+              if (!currentPath()) {
+                // Prefer /home or first non-root mount
+                const home = vols.find((v) => v.driveLetter.startsWith("/home"));
+                loadDir(home ? home.driveLetter : vols[0].driveLetter);
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Quick access (works cross-platform)
     try {
       const qa = await window.TauriCore.invoke<QuickAccessEntry[]>("get_quick_access");
       if (Array.isArray(qa)) {
@@ -59,7 +121,7 @@ export function DirectoryPickerModal(props: {
     } catch {}
 
     if (!currentPath()) {
-      loadDir("/home/opc");
+      loadDir("/");
     }
   }
 
@@ -180,15 +242,15 @@ export function DirectoryPickerModal(props: {
                           "border-radius": "6px",
                           cursor: "pointer",
                           "font-size": "12px",
-                          color: currentPath().startsWith(vol.driveLetter) ? "var(--accent-default, var(--accent-color, #60cdff))" : "var(--text-primary, var(--text-color))",
+                          color: currentPath() === vol.driveLetter || currentPath().startsWith(vol.driveLetter + "/") ? "var(--accent-default, var(--accent-color, #60cdff))" : "var(--text-primary, var(--text-color))",
                           "text-shadow": "var(--text-shadow)",
-                          background: currentPath().startsWith(vol.driveLetter) ? "var(--accent-bg-soft, rgba(96,205,255,0.12))" : "transparent",
+                          background: currentPath() === vol.driveLetter || currentPath().startsWith(vol.driveLetter + "/") ? "var(--accent-bg-soft, rgba(96,205,255,0.12))" : "transparent",
                           transition: "background 0.15s",
                         }}
                         onClick={() => loadDir(vol.driveLetter)}
                       >
                         💾 <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "font-weight": 500 }}>
-                          {vol.volumeName ? `${vol.volumeName} (${vol.driveLetter})` : vol.driveLetter}
+                          {vol.volumeName && vol.volumeName !== vol.driveLetter ? `${vol.volumeName} — ${vol.driveLetter}` : vol.driveLetter}
                         </span>
                       </div>
                     )}
