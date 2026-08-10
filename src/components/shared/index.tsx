@@ -113,16 +113,16 @@ export function CloseIcon(props: { size?: number }) {
 export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: () => void; children: JSX.Element; style?: any }) {
   const base = { ...S.btn, ...(props.size === "sm" ? { padding: "4px 10px", "font-size": "11px" } : {}) };
   const variantStyle = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : S.btnSecondary;
-  const tintBg = props.variant === "primary"
-    ? buttonBg("#0078d4")
-    : props.variant === "danger"
-      ? buttonBg("#ef4444")
-      : undefined;
-  const variant = { ...variantStyle, ...(tintBg ? { background: tintBg } : {}) };
   return (
     <button
       type="button"
-      style={{ ...base, ...variant, ...props.style }}
+      style={{
+        ...base,
+        ...variantStyle,
+        ...(props.variant === "primary" ? { background: buttonBg("#0078d4") } : {}),
+        ...(props.variant === "danger" ? { background: buttonBg("#ef4444") } : {}),
+        ...props.style,
+      }}
       disabled={props.disabled}
       onClick={props.onClick}
     >

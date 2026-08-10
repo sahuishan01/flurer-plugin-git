@@ -1,7 +1,7 @@
-# FLURER MIRROR SYNC REQUIRED — v0.12.11
+# FLURER MIRROR SYNC REQUIRED — v0.12.13
 
 **Date:** 2026-08-09
-**Source repo:** `sahuishan01/flurer-plugin-git` (tag `v0.12.11`)
+**Source repo:** `sahuishan01/flurer-plugin-git` (tag `v0.12.13`)
 **Mirror:** `Flurer/plugins/git`
 
 ---
@@ -17,19 +17,17 @@ The plugin source lives in two places and must stay in sync:
 
 ---
 
-## Files changed (v0.12.5 → v0.12.11)
+## Files changed (v0.12.11 → v0.12.13)
 
 | File | Change |
 |------|--------|
-| `src/components/GraphView.tsx` | Graph redesign: SVG lanes + HTML flex rows, responsive breakpoints (640/480/360px), branch ref pills, merge badges, lane legend. SVG alignment restored to v0.12.4 approach (`rowMaxLanes`, `refStart`, `textX`, `msgLeft`, foreignObject). Color changes kept (lighten, CSS vars, gradient merge badge). Bottom padding for dangling edges. |
-| `src/components/shared/index.tsx` | `backdrop-filter: blur()` stripped from all text-containing elements (Card, inputs, buttons, tabBar, repoCard, context menus, dropdowns, modals). Only full-screen overlay backdrops retain blur. |
-| `src/components/DiffView.tsx` | Button group `backdrop-filter` stripped. Inner elements retain `surfaceBg(0.08)` and `surfaceBg(0.05)` for section headers. |
-| `src/styles.ts` | `backdrop-filter` removed from all text-containing styles (`S.card`, `S.btn`, `S.input`, `S.tabBar`, `S.toast`, etc.) |
-| `src/context.tsx` | `openRepo` restores saved view; `switchView` saves view. `loadGraph` try/catch toast. |
-| `src/utils.ts` | `surfaceBg()`, `isLightBg()`, `getSavedActiveView`/`saveActiveView`, `getSavedBranchSelection`/`saveBranchSelection`. |
-| `src/index.tsx` | Single `surfaceBg(0.06)` tint div behind whole plugin (GitPanel root). Import added. |
-| `package.json` | Version → `0.12.11` |
-| `plugin.json` | Version → `0.12.11` |
+| `src/utils.ts` | Added `buttonBg(accentColor, opacity?)` — blends accent toward bg. Added `_buttonTintOpacity` signal + `getButtonTintOpacity()` / `setButtonTintOpacity()`. Added `parseColor()` helper. |
+| `src/styles.ts` | Removed `text-shadow` from `S.btnPrimary` and `S.btnSecondary`. |
+| `src/components/shared/index.tsx` | `Button` component now applies `buttonBg()` tinting to primary/danger variants. Removed `text-shadow` from `menuBtnStyle` and `BranchMultiSelect` trigger. |
+| `src/components/SettingsPanel.tsx` | New "Button tint opacity" slider (0–50%, default 12%). Persists both settings together. |
+| `src/index.tsx` | Applies `buttonTintOpacity` from plugin settings on startup. |
+| `package.json` | Version → `0.12.13` |
+| `plugin.json` | Version → `0.12.13` |
 
 ---
 
@@ -54,7 +52,7 @@ grep -o 'version:"0\.12\.[0-9]*"' dist/index.js
 # 4. Commit the mirror changes
 cd ../..
 git add plugins/git
-git commit -m "plugins/git: sync flurer-plugin-git v0.12.11"
+git commit -m "plugins/git: sync flurer-plugin-git v0.12.13"
 git push
 ```
 
@@ -62,11 +60,10 @@ git push
 
 ## Verification checklist
 
-- [ ] `bun run build` succeeds in `Flurer/plugins/git` (bundle ≈ 113 KB)
-- [ ] `dist/index.js` version matches `package.json` (0.12.11)
+- [ ] `bun run build` succeeds in `Flurer/plugins/git` (bundle ≈ 115 KB)
+- [ ] `dist/index.js` version matches `package.json` (0.12.13)
 - [ ] `diff` of `src/` between both repos is clean
 - [ ] Runtime installed plugin at `~/.config/flurer/plugins/git/` updated with new `dist/index.js` + `plugin.json` (restart Flurer to load)
-- [ ] Graph rows show `author · committer · time`
-- [ ] Branch filter survives repo close/reopen and app restart
+- [ ] Buttons have no text-shadow
+- [ ] Button backgrounds are tinted (not solid), adjustable in Settings
 - [ ] Single tint visible behind whole plugin (subtle light/dark blend)
-- [ ] No blurry text (no `backdrop-filter` on text elements)
