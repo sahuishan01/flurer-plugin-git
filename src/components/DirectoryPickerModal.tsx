@@ -75,33 +75,36 @@ export function DirectoryPickerModal(props: {
     if (drives().length === 0) {
       try {
         const isWin = navigator.platform.includes("Win");
-        if (!isWin && window.TauriShell?.execute) {
-          const result = await window.TauriShell.execute("lsblk", ["-Jpo", "NAME,SIZE,MOUNTPOINT,FSTYPE,RM"]);
-          const stdout = typeof result.stdout === "string" ? result.stdout : "";
-          if (stdout) {
-            const blk = JSON.parse(stdout);
-            const vols: DiskVolume[] = [];
-            if (Array.isArray(blk?.blockdevices)) {
-              for (const dev of blk.blockdevices) {
-                const mounts = flattenMounts(dev);
-                for (const m of mounts) {
-                  if (!m.mountpoint || m.mountpoint === "[SWAP]") continue;
-                  vols.push({
-                    driveLetter: m.mountpoint,
-                    volumeName: m.label || dev.model || dev.name || m.mountpoint,
-                    fileSystem: m.fstype || "",
-                    totalSpace: m.size ? parseInt(m.size, 10) || 0 : 0,
-                    freeSpace: 0,
-                  });
+        if (!isWin) {
+          const win = window as any;
+          const Command = win.TauriShell?.Command || win.__TAURI_PLUGIN_SHELL__?.Command || win.__TAURI__?.shell?.Command;
+          if (Command) {
+            const result = await Command.create("lsblk", ["-Jpo", "NAME,SIZE,MOUNTPOINT,FSTYPE,RM"]).execute({ windowsHide: true });
+            const stdout = typeof result.stdout === "string" ? result.stdout : "";
+            if (stdout) {
+              const blk = JSON.parse(stdout);
+              const vols: DiskVolume[] = [];
+              if (Array.isArray(blk?.blockdevices)) {
+                for (const dev of blk.blockdevices) {
+                  const mounts = flattenMounts(dev);
+                  for (const m of mounts) {
+                    if (!m.mountpoint || m.mountpoint === "[SWAP]") continue;
+                    vols.push({
+                      driveLetter: m.mountpoint,
+                      volumeName: m.label || dev.model || dev.name || m.mountpoint,
+                      fileSystem: m.fstype || "",
+                      totalSpace: m.size ? parseInt(m.size, 10) || 0 : 0,
+                      freeSpace: 0,
+                    });
+                  }
                 }
               }
-            }
-            if (vols.length > 0) {
-              setDrives(vols);
-              if (!currentPath()) {
-                // Prefer /home or first non-root mount
-                const home = vols.find((v) => v.driveLetter.startsWith("/home"));
-                loadDir(home ? home.driveLetter : vols[0].driveLetter);
+              if (vols.length > 0) {
+                setDrives(vols);
+                if (!currentPath()) {
+                  const home = vols.find((v) => v.driveLetter.startsWith("/home"));
+                  loadDir(home ? home.driveLetter : vols[0].driveLetter);
+                }
               }
             }
           }
