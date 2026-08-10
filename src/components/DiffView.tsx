@@ -59,7 +59,7 @@ export function DiffView() {
   });
 
   return (
-    <div style={{ padding: "16px 24px", background: surfaceBg() }}>
+    <div style={{ padding: "16px 24px" }}>
       <div style={{ "margin-bottom": "14px", display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "10px" }}>
         <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
           <Show when={ctx.selectedDiffFile()}>
@@ -75,7 +75,7 @@ export function DiffView() {
 
         {/* Quick Target Switcher Toolbar for Commit Diffs */}
         <Show when={commitHash()}>
-          <div style={{ display: "inline-flex", background: "var(--control-bg, rgba(255, 255, 255, 0.08))", border: "var(--control-border, 1px solid rgba(255, 255, 255, 0.12))", "border-radius": "8px", padding: "2px", gap: "2px", "backdrop-filter": "blur(8px)" }}>
+          <div style={{ display: "inline-flex", background: "var(--control-bg, rgba(255, 255, 255, 0.08))", border: "var(--control-border, 1px solid rgba(255, 255, 255, 0.12))", "border-radius": "8px", padding: "2px", gap: "2px" }}>
             <button
               type="button"
               style={{

@@ -1,6 +1,6 @@
 import { createSignal, createMemo, Index, For, Show, onMount } from "solid-js";
 import { useGit } from "../context";
-import { formatTimestamp, surfaceBg } from "../utils";
+import { formatTimestamp } from "../utils";
 import type { GitGraphEntry } from "../types";
 import { EmptyState, Card, Button, CloseIcon, CommitContextMenu } from "./shared";
 import { S } from "../styles";
@@ -213,12 +213,12 @@ export function GraphView() {
   };
 
   return (
-    <div style={{ display: "flex", "flex-direction": "column", height: "100%", width: "100%", overflow: "hidden", padding: "16px 20px", background: surfaceBg(0.04), "box-sizing": "border-box" }}>
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", width: "100%", overflow: "hidden", padding: "16px 20px", "box-sizing": "border-box" }}>
       <Show when={data().rows.length === 0}>
         <EmptyState message="Loading graph..." />
       </Show>
       <Show when={data().rows.length > 0}>
-        <div onScroll={handleScroll} style={{ flex: 1, width: "100%", overflow: "auto", background: surfaceBg(0.04) }}>
+        <div onScroll={handleScroll} style={{ flex: 1, width: "100%", overflow: "auto" }}>
           <div class="flurer-git-tree" style={{ width: "100%", "min-width": `calc(${laneW()}px + 220px)`, position: "relative", height: `${svgH()}px` }}>
             {/* Legend: lane → branch name */}
             <div class="flurer-git-legend" style={{ position: "absolute", left: 0, top: 0, width: "100%", height: `${LEGEND_H}px`, display: "flex", "align-items": "center", gap: "8px", padding: `0 14px 0 ${laneW() + 10}px`, "box-sizing": "border-box", overflow: "hidden", "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))" }}>

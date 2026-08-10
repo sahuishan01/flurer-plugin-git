@@ -1,6 +1,6 @@
 import { createSignal, createMemo, For, Show, onMount } from "solid-js";
 import { useGit } from "../context";
-import { formatTimestamp, surfaceBg } from "../utils";
+import { formatTimestamp } from "../utils";
 import { Card, Button, EmptyState, ConfirmDialog } from "./shared";
 import { S } from "../styles";
 
@@ -27,7 +27,7 @@ export function StashView() {
   }
 
   return (
-    <div style={{ padding: "16px 24px", background: surfaceBg() }}>
+    <div style={{ padding: "16px 24px" }}>
       <Card>
         <div style={S.cardHeader}>
           <span>Stashes ({ctx.stashes().length})</span>

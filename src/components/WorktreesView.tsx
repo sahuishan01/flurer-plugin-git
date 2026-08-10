@@ -1,6 +1,6 @@
 import { createSignal, For, Show, onMount } from "solid-js";
 import { useGit } from "../context";
-import { basename, surfaceBg } from "../utils";
+import { basename } from "../utils";
 import { Card, Button, EmptyState, ConfirmDialog } from "./shared";
 import { S } from "../styles";
 
@@ -31,7 +31,7 @@ export function WorktreesView() {
   }
 
   return (
-    <div style={{ padding: "16px 24px", background: surfaceBg() }}>
+    <div style={{ padding: "16px 24px" }}>
       <Card>
         <div style={S.cardHeader}>
           <span>Worktrees ({ctx.worktrees().length})</span>

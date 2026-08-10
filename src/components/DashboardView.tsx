@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { getRecentRepos, removeRecentRepo, formatTimestamp, surfaceBg } from "../utils";
+import { getRecentRepos, removeRecentRepo, formatTimestamp } from "../utils";
 import { GitIcon, FolderIcon, TrashIcon, Button } from "./shared";
 import { DirectoryPickerModal } from "./DirectoryPickerModal";
 import { S } from "../styles";
@@ -32,7 +32,7 @@ export function DashboardView(props: DashboardViewProps) {
   }
 
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", background: surfaceBg() }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden" }}>
       <div style={{ ...S.section, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0 }}>
         <div style={S.toolbar}>
           <GitIcon size={22} />

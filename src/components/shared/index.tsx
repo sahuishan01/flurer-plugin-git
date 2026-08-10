@@ -1,6 +1,5 @@
 import { Show, For, createSignal, createMemo, type JSX } from "solid-js";
 import { useGit } from "../../context";
-import { surfaceBg } from "../../utils";
 import { S } from "../../styles";
 
 export function GitIcon(props: { size?: number }) {
@@ -273,7 +272,6 @@ export function CommitContextMenu(props: {
           "border-radius": "8px",
           padding: "6px",
           "box-shadow": "var(--glass-shadow, 0 8px 24px rgba(0,0,0,0.5))",
-          "backdrop-filter": "var(--glass-blur, blur(20px))",
           display: "flex",
           "flex-direction": "column",
           gap: "2px",
@@ -378,7 +376,6 @@ export function BranchMultiSelect() {
           "text-shadow": "var(--text-shadow)",
           cursor: "pointer",
           transition: "all 0.15s ease",
-          "backdrop-filter": "blur(8px)",
         }}
         onClick={() => setOpen(!open())}
         title="Filter graph & history by specific branches"
@@ -408,7 +405,6 @@ export function BranchMultiSelect() {
             "border-radius": "8px",
             padding: "8px",
             "box-shadow": "var(--glass-shadow, 0 12px 32px rgba(0,0,0,0.5))",
-            "backdrop-filter": "var(--glass-blur, blur(24px))",
             "min-width": "220px",
             "max-width": "300px",
             "max-height": "320px",
@@ -535,7 +531,6 @@ export function DiffCompareModal() {
             width: "100%",
             "max-width": "460px",
             "box-shadow": "var(--glass-shadow, 0 16px 40px rgba(0,0,0,0.6))",
-            "backdrop-filter": "var(--glass-blur, blur(24px))",
             display: "flex",
             "flex-direction": "column",
             gap: "16px",
