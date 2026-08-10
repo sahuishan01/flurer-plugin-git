@@ -63,7 +63,7 @@ function blendChannel(base: number, tint: number, opacity: number): number {
 /** Get a solid surface background blended against the detected bg color.
  *  For dark backgrounds, tints lighter. For light backgrounds, tints darker. */
 export function surfaceBg(opacity?: number): string {
-  const o = opacity ?? _surfaceOpacity;
+  const o = opacity ?? _surfaceOpacity();
   isLightBg(); // ensure _bgColor is cached
   const hex = _bgColor || (isLightBg() ? "#f5f5f5" : "#1a1a2e");
   const r = parseInt(hex.slice(1, 3), 16);
@@ -94,7 +94,7 @@ function parseColor(color: string): [number, number, number] | null {
 
 /** Blend a color toward the background at the given opacity, creating a tinted button surface. */
 export function buttonBg(accentColor: string, opacity?: number): string {
-  const o = opacity ?? _buttonTintOpacity;
+  const o = opacity ?? _buttonTintOpacity();
   isLightBg();
   const bgHex = _bgColor || (isLightBg() ? "#f5f5f5" : "#1a1a2e");
   const bg = parseColor(bgHex) || (isLightBg() ? [245, 245, 245] : [26, 26, 46]);
