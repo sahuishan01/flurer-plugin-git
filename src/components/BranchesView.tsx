@@ -1,5 +1,6 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { useGit } from "../context";
+import { surfaceBg } from "../utils";
 import { Card, Button, EmptyState, ConfirmDialog } from "./shared";
 import { S } from "../styles";
 
@@ -37,7 +38,7 @@ export function BranchesView() {
   }
 
   return (
-    <div style={{ padding: "16px 24px" }}>
+    <div style={{ padding: "16px 24px", background: surfaceBg() }}>
       <Show when={currentBranch()}>
         <Card>
           <div style={S.cardHeader}>Current Branch</div>

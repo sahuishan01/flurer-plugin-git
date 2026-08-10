@@ -59,7 +59,7 @@ export function DiffView() {
   });
 
   return (
-    <div style={{ padding: "16px 24px" }}>
+    <div style={{ padding: "16px 24px", background: surfaceBg() }}>
       <div style={{ "margin-bottom": "14px", display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "10px" }}>
         <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
           <Show when={ctx.selectedDiffFile()}>

@@ -1,5 +1,4 @@
 import { createSignal, For, Show, onMount } from "solid-js";
-import { surfaceBg } from "../utils";
 import { FolderIcon, CloseIcon, Button } from "./shared";
 
 interface DiskVolume {

@@ -1,6 +1,6 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { useGit } from "../context";
-import { statusColor } from "../utils";
+import { statusColor, surfaceBg } from "../utils";
 import { Badge, Button, Card, EmptyState } from "./shared";
 import { S } from "../styles";
 
@@ -24,7 +24,7 @@ export function ChangesView() {
   }
 
   return (
-    <div style={{ padding: "16px 24px" }}>
+    <div style={{ padding: "16px 24px", background: surfaceBg() }}>
       <Show when={ctx.loading() && !ctx.status()}>
         <EmptyState message="Loading repository status..." />
       </Show>

@@ -1,6 +1,6 @@
 import { Show, Switch, Match, createMemo } from "solid-js";
 import { useGit } from "../context";
-import { basename } from "../utils";
+import { basename, surfaceBg } from "../utils";
 import { GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon, BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -50,7 +50,7 @@ export function RepoView(props: RepoViewProps) {
   );
 
   return (
-    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box" }}>
+    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", background: surfaceBg() }}>
       <div style={{ ...S.section, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0 }}>
         <div style={S.toolbar}>
           <Button onClick={props.onClose} size="sm" title="Close tab">

@@ -32,7 +32,7 @@ export function DashboardView(props: DashboardViewProps) {
   }
 
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden" }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", background: surfaceBg() }}>
       <div style={{ ...S.section, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0 }}>
         <div style={S.toolbar}>
           <GitIcon size={22} />

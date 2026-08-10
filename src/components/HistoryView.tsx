@@ -1,6 +1,6 @@
 import { createSignal, createMemo, For, Show, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
-import { formatTimestamp } from "../utils";
+import { formatTimestamp, surfaceBg } from "../utils";
 import { Card, EmptyState, Button, CommitContextMenu, BranchMultiSelect } from "./shared";
 import { S } from "../styles";
 
@@ -62,6 +62,7 @@ export function HistoryView() {
         "flex-direction": "column",
         "align-items": "stretch",
         overflow: "hidden",
+        background: surfaceBg(),
       }}
     >
       <div style={{ display: "flex", gap: "10px", "align-items": "center", "margin-bottom": "12px", width: "100%", "box-sizing": "border-box" }}>
