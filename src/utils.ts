@@ -37,16 +37,29 @@ export function getButtonTintOpacity(): number {
 export function isLightBg(): boolean {
   if (_isLight !== null) return _isLight;
   try {
-    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg-color").trim();
-    if (bg) {
+    const root = document.documentElement;
+    const cs = getComputedStyle(root);
+    // Try --bg-color first (hex)
+    const bg = cs.getPropertyValue("--bg-color").trim();
+    if (bg && bg !== "transparent") {
       const match = bg.match(/^#([0-9a-f]{6})$/i);
       if (match) {
         _bgColor = bg;
         const r = parseInt(match[1].slice(0, 2), 16);
         const g = parseInt(match[1].slice(2, 4), 16);
         const b = parseInt(match[1].slice(4, 6), 16);
-        // Perceived luminance (sRGB coefficients)
         _isLight = 0.299 * r + 0.587 * g + 0.114 * b > 128;
+        return _isLight;
+      }
+    }
+    // Fallback: read --glass-tint-rgb or --panel-rgb (e.g. "32, 32, 32")
+    const tintRgb = cs.getPropertyValue("--glass-tint-rgb").trim()
+      || cs.getPropertyValue("--panel-rgb").trim();
+    if (tintRgb) {
+      const parts = tintRgb.split(",").map((s) => parseInt(s.trim(), 10));
+      if (parts.length === 3 && parts.every((n) => !isNaN(n))) {
+        _bgColor = `#${parts.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+        _isLight = 0.299 * parts[0] + 0.587 * parts[1] + 0.114 * parts[2] > 128;
         return _isLight;
       }
     }
