@@ -1,6 +1,6 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount } from "solid-js";
 import { GitProvider } from "./context";
-import { getRecentRepos, basename, setSurfaceOpacity, surfaceBg, getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab } from "./utils";
+import { getRecentRepos, basename, setSurfaceOpacity, setButtonTintOpacity, surfaceBg, getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab } from "./utils";
 import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
 import { RepoView } from "./components/RepoView";
@@ -62,6 +62,8 @@ function GitPanel(props: any) {
   // Apply saved plugin settings on mount
   const opacity = props.pluginSettings?.surfaceOpacity;
   if (typeof opacity === "number") setSurfaceOpacity(opacity);
+  const btnOpacity = props.pluginSettings?.buttonTintOpacity;
+  if (typeof btnOpacity === "number") setButtonTintOpacity(btnOpacity);
 
   const showDashboard = () => tabs().length === 0;
 

@@ -9,6 +9,9 @@ let _bgColor: string | null = null;
 const [_surfaceOpacity, _setSurfaceOpacity] = createRoot(() =>
   createSignal(0.04)
 );
+const [_buttonTintOpacity, _setButtonTintOpacity] = createRoot(() =>
+  createSignal(0.12)
+);
 
 /** Override the surface tint opacity (0–1). Passed via plugin settings. */
 export function setSurfaceOpacity(opacity: number) {
@@ -18,6 +21,16 @@ export function setSurfaceOpacity(opacity: number) {
 /** Get current surface tint opacity. */
 export function getSurfaceOpacity(): number {
   return _surfaceOpacity();
+}
+
+/** Override the button tint opacity (0–1). Passed via plugin settings. */
+export function setButtonTintOpacity(opacity: number) {
+  _setButtonTintOpacity(Math.max(0, Math.min(1, opacity)));
+}
+
+/** Get current button tint opacity. */
+export function getButtonTintOpacity(): number {
+  return _buttonTintOpacity();
 }
 
 /** Detect whether Flurer's background is light or dark, and cache its hex. */
@@ -63,6 +76,30 @@ export function surfaceBg(opacity?: number): string {
     // Tint toward white (lighter surface)
     return `rgb(${blendChannel(r, 255, o)},${blendChannel(g, 255, o)},${blendChannel(b, 255, o)})`;
   }
+}
+
+/** Parse a CSS color string (#hex or rgb()) into [r, g, b]. */
+function parseColor(color: string): [number, number, number] | null {
+  const hexMatch = color.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const h = hexMatch[1];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  const rgbMatch = color.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (rgbMatch) {
+    return [parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3])];
+  }
+  return null;
+}
+
+/** Blend a color toward the background at the given opacity, creating a tinted button surface. */
+export function buttonBg(accentColor: string, opacity?: number): string {
+  const o = opacity ?? _buttonTintOpacity;
+  isLightBg();
+  const bgHex = _bgColor || (isLightBg() ? "#f5f5f5" : "#1a1a2e");
+  const bg = parseColor(bgHex) || (isLightBg() ? [245, 245, 245] : [26, 26, 46]);
+  const fg = parseColor(accentColor) || [0, 120, 212];
+  return `rgb(${blendChannel(bg[0], fg[0], o)},${blendChannel(bg[1], fg[1], o)},${blendChannel(bg[2], fg[2], o)})`;
 }
 
 export function getRecentRepos(): RecentRepo[] {
