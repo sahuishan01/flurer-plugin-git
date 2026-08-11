@@ -5,7 +5,6 @@ import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
 import { RepoView } from "./components/RepoView";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { DirectoryPickerModal } from "./components/DirectoryPickerModal";
 
 interface OpenTab {
   id: string;
@@ -18,7 +17,6 @@ let tabCounter = 0;
 function GitPanel(props: any) {
   const [tabs, setTabs] = createSignal<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = createSignal<string | null>(null);
-  const [showPicker, setShowPicker] = createSignal(false);
   const [showDashManual, setShowDashManual] = createSignal(false);
 
   // Restore open tabs from localStorage on mount
@@ -196,13 +194,6 @@ function GitPanel(props: any) {
           </Show>
         )}
       </For>
-
-      {/* Internal Folder Browser Modal */}
-      <DirectoryPickerModal
-        open={showPicker()}
-        onSelect={(path) => openRepo(path)}
-        onClose={() => setShowPicker(false)}
-      />
     </div>
   );
 }
