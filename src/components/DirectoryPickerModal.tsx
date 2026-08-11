@@ -1,4 +1,4 @@
-import { createSignal, For, Show, onMount } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import { FolderIcon, CloseIcon, Button } from "./shared";
 
 interface DiskVolume {
@@ -20,6 +20,27 @@ interface QuickAccessEntry {
   path: string;
 }
 
+interface PickerEntry {
+  name: string;
+  isDir?: boolean;
+  is_dir?: boolean;
+  path: string;
+}
+
+interface DirListing {
+  entries: PickerEntry[];
+  unreadable: number;
+}
+
+interface PickerSettings {
+  recentPaths?: string[];
+  favouritePaths?: string[];
+}
+
+function driveRoot(letter: string): string {
+  return /^[a-zA-Z]:\\?$/.test(letter) ? `${letter.slice(0, 2)}\\` : letter;
+}
+
 export function DirectoryPickerModal(props: {
   open: boolean;
   initialPath?: string;
@@ -30,6 +51,8 @@ export function DirectoryPickerModal(props: {
   const [items, setItems] = createSignal<{ name: string; is_dir: boolean; path: string }[]>([]);
   const [drives, setDrives] = createSignal<DiskVolume[]>([]);
   const [quickAccess, setQuickAccess] = createSignal<QuickAccessEntry[]>([]);
+  const [recentPaths, setRecentPaths] = createSignal<string[]>([]);
+  const [favouritePaths, setFavouritePaths] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(false);
 
   async function loadDrivesAndQuickAccess() {
@@ -43,9 +66,9 @@ export function DirectoryPickerModal(props: {
         topo.forEach((d) => {
           if (d.volumes) vols.push(...d.volumes);
         });
-        setDrives(vols);
+        setDrives(vols.map((volume) => ({ ...volume, driveLetter: driveRoot(volume.driveLetter) })));
         if (!currentPath() && vols.length > 0) {
-          loadDir(vols[0].driveLetter || "C:\\");
+          loadDir(driveRoot(vols[0].driveLetter || "C:\\"));
         }
       }
     } catch {}
@@ -81,7 +104,7 @@ export function DirectoryPickerModal(props: {
             } catch {}
           }
           if (found.length > 0) {
-            setDrives(found);
+        setDrives(found);
             if (!currentPath()) {
               const home = found.find((v) => v.driveLetter.startsWith("/home"));
               loadDir(home ? home.driveLetter : found[0].driveLetter);
@@ -102,6 +125,12 @@ export function DirectoryPickerModal(props: {
       }
     } catch {}
 
+    try {
+      const settings = await window.TauriCore.invoke<PickerSettings>("get_settings");
+      setRecentPaths(settings.recentPaths ?? []);
+      setFavouritePaths(settings.favouritePaths ?? []);
+    } catch {}
+
     if (!currentPath()) {
       loadDir("/");
     }
@@ -113,13 +142,14 @@ export function DirectoryPickerModal(props: {
     setCurrentPath(dirPath);
     try {
       if (window.TauriCore?.invoke) {
-        const res = await window.TauriCore.invoke<any[]>("list_directory", {
+        const res = await window.TauriCore.invoke<DirListing | PickerEntry[]>("list_directory", {
           path: dirPath,
           sortKey: "name",
           sortDirection: "ascending",
         });
-        if (Array.isArray(res)) {
-          const dirs = res
+        const listed = Array.isArray(res) ? res : res.entries;
+        if (Array.isArray(listed)) {
+          const dirs = listed
             .filter((item) => item.is_dir || item.isDir)
             .map((item) => ({
               name: item.name,
@@ -137,7 +167,7 @@ export function DirectoryPickerModal(props: {
     }
   }
 
-  onMount(() => {
+  createEffect(() => {
     if (props.open) {
       loadDrivesAndQuickAccess();
       if (props.initialPath) loadDir(props.initialPath);
@@ -268,6 +298,36 @@ export function DirectoryPickerModal(props: {
                         <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
                           {qa.label}
                         </span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              <Show when={recentPaths().length > 0}>
+                <div>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-secondary, #888)", "text-transform": "uppercase", "margin-bottom": "6px", padding: "0 6px" }}>
+                    Recents
+                  </div>
+                  <For each={recentPaths()}>
+                    {(path) => (
+                      <div style={{ padding: "6px 8px", cursor: "pointer", "font-size": "12px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={path} onClick={() => loadDir(path)}>
+                        🕘 {path}
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              <Show when={favouritePaths().length > 0}>
+                <div>
+                  <div style={{ "font-size": "11px", "font-weight": 600, color: "var(--text-secondary, #888)", "text-transform": "uppercase", "margin-bottom": "6px", padding: "0 6px" }}>
+                    Favourites
+                  </div>
+                  <For each={favouritePaths()}>
+                    {(path) => (
+                      <div style={{ padding: "6px 8px", cursor: "pointer", "font-size": "12px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={path} onClick={() => loadDir(path)}>
+                        ★ {path}
                       </div>
                     )}
                   </For>
