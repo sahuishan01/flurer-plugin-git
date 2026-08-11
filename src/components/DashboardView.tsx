@@ -1,25 +1,18 @@
 import { createSignal, For, Show } from "solid-js";
 import { getRecentRepos, removeRecentRepo, formatTimestamp } from "../utils";
 import { GitIcon, FolderIcon, TrashIcon, Button } from "./shared";
+import { DirectoryPickerModal } from "./DirectoryPickerModal";
 import { S } from "../styles";
 
 type DashboardViewProps = {
   onOpenRepo: (path: string) => void;
 };
 
-async function pickFolder(): Promise<string | null> {
-  if (window.TauriCore?.invoke) {
-    try {
-      return await window.TauriCore.invoke<string | null>("pick_folder");
-    } catch {}
-  }
-  return null;
-}
-
 export function DashboardView(props: DashboardViewProps) {
   const [repos, setRepos] = createSignal(getRecentRepos());
   const [openPath, setOpenPath] = createSignal("");
   const [showInput, setShowInput] = createSignal(false);
+  const [showPicker, setShowPicker] = createSignal(false);
 
   function handleOpen(path: string) {
     props.onOpenRepo(path);
@@ -90,7 +83,7 @@ export function DashboardView(props: DashboardViewProps) {
           <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
             <Button
               variant="primary"
-              onClick={async () => { const p = await pickFolder(); if (p) props.onOpenRepo(p); }}
+              onClick={() => setShowPicker(true)}
               style={{ flex: 1, padding: "10px", display: "flex", "align-items": "center", "justify-content": "center", gap: "8px" }}
             >
               <FolderIcon size={16} />
@@ -130,6 +123,11 @@ export function DashboardView(props: DashboardViewProps) {
         </Show>
       </div>
 
+      <DirectoryPickerModal
+        open={showPicker()}
+        onSelect={(path) => props.onOpenRepo(path)}
+        onClose={() => setShowPicker(false)}
+      />
     </div>
   );
 }
