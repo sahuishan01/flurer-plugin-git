@@ -2,7 +2,7 @@
   "id": "git",
   "name": "Git Operations",
   "description": "View git status, stage/unstage files, commit, push and pull from within Flurer.",
-  "version": "0.12.24",
+  "version": "0.12.25",
   "author": "Algosculptor",
   "entry": "index.js",
   "repo": "sahuishan01/flurer-plugin-git"

@@ -100,13 +100,16 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
 
     const p1 = e.parents[0];
     const existingP1 = lanes.indexOf(p1);
+    let p1ViaLane: number;
     if (existingP1 !== -1 && existingP1 !== lane) {
       lanes[lane] = null;
       compactLanes();
+      p1ViaLane = existingP1;
     } else {
       lanes[lane] = p1;
+      p1ViaLane = lane;
     }
-    edges.push({ fromRow: i, fromLane: lane, viaLane: lane, toHash: e.parents[0], toRow: null, toLane: null, isMergeBranch: false, parentIndex: 0 });
+    edges.push({ fromRow: i, fromLane: lane, viaLane: p1ViaLane, toHash: e.parents[0], toRow: null, toLane: null, isMergeBranch: false, parentIndex: 0 });
 
     for (let k = 1; k < e.parents.length; k++) {
       const via = allocLane(e.parents[k]);
@@ -207,28 +210,42 @@ export function GraphView() {
     setMenuPos({ x: e.clientX, y: e.clientY, hash });
   }
 
-  const edgePoints = (e: GraphEdge): string => {
+  const edgePath = (e: GraphEdge): string => {
     const x1 = laneX(e.fromLane);
     const y1 = rowY(e.fromRow);
     const vx = laneX(e.viaLane);
     const y2 = e.toRow !== null ? rowY(e.toRow) : bottomY();
     const x2 = e.toLane !== null ? laneX(e.toLane) : vx;
 
-    const pts: string[] = [`${x1},${y1}`];
-    if (vx !== x1) {
-      const forkY = y1 + ROW_H / 2;
-      pts.push(`${x1},${forkY}`, `${vx},${forkY}`);
+    if (e.toRow !== null && e.toRow === e.fromRow + 1) {
+      if (x1 === x2) {
+        return `M ${x1} ${y1} L ${x2} ${y2}`;
+      }
+      if (vx === x1 || vx === x2) {
+        return `M ${x1} ${y1} C ${x1} ${y1 + ROW_H / 2}, ${x2} ${y2 - ROW_H / 2}, ${x2} ${y2}`;
+      }
+      return `M ${x1} ${y1} C ${x1} ${y1 + ROW_H / 2}, ${vx} ${y1 + ROW_H / 2}, ${vx} ${y1 + ROW_H / 2} C ${vx} ${y1 + ROW_H / 2}, ${x2} ${y2 - ROW_H / 2}, ${x2} ${y2}`;
     }
-    if (x2 !== vx) {
-      const joinY = y2 - ROW_H / 2;
-      pts.push(`${vx},${joinY}`, `${x2},${joinY}`);
-    }
-    pts.push(`${x2},${y2}`);
 
-    if (e.toRow === null) {
-      pts.push(`${x2 + 5},${y2}`);
+    let d = `M ${x1} ${y1}`;
+
+    if (vx !== x1) {
+      d += ` C ${x1} ${y1 + ROW_H / 2}, ${vx} ${y1 + ROW_H / 2}, ${vx} ${y1 + ROW_H}`;
+    } else {
+      d += ` L ${vx} ${y1 + ROW_H}`;
     }
-    return pts.join(" ");
+
+    if (y2 - ROW_H > y1 + ROW_H) {
+      d += ` L ${vx} ${y2 - ROW_H}`;
+    }
+
+    if (x2 !== vx && e.toRow !== null) {
+      d += ` C ${vx} ${y2 - ROW_H / 2}, ${x2} ${y2 - ROW_H / 2}, ${x2} ${y2}`;
+    } else {
+      d += ` L ${x2} ${y2}`;
+    }
+
+    return d;
   };
 
   return (
@@ -270,7 +287,7 @@ export function GraphView() {
                   const strokeCol = () => laneColor(edge().viaLane);
                   const markerId = () => `url(#merge-arrow-${edge().viaLane % COLORS.length})`;
                   return (
-                    <polyline points={edgePoints(edge())} fill="none" stroke={strokeCol()} stroke-width={isMerge() ? "2.5" : "2"} stroke-dasharray={isMerge() ? "5,3" : "none"} opacity={isMerge() ? "0.95" : "0.55"} stroke-linejoin="round" stroke-linecap="round" marker-start={isMerge() ? markerId() : undefined} />
+                    <path d={edgePath(edge())} fill="none" stroke={strokeCol()} stroke-width={isMerge() ? "2.5" : "2"} stroke-dasharray={isMerge() ? "5,3" : "none"} opacity={isMerge() ? "0.95" : "0.65"} stroke-linejoin="round" stroke-linecap="round" marker-start={isMerge() ? markerId() : undefined} />
                   );
                 }}
               </Index>
