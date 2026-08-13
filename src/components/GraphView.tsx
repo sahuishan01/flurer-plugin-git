@@ -235,13 +235,14 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
     nodeMap.set(r.hash, node);
   });
 
+  // Reversed Link Flow: Parent ➔ Child (Chronological Ancestry Flow)
   gData.edges.forEach((edge) => {
     const fromNode = nodeMap.get(gData.rows[edge.fromRow]?.hash);
     if (fromNode && edge.toHash && nodeMap.has(edge.toHash)) {
       links.push({
-        source: fromNode.id,
-        target: edge.toHash,
-        color: edge.isMergeBranch ? "rgba(96, 205, 255, 0.65)" : "rgba(245, 158, 11, 0.45)",
+        source: edge.toHash, // Parent (Older)
+        target: fromNode.id, // Child (Newer)
+        color: edge.isMergeBranch ? "rgba(96, 205, 255, 0.75)" : "rgba(245, 158, 11, 0.55)",
         isMerge: edge.isMergeBranch,
       });
     }
@@ -317,6 +318,7 @@ export function GraphView() {
   const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
   const [hoveredNode, setHoveredNode] = createSignal<ForceNode | null>(null);
   const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
+  let mousePos = { x: 0, y: 0 };
 
   let graphContainerRef!: HTMLDivElement;
   let forceInstance: any = null;
@@ -335,7 +337,7 @@ export function GraphView() {
       forceInstance.cameraPosition(
         { x: nx * distRatio, y: ny * distRatio + 10, z: nz * distRatio },
         { x: nx, y: ny, z: nz },
-        1000 // 1s smooth damped camera fly-to
+        1000
       );
     } else if (mode === "2d") {
       forceInstance.centerAt(node.x, node.y, 750);
@@ -344,6 +346,38 @@ export function GraphView() {
 
     setSelectedHash(node.hash);
     ctx.showCommitDetail(node.hash);
+  }
+
+  function focusOnEmptySpace(clientX: number, clientY: number) {
+    if (!forceInstance) return;
+    const mode = displayMode();
+    const container = graphContainerRef;
+    if (!container) return;
+
+    if (mode === "2d" && typeof forceInstance.screen2GraphCoords === "function") {
+      const rect = container.getBoundingClientRect();
+      const coords = forceInstance.screen2GraphCoords(clientX - rect.left, clientY - rect.top);
+      if (coords) {
+        forceInstance.centerAt(coords.x, coords.y, 700);
+      }
+    } else if (mode === "3d" && forceInstance.camera) {
+      const rect = container.getBoundingClientRect();
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, forceInstance.camera());
+      const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+      const targetPt = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(plane, targetPt)) {
+        forceInstance.cameraPosition(
+          { x: targetPt.x, y: targetPt.y, z: forceInstance.camera().position.z },
+          { x: targetPt.x, y: targetPt.y, z: 0 },
+          800
+        );
+      }
+    }
   }
 
   onMount(() => {
@@ -355,21 +389,32 @@ export function GraphView() {
       document.head.appendChild(st);
     }
 
+    const trackMouse = (e: MouseEvent) => {
+      mousePos = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("mousemove", trackMouse);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "f" || e.key === "F") {
         const tag = (document.activeElement?.tagName || "").toUpperCase();
         if (tag === "INPUT" || tag === "TEXTAREA") return;
 
         const node = hoveredNode();
-        if (node && forceInstance) {
+        if (node) {
           e.preventDefault();
           focusOnNode(node);
+        } else if (forceInstance) {
+          e.preventDefault();
+          focusOnEmptySpace(mousePos.x, mousePos.y);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+    onCleanup(() => {
+      window.removeEventListener("mousemove", trackMouse);
+      window.removeEventListener("keydown", handleKeyDown);
+    });
   });
 
   onCleanup(() => {
@@ -381,7 +426,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph dynamically with distance-scaled pan speed
+  // Render 3D WebGL / 2D Canvas force graph dynamically with unlimited zoom & empty space focus
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -447,9 +492,12 @@ export function GraphView() {
         .onNodeClick((node: any) => {
           if (!node) return;
           focusOnNode(node);
+        })
+        .onBackgroundClick((e: MouseEvent) => {
+          focusOnEmptySpace(e.clientX, e.clientY);
         });
 
-      // Configure OrbitControls damping & dynamic distance-based pan speed scaling
+      // Configure OrbitControls for unlimited zoom & smooth damping
       setTimeout(() => {
         const controls = inst.controls();
         if (controls) {
@@ -457,17 +505,19 @@ export function GraphView() {
           controls.dampingFactor = 0.06;
           controls.rotateSpeed = 0.6;
           controls.zoomSpeed = 0.8;
-          controls.panSpeed = 0.25; // Base low pan speed
+          controls.panSpeed = 0.25;
+          controls.minDistance = 0.5;   // Unlimited zoom-in
+          controls.maxDistance = 20000; // Unlimited zoom-out
           controls.screenSpacePanning = true;
         }
       }, 20);
 
-      // Dynamically scale panSpeed based on camera distance to target so close-up panning is steady and precise
+      // Dynamically scale panSpeed based on camera distance so close-up panning is steady and precise
       inst.onEngineTick(() => {
         const controls = inst.controls();
         if (controls && controls.object && controls.target) {
           const dist = controls.object.position.distanceTo(controls.target);
-          controls.panSpeed = Math.min(0.6, Math.max(0.04, 0.22 * (dist / 140)));
+          controls.panSpeed = Math.min(0.6, Math.max(0.03, 0.22 * (dist / 140)));
         }
       });
 
@@ -481,8 +531,8 @@ export function GraphView() {
         .enablePanInteraction(true)
         .enableZoomInteraction(true)
         .zoomSpeed(0.5)
-        .minZoom(0.15)
-        .maxZoom(12);
+        .minZoom(0.005) // Unlimited zoom-out
+        .maxZoom(100);  // Unlimited zoom-in
 
       if (dagMode !== "none") {
         if (dagMode === "radial") {
@@ -553,6 +603,9 @@ export function GraphView() {
         .onNodeClick((node: any) => {
           if (!node) return;
           focusOnNode(node);
+        })
+        .onBackgroundClick((e: MouseEvent) => {
+          focusOnEmptySpace(e.clientX, e.clientY);
         });
 
       forceInstance = inst;
@@ -761,7 +814,7 @@ export function GraphView() {
         <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
           <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.7))", "pointer-events": "none", "font-family": "Space Mono, monospace", background: "rgba(10, 14, 23, 0.8)", padding: "5px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.12)", "box-shadow": "0 4px 12px rgba(0,0,0,0.3)" }}>
-            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Left Click Drag • Focus Node: Hover & Press 'F'" : "Pan: Drag • Zoom: Scroll • Focus Node: Hover & Press 'F'"}
+            {displayMode() === "3d" ? "Pan: Right Click Drag • Focus: Click Node or Empty Space • 'F': Focus Cursor" : "Pan: Drag • Zoom: Unlimited • Focus: Click Node or Empty Space • 'F': Focus Cursor"}
           </div>
         </div>
       </Show>
