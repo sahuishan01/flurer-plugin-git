@@ -1,6 +1,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, Index, For, Show, onMount } from "solid-js";
 import ForceGraph2D from "force-graph";
 import ForceGraph3D from "3d-force-graph";
+import * as THREE from "three";
 import { useGit } from "../context";
 import { formatTimestamp } from "../utils";
 import type { GitGraphEntry } from "../types";
@@ -246,6 +247,61 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
   return { nodes, links };
 }
 
+function createNode3DSprite(node: ForceNode): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const radius = Math.sqrt(Math.max(0, node.val || 4)) * 1.2;
+  const geometry = node.isMerge
+    ? new THREE.OctahedronGeometry(radius * 1.1)
+    : new THREE.SphereGeometry(radius, 16, 16);
+
+  const material = new THREE.MeshLambertMaterial({
+    color: node.color || "#f59e0b",
+    transparent: true,
+    opacity: node.matchesSearch ? 0.95 : 0.25,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  group.add(mesh);
+
+  // Floating 3D Branch / Tag Badge Sprite
+  if (node.refs && node.refs.length > 0) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      canvas.width = 320;
+      canvas.height = 72;
+      const labels = node.refs.map(r => r.replace("HEAD -> ", "").replace("HEAD, ", ""));
+      const text = labels.join(" • ");
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+      ctx.strokeStyle = "#60cdff";
+      ctx.lineWidth = 3;
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(4, 6, canvas.width - 8, canvas.height - 12, 14);
+      } else {
+        ctx.rect(4, 6, canvas.width - 8, canvas.height - 12);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = "bold 24px Space Mono, monospace";
+      ctx.fillStyle = "#60cdff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text.length > 22 ? text.slice(0, 22) + "…" : text, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.position.set(0, radius + 12, 0);
+      sprite.scale.set(32, 7.5, 1);
+      group.add(sprite);
+    }
+  }
+
+  return group;
+}
+
 function lighten(hex: string, alpha: number): string {
   return `${hex}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
 }
@@ -280,7 +336,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph dynamically with DAG structure
+  // Render 3D WebGL / 2D Canvas force graph dynamically with DAG structure & visible branch badges
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -327,6 +383,7 @@ export function GraphView() {
       }
 
       inst
+        .nodeThreeObject((node: any) => createNode3DSprite(node))
         .nodeLabel((node: any) => `
           <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.18); padding: 8px 12px; border-radius: 8px; font-family: monospace; font-size: 11px; color: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
             <div style="color: #f59e0b; font-weight: bold;">${node.shortHash} ${node.isMerge ? '🔀 MERGE' : ''} ${node.refs && node.refs.length ? '<span style="color:#60cdff;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
@@ -371,6 +428,54 @@ export function GraphView() {
       }
 
       inst
+        .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
+          const x = node.x;
+          const y = node.y;
+          const r = Math.sqrt(Math.max(0, node.val || 4)) * 1.8;
+
+          // Node Circle
+          canvasCtx.beginPath();
+          canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
+          canvasCtx.fillStyle = node.color || "#f59e0b";
+          canvasCtx.fill();
+          canvasCtx.lineWidth = 1.5 / globalScale;
+          canvasCtx.strokeStyle = node.isMerge ? "#60cdff" : "rgba(0,0,0,0.6)";
+          canvasCtx.stroke();
+
+          // Render Branch Names & Tag Badges directly at nodes
+          if (node.refs && node.refs.length > 0) {
+            const fontSize = Math.max(10 / globalScale, 3);
+            canvasCtx.font = `700 ${fontSize}px Space Mono, monospace`;
+            let badgeX = x + r + 4 / globalScale;
+
+            node.refs.forEach((ref: string) => {
+              const isTag = ref.startsWith("tag:") || ref.includes("v0.") || ref.startsWith("v");
+              const isHead = ref.includes("HEAD");
+              const label = ref.replace("HEAD -> ", "").replace("HEAD, ", "");
+              const textWidth = canvasCtx.measureText(label).width;
+              const paddingX = 4 / globalScale;
+              const badgeH = fontSize + 4 / globalScale;
+              const badgeW = textWidth + paddingX * 2;
+              const badgeY = y - badgeH / 2;
+
+              // Badge Pill Background
+              canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.9)" : (isHead ? "rgba(245, 158, 11, 0.95)" : "rgba(14, 165, 233, 0.9)");
+              canvasCtx.beginPath();
+              if (typeof canvasCtx.roundRect === "function") {
+                canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 4 / globalScale);
+              } else {
+                canvasCtx.rect(badgeX, badgeY, badgeW, badgeH);
+              }
+              canvasCtx.fill();
+
+              // Badge Text
+              canvasCtx.fillStyle = "#ffffff";
+              canvasCtx.fillText(label, badgeX + paddingX, badgeY + badgeH - 3 / globalScale);
+
+              badgeX += badgeW + 3 / globalScale;
+            });
+          }
+        })
         .nodeLabel((node: any) => `${node.shortHash}${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
         .linkDirectionalArrowLength(5)
         .linkDirectionalArrowRelPos(0.85)
