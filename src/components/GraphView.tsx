@@ -381,7 +381,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph dynamically with DAG structure & smooth controls
+  // Render 3D WebGL / 2D Canvas force graph dynamically with distance-scaled pan speed
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -449,18 +449,27 @@ export function GraphView() {
           focusOnNode(node);
         });
 
-      // Configure OrbitControls damping & smooth panning
+      // Configure OrbitControls damping & dynamic distance-based pan speed scaling
       setTimeout(() => {
         const controls = inst.controls();
         if (controls) {
           controls.enableDamping = true;
-          controls.dampingFactor = 0.08;
-          controls.rotateSpeed = 0.8;
-          controls.zoomSpeed = 1.2;
-          controls.panSpeed = 1.2;
+          controls.dampingFactor = 0.06;
+          controls.rotateSpeed = 0.6;
+          controls.zoomSpeed = 0.8;
+          controls.panSpeed = 0.25; // Base low pan speed
           controls.screenSpacePanning = true;
         }
       }, 20);
+
+      // Dynamically scale panSpeed based on camera distance to target so close-up panning is steady and precise
+      inst.onEngineTick(() => {
+        const controls = inst.controls();
+        if (controls && controls.object && controls.target) {
+          const dist = controls.object.position.distanceTo(controls.target);
+          controls.panSpeed = Math.min(0.6, Math.max(0.04, 0.22 * (dist / 140)));
+        }
+      });
 
       forceInstance = inst;
     } else if (mode === "2d") {
@@ -471,6 +480,7 @@ export function GraphView() {
         .nodeColor((node: any) => node.color)
         .enablePanInteraction(true)
         .enableZoomInteraction(true)
+        .zoomSpeed(0.5)
         .minZoom(0.15)
         .maxZoom(12);
 
@@ -751,7 +761,7 @@ export function GraphView() {
         <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
           <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.7))", "pointer-events": "none", "font-family": "Space Mono, monospace", background: "rgba(10, 14, 23, 0.8)", padding: "5px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.12)", "box-shadow": "0 4px 12px rgba(0,0,0,0.3)" }}>
-            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Left Click Drag • Focus Node: Hover & Press 'F' (with Damping)" : "Pan: Drag • Zoom: Scroll • Focus Node: Hover & Press 'F' (with Damping)"}
+            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Left Click Drag • Focus Node: Hover & Press 'F'" : "Pan: Drag • Zoom: Scroll • Focus Node: Hover & Press 'F'"}
           </div>
         </div>
       </Show>
