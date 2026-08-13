@@ -169,6 +169,9 @@ interface ForceNode {
   val: number;
   matchesSearch: boolean;
   isMerge: boolean;
+  x?: number;
+  y?: number;
+  z?: number;
 }
 
 interface ForceLink {
@@ -312,10 +315,36 @@ export function GraphView() {
   const [dagLayout, setDagLayout] = createSignal<DagLayoutMode>("td");
   const [searchQuery, setSearchQuery] = createSignal("");
   const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
+  const [hoveredNode, setHoveredNode] = createSignal<ForceNode | null>(null);
   const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
 
   let graphContainerRef!: HTMLDivElement;
   let forceInstance: any = null;
+
+  function focusOnNode(node: ForceNode) {
+    if (!node || !forceInstance) return;
+    const mode = displayMode();
+
+    if (mode === "3d") {
+      const distance = 42;
+      const nx = node.x || 0;
+      const ny = node.y || 0;
+      const nz = node.z || 0;
+      const distRatio = 1 + distance / (Math.hypot(nx, ny, nz) || 1);
+
+      forceInstance.cameraPosition(
+        { x: nx * distRatio, y: ny * distRatio + 10, z: nz * distRatio },
+        { x: nx, y: ny, z: nz },
+        1000 // 1s smooth damped camera fly-to
+      );
+    } else if (mode === "2d") {
+      forceInstance.centerAt(node.x, node.y, 750);
+      forceInstance.zoom(3, 750);
+    }
+
+    setSelectedHash(node.hash);
+    ctx.showCommitDetail(node.hash);
+  }
 
   onMount(() => {
     if (ctx.graph().length === 0) ctx.loadGraph();
@@ -325,6 +354,22 @@ export function GraphView() {
       st.textContent = GRAPH_CSS;
       document.head.appendChild(st);
     }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "f" || e.key === "F") {
+        const tag = (document.activeElement?.tagName || "").toUpperCase();
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+        const node = hoveredNode();
+        if (node && forceInstance) {
+          e.preventDefault();
+          focusOnNode(node);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
   });
 
   onCleanup(() => {
@@ -336,7 +381,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph dynamically with DAG structure & visible branch badges
+  // Render 3D WebGL / 2D Canvas force graph dynamically with DAG structure & smooth controls
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -398,18 +443,24 @@ export function GraphView() {
         .linkDirectionalParticleSpeed(0.005)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
+        .onNodeHover((node: any) => setHoveredNode(node || null))
         .onNodeClick((node: any) => {
           if (!node) return;
-          const distance = 45;
-          const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
-          inst.cameraPosition(
-            { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-            { x: node.x, y: node.y, z: node.z },
-            1200
-          );
-          setSelectedHash(node.hash);
-          ctx.showCommitDetail(node.hash);
+          focusOnNode(node);
         });
+
+      // Configure OrbitControls damping & smooth panning
+      setTimeout(() => {
+        const controls = inst.controls();
+        if (controls) {
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.08;
+          controls.rotateSpeed = 0.8;
+          controls.zoomSpeed = 1.2;
+          controls.panSpeed = 1.2;
+          controls.screenSpacePanning = true;
+        }
+      }, 20);
 
       forceInstance = inst;
     } else if (mode === "2d") {
@@ -417,7 +468,11 @@ export function GraphView() {
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
-        .nodeColor((node: any) => node.color);
+        .nodeColor((node: any) => node.color)
+        .enablePanInteraction(true)
+        .enableZoomInteraction(true)
+        .minZoom(0.15)
+        .maxZoom(12);
 
       if (dagMode !== "none") {
         if (dagMode === "radial") {
@@ -484,12 +539,10 @@ export function GraphView() {
         .linkDirectionalParticleSpeed(0.005)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
+        .onNodeHover((node: any) => setHoveredNode(node || null))
         .onNodeClick((node: any) => {
           if (!node) return;
-          inst.centerAt(node.x, node.y, 800);
-          inst.zoom(2.5, 800);
-          setSelectedHash(node.hash);
-          ctx.showCommitDetail(node.hash);
+          focusOnNode(node);
         });
 
       forceInstance = inst;
@@ -697,8 +750,8 @@ export function GraphView() {
       <Show when={displayMode() !== "tree" && ctx.graph().length > 0}>
         <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
-          <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.5))", "pointer-events": "none", "font-family": "Space Mono, monospace" }}>
-            {displayMode() === "3d" ? "Rotate: Drag • Zoom: Scroll • Pan: Right Click • Focus: Left Click Node" : "Pan: Drag • Zoom: Scroll • Focus: Click Node"}
+          <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.7))", "pointer-events": "none", "font-family": "Space Mono, monospace", background: "rgba(10, 14, 23, 0.8)", padding: "5px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.12)", "box-shadow": "0 4px 12px rgba(0,0,0,0.3)" }}>
+            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Left Click Drag • Focus Node: Hover & Press 'F' (with Damping)" : "Pan: Drag • Zoom: Scroll • Focus Node: Hover & Press 'F' (with Damping)"}
           </div>
         </div>
       </Show>
