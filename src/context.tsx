@@ -1,5 +1,6 @@
 import { createContext, useContext, createSignal, createMemo, onMount, type Accessor, type JSX, type ParentProps } from "solid-js";
 import { saveRecentRepo, getSavedBranchSelection, saveBranchSelection, getSavedActiveView, saveActiveView } from "./utils";
+import { loadGraphCache, saveGraphCache } from "./cache";
 import * as git from "./git";
 import type {
   GitView, GitStatus, GitCommit, GitBranch, GitGraphEntry,
@@ -498,6 +499,15 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     const p = repoPath();
     if (!p) return;
     const bList = overrideBranches ?? selectedBranches();
+
+    // Instant load from cache
+    try {
+      const cached = await loadGraphCache(p);
+      if (cached && cached.length > 0 && graph().length === 0) {
+        setGraph(cached);
+      }
+    } catch {}
+
     setGraphLoading(true);
     graphPage = 0;
     try {
@@ -505,6 +515,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
       setGraph(g);
       graphPage = 1;
       setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
+      saveGraphCache(p, g).catch(() => {});
     } catch (err) {
       showToast(`Failed to load graph: ${err}`, "error");
     } finally {
@@ -519,8 +530,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     try {
       const g = await git.gitGraph(p, GRAPH_PAGE_SIZE, graphPage * GRAPH_PAGE_SIZE, selectedBranches());
       if (g.length > 0) {
-        setGraph([...graph(), ...g]);
+        const updated = [...graph(), ...g];
+        setGraph(updated);
         graphPage++;
+        saveGraphCache(p, updated).catch(() => {});
       }
       setGraphHasMore(g.length >= GRAPH_PAGE_SIZE);
     } catch (err) {

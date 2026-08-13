@@ -1,6 +1,6 @@
 {
   "name": "flurer-plugin-git",
-  "version": "0.12.25",
+  "version": "0.12.26",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,5 +12,11 @@
     "vite": "^6",
     "vite-plugin-solid": "^2",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "3d-force-graph": "^1.80.0",
+    "@types/three": "^0.185.4",
+    "force-graph": "^1.51.4",
+    "three": "^0.185.1"
   }
 }

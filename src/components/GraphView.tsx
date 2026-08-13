@@ -1,4 +1,6 @@
-import { createSignal, createMemo, Index, For, Show, onMount } from "solid-js";
+import { createSignal, createMemo, createEffect, onCleanup, Index, For, Show, onMount } from "solid-js";
+import ForceGraph2D from "force-graph";
+import ForceGraph3D from "3d-force-graph";
 import { useGit } from "../context";
 import { formatTimestamp } from "../utils";
 import type { GitGraphEntry } from "../types";
@@ -22,10 +24,16 @@ const GRAPH_CSS = `
 .flurer-git-loadmore:hover{background:var(--control-bg, rgba(255,255,255,0.06));transform:translateY(-1px);}
 .flurer-git-lanechip{transition:filter .15s ease;}
 .flurer-git-lanechip:hover{filter:brightness(1.15);}
+.flurer-git-modebtn{transition:all .15s ease; cursor:pointer; padding:5px 12px; font-size:11px; font-weight:600; border-radius:6px; border:1px solid transparent; user-select:none;}
+.flurer-git-modebtn:hover{filter:brightness(1.15);}
+.flurer-git-modebtn-active{background:var(--accent-default, #f59e0b); color:#000; font-weight:700; border-color:var(--accent-default, #f59e0b);}
+.flurer-git-modebtn-inactive{background:var(--control-bg, rgba(255,255,255,0.06)); color:var(--text-secondary, #a0a0a0); border-color:var(--border-subtle, rgba(255,255,255,0.1));}
 @media (max-width:640px){.flurer-git-meta{display:none!important;}}
 @media (max-width:480px){.flurer-git-refs{display:none!important;}}
 @media (max-width:360px){.flurer-git-hash{display:none!important;}}
 `;
+
+export type GraphDisplayMode = "3d" | "2d" | "tree";
 
 interface GraphRow extends GitGraphEntry {
   lane: number;
@@ -144,14 +152,104 @@ function buildGraph(entries: GitGraphEntry[]): GraphData {
   return { rows, edges, laneCount, laneLabels };
 }
 
+interface ForceNode {
+  id: string;
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  timestamp: number;
+  refs: string[];
+  parents: string[];
+  color: string;
+  val: number;
+  matchesSearch: boolean;
+}
+
+interface ForceLink {
+  source: string;
+  target: string;
+  color: string;
+}
+
+function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
+  const nodes: ForceNode[] = [];
+  const links: ForceLink[] = [];
+  const nodeMap = new Map<string, ForceNode>();
+
+  const authorColors = new Map<string, string>();
+  const getAuthorColor = (author: string) => {
+    if (!authorColors.has(author)) {
+      const idx = authorColors.size % COLORS.length;
+      authorColors.set(author, COLORS[idx]);
+    }
+    return authorColors.get(author)!;
+  };
+
+  const query = searchQuery.trim().toLowerCase();
+
+  entries.forEach((e) => {
+    const isMerge = e.parents.length > 1;
+    const hasRef = e.refs.length > 0;
+    const baseSize = hasRef ? 7 : (isMerge ? 5.5 : 3.5);
+    const authorCol = getAuthorColor(e.author);
+
+    const matchesSearch = query.length === 0 || (
+      e.hash.toLowerCase().includes(query) ||
+      e.message.toLowerCase().includes(query) ||
+      e.author.toLowerCase().includes(query) ||
+      e.refs.some(r => r.toLowerCase().includes(query))
+    );
+
+    const nodeColor = matchesSearch
+      ? authorCol
+      : "rgba(100, 116, 139, 0.2)";
+
+    const node: ForceNode = {
+      id: e.hash,
+      hash: e.hash,
+      shortHash: e.hash.slice(0, 7),
+      message: e.message,
+      author: e.author,
+      timestamp: e.timestamp,
+      refs: e.refs,
+      parents: e.parents,
+      color: nodeColor,
+      val: query && matchesSearch ? baseSize * 1.6 : baseSize,
+      matchesSearch,
+    };
+    nodes.push(node);
+    nodeMap.set(e.hash, node);
+  });
+
+  entries.forEach((e) => {
+    e.parents.forEach((parentHash) => {
+      if (nodeMap.has(parentHash)) {
+        links.push({
+          source: e.hash,
+          target: parentHash,
+          color: query ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.22)",
+        });
+      }
+    });
+  });
+
+  return { nodes, links };
+}
+
 function lighten(hex: string, alpha: number): string {
   return `${hex}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
 }
 
 export function GraphView() {
   const ctx = useGit();
+  const [displayMode, setDisplayMode] = createSignal<GraphDisplayMode>("3d");
+  const [searchQuery, setSearchQuery] = createSignal("");
   const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
   const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
+
+  let graphContainerRef!: HTMLDivElement;
+  let forceInstance: any = null;
 
   onMount(() => {
     if (ctx.graph().length === 0) ctx.loadGraph();
@@ -160,6 +258,97 @@ export function GraphView() {
       st.id = GRAPH_CSS_ID;
       st.textContent = GRAPH_CSS;
       document.head.appendChild(st);
+    }
+  });
+
+  onCleanup(() => {
+    if (forceInstance) {
+      if (typeof forceInstance._destructor === "function") {
+        try { forceInstance._destructor(); } catch {}
+      }
+      forceInstance = null;
+    }
+  });
+
+  // Render 3D WebGL / 2D Canvas force graph dynamically
+  createEffect(() => {
+    const mode = displayMode();
+    const entries = ctx.graph();
+    const query = searchQuery();
+    const container = graphContainerRef;
+
+    if (!container || mode === "tree") {
+      if (forceInstance) {
+        if (typeof forceInstance._destructor === "function") {
+          try { forceInstance._destructor(); } catch {}
+        }
+        container.innerHTML = "";
+        forceInstance = null;
+      }
+      return;
+    }
+
+    // Clean previous instance
+    if (forceInstance) {
+      if (typeof forceInstance._destructor === "function") {
+        try { forceInstance._destructor(); } catch {}
+      }
+      container.innerHTML = "";
+      forceInstance = null;
+    }
+
+    if (entries.length === 0) return;
+
+    const data = buildForceGraphData(entries, query);
+
+    if (mode === "3d") {
+      forceInstance = ForceGraph3D()(container)
+        .graphData(data)
+        .nodeId("id")
+        .nodeVal("val")
+        .nodeColor((node: any) => node.color)
+        .nodeLabel((node: any) => `
+          <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.18); padding: 8px 12px; border-radius: 8px; font-family: monospace; font-size: 11px; color: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+            <div style="color: #f59e0b; font-weight: bold;">${node.shortHash} ${node.refs && node.refs.length ? '<span style="color:#60cdff;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
+            <div style="margin: 4px 0; color: #f8fafc; font-weight: 500;">${node.message}</div>
+            <div style="color: #94a3b8; font-size: 10px;">${node.author} • ${formatTimestamp(node.timestamp)}</div>
+          </div>
+        `)
+        .linkDirectionalParticles(2)
+        .linkDirectionalParticleWidth(1.8)
+        .linkDirectionalParticleSpeed(0.006)
+        .linkColor((link: any) => link.color)
+        .backgroundColor("rgba(0,0,0,0)")
+        .onNodeClick((node: any) => {
+          if (!node) return;
+          const distance = 45;
+          const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
+          forceInstance.cameraPosition(
+            { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+            { x: node.x, y: node.y, z: node.z },
+            1200
+          );
+          setSelectedHash(node.hash);
+          ctx.showCommitDetail(node.hash);
+        });
+    } else if (mode === "2d") {
+      forceInstance = ForceGraph2D()(container)
+        .graphData(data)
+        .nodeId("id")
+        .nodeVal("val")
+        .nodeColor((node: any) => node.color)
+        .nodeLabel((node: any) => `${node.shortHash}: ${node.message} (${node.author})`)
+        .linkDirectionalArrowLength(4)
+        .linkDirectionalArrowRelPos(1)
+        .linkColor((link: any) => link.color)
+        .backgroundColor("rgba(0,0,0,0)")
+        .onNodeClick((node: any) => {
+          if (!node) return;
+          forceInstance.centerAt(node.x, node.y, 800);
+          forceInstance.zoom(2.5, 800);
+          setSelectedHash(node.hash);
+          ctx.showCommitDetail(node.hash);
+        });
     }
   });
 
@@ -250,10 +439,89 @@ export function GraphView() {
 
   return (
     <div style={{ display: "flex", "flex-direction": "column", height: "100%", width: "100%", overflow: "hidden", padding: "16px 20px", "box-sizing": "border-box" }}>
-      <Show when={data().rows.length === 0}>
+      {/* Dynamic Graph Toolbar */}
+      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px", gap: "12px", "flex-wrap": "wrap", "flex-shrink": 0 }}>
+        {/* Mode Selector */}
+        <div style={{ display: "flex", "align-items": "center", gap: "6px", background: "var(--control-bg, rgba(255,255,255,0.04))", padding: "4px", "border-radius": "8px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))" }}>
+          <button
+            class={`flurer-git-modebtn ${displayMode() === "3d" ? "flurer-git-modebtn-active" : "flurer-git-modebtn-inactive"}`}
+            onClick={() => setDisplayMode("3d")}
+          >
+            🌐 3D WebGL
+          </button>
+          <button
+            class={`flurer-git-modebtn ${displayMode() === "2d" ? "flurer-git-modebtn-active" : "flurer-git-modebtn-inactive"}`}
+            onClick={() => setDisplayMode("2d")}
+          >
+            🎨 2D Canvas
+          </button>
+          <button
+            class={`flurer-git-modebtn ${displayMode() === "tree" ? "flurer-git-modebtn-active" : "flurer-git-modebtn-inactive"}`}
+            onClick={() => setDisplayMode("tree")}
+          >
+            📜 Tree View
+          </button>
+        </div>
+
+        {/* Filter Input & Controls */}
+        <div style={{ display: "flex", "align-items": "center", gap: "8px", flex: 1, "max-width": "400px" }}>
+          <input
+            type="text"
+            placeholder="🔍 Search commits, authors, hashes..."
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            style={{
+              width: "100%",
+              padding: "6px 12px",
+              "font-size": "12px",
+              "border-radius": "6px",
+              border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
+              background: "var(--input-bg, rgba(0,0,0,0.2))",
+              color: "var(--text-primary, #fff)",
+              outline: "none",
+            }}
+          />
+          <Show when={displayMode() !== "tree"}>
+            <button
+              onClick={() => {
+                if (forceInstance && typeof forceInstance.zoomToFit === "function") {
+                  forceInstance.zoomToFit(400, 20);
+                }
+              }}
+              title="Recenter / Fit Graph"
+              style={{
+                padding: "6px 10px",
+                "font-size": "11px",
+                "font-weight": 600,
+                "border-radius": "6px",
+                border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
+                background: "var(--control-bg, rgba(255,255,255,0.06))",
+                color: "var(--text-primary, #fff)",
+                cursor: "pointer",
+              }}
+            >
+              🎯 Fit
+            </button>
+          </Show>
+        </div>
+      </div>
+
+      <Show when={ctx.graph().length === 0}>
         <EmptyState message="Loading graph..." />
       </Show>
-      <Show when={data().rows.length > 0}>
+
+      {/* Force-directed Interactive 2D/3D Container */}
+      <Show when={displayMode() !== "tree" && ctx.graph().length > 0}>
+        <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
+          <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
+          <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.5))", "pointer-events": "none", "font-family": "Space Mono, monospace" }}>
+            {displayMode() === "3d" ? "Rotate: Drag • Zoom: Scroll • Pan: Right Click • Focus: Left Click Node" : "Pan: Drag • Zoom: Scroll • Focus: Click Node"}
+          </div>
+        </div>
+      </Show>
+
+      {/* Standard Git Tree View */}
+      <Show when={displayMode() === "tree" && data().rows.length > 0}>
         <div onScroll={handleScroll} style={{ flex: 1, width: "100%", overflow: "auto" }}>
           <div class="flurer-git-tree" style={{ width: "100%", "min-width": `calc(${graphW() + 340}px)`, position: "relative", height: `${svgH()}px` }}>
             {/* Legend: lane → branch name */}
@@ -270,7 +538,7 @@ export function GraphView() {
               </For>
             </div>
 
-            {/* SVG layer: edges + dots + text (v0.12.4 alignment) */}
+            {/* SVG layer: edges + dots + text */}
             <svg width="100%" height={svgH()} style={{ position: "absolute", left: 0, top: 0, display: "block" }}>
               <defs>
                 <Index each={COLORS}>
