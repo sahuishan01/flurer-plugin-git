@@ -193,7 +193,7 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
   gData.rows.forEach((r, i) => {
     const isMerge = r.parents.length > 1;
     const hasRef = r.refs.length > 0;
-    const baseSize = hasRef ? 9 : (isMerge ? 7 : 5.5);
+    const baseSize = hasRef ? 8 : (isMerge ? 6 : 4);
     
     // Vibrant & High-Contrast Branch Lane Colors
     const branchColor = COLORS[r.lane % COLORS.length];
@@ -207,7 +207,7 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
 
     const nodeColor = matchesSearch
       ? (isMerge ? "#38bdf8" : branchColor)
-      : "rgba(148, 163, 184, 0.45)"; // Saturated, clear fallback color for non-matching nodes
+      : "rgba(148, 163, 184, 0.4)";
 
     // Initial column separation by branch lane
     const columnX = (r.lane - (gData.laneCount - 1) / 2) * 70;
@@ -225,7 +225,7 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
       lane: r.lane,
       rowIndex: i,
       color: nodeColor,
-      val: query && matchesSearch ? baseSize * 1.6 : baseSize,
+      val: query && matchesSearch ? baseSize * 1.5 : baseSize,
       matchesSearch,
       isMerge,
       x: columnX,
@@ -240,8 +240,8 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
     const fromNode = nodeMap.get(gData.rows[edge.fromRow]?.hash);
     if (fromNode && edge.toHash && nodeMap.has(edge.toHash)) {
       const linkColor = edge.isMergeBranch
-        ? "rgba(56, 189, 248, 0.95)" // Saturated Glowing Cyan for Merge Arcs
-        : COLORS[edge.viaLane % COLORS.length]; // Saturated branch track color
+        ? "rgba(56, 189, 248, 0.85)"
+        : COLORS[edge.viaLane % COLORS.length];
 
       links.push({
         source: edge.toHash, // Parent
@@ -256,26 +256,36 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
   return { nodes, links, laneCount: gData.laneCount, laneLabels: gData.laneLabels };
 }
 
+// Shared, zero-allocation 3D Geometry and Material cache to prevent memory & GC lag
+const sharedSphereGeo = new THREE.SphereGeometry(1, 12, 12);
+const sharedOctaGeo = new THREE.OctahedronGeometry(1, 0);
+const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+
+function getSharedMaterial(color: string): THREE.MeshStandardMaterial {
+  if (!materialCache.has(color)) {
+    materialCache.set(color, new THREE.MeshStandardMaterial({
+      color: color,
+      emissive: color,
+      emissiveIntensity: 0.35,
+      roughness: 0.3,
+      metalness: 0.1,
+    }));
+  }
+  return materialCache.get(color)!;
+}
+
 function createNode3DSprite(node: ForceNode): THREE.Object3D {
   const group = new THREE.Group();
 
-  const radius = Math.max(3.5, Math.sqrt(Math.max(0, node.val || 4)) * 1.5);
-  const geometry = node.isMerge
-    ? new THREE.OctahedronGeometry(radius * 1.15)
-    : new THREE.SphereGeometry(radius, 16, 16);
-
-  // Glowing Emissive Material so 3D nodes stand out brightly
-  const material = new THREE.MeshStandardMaterial({
-    color: node.color || "#f59e0b",
-    emissive: node.color || "#f59e0b",
-    emissiveIntensity: 0.45,
-    roughness: 0.25,
-    metalness: 0.15,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
+  const radius = Math.max(3, Math.sqrt(Math.max(0, node.val || 4)) * 1.3);
+  const mesh = new THREE.Mesh(
+    node.isMerge ? sharedOctaGeo : sharedSphereGeo,
+    getSharedMaterial(node.color || "#f59e0b")
+  );
+  mesh.scale.set(radius, radius, radius);
   group.add(mesh);
 
-  // Floating 3D Branch / Tag Badge Sprite
+  // Floating 3D Branch / Tag Badge Sprite (only when refs exist)
   if (node.refs && node.refs.length > 0) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -305,8 +315,8 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
       const texture = new THREE.CanvasTexture(canvas);
       const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
       const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.position.set(0, radius + 14, 0);
-      sprite.scale.set(34, 8, 1);
+      sprite.position.set(0, radius + 12, 0);
+      sprite.scale.set(32, 7.5, 1);
       group.add(sprite);
     }
   }
@@ -434,7 +444,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph with vibrant colors & guaranteed zoomed-out visibility
+  // Render 3D WebGL / 2D Canvas force graph with high performance & 0 GC lag
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -470,7 +480,7 @@ export function GraphView() {
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
-        .nodeRelSize(5) // Guaranteed node size in 3D
+        .nodeRelSize(4.5)
         .nodeColor((node: any) => node.color);
 
       if (dagMode !== "none") {
@@ -491,11 +501,11 @@ export function GraphView() {
           </div>
         `)
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => link.isMerge ? 3.0 : 2.0)
-        .linkDirectionalArrowLength(6)
+        .linkWidth((link: any) => link.isMerge ? 2.5 : 1.6)
+        .linkDirectionalArrowLength(5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkDirectionalParticles((link: any) => link.isMerge ? 4 : 1)
-        .linkDirectionalParticleWidth(3.0)
+        .linkDirectionalParticles((link: any) => link.isMerge ? 3 : 1)
+        .linkDirectionalParticleWidth(2.0)
         .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
@@ -516,47 +526,21 @@ export function GraphView() {
           controls.dampingFactor = 0.06;
           controls.rotateSpeed = 0.6;
           controls.zoomSpeed = 0.8;
-          controls.panSpeed = 0.12;     // Smooth base pan speed
-          controls.minDistance = 0.5;   // Unlimited zoom-in
-          controls.maxDistance = 20000; // Unlimited zoom-out
+          controls.panSpeed = 0.15;
+          controls.minDistance = 0.5;
+          controls.maxDistance = 20000;
           controls.screenSpacePanning = true;
         }
       }, 20);
 
-      // Frustum-Based Dynamic Pan Speed: Calculates distance to the CLOSEST visible node on screen
-      inst.onRenderFrame(() => {
+      // Silky Smooth, Zero-Allocation Dynamic Pan Speed Calculation
+      inst.onEngineTick(() => {
         const controls = inst.controls();
         const camera = inst.camera();
-        if (!controls || !camera) return;
-
-        const nodesData = inst.graphData().nodes;
-        if (!nodesData || nodesData.length === 0) return;
-
-        const frustum = new THREE.Frustum();
-        const projScreenMatrix = new THREE.Matrix4();
-        projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-        frustum.setFromProjectionMatrix(projScreenMatrix);
-
-        const camPos = camera.position;
-        let minDist = Infinity;
-
-        for (let i = 0; i < nodesData.length; i++) {
-          const n = nodesData[i];
-          if (n.x === undefined || n.y === undefined || n.z === undefined) continue;
-
-          const pt = new THREE.Vector3(n.x, n.y, n.z);
-          if (frustum.containsPoint(pt)) {
-            const d = camPos.distanceTo(pt);
-            if (d < minDist) minDist = d;
-          }
+        if (controls && camera && controls.target) {
+          const dist = camera.position.distanceTo(controls.target);
+          controls.panSpeed = Math.min(0.55, Math.max(0.015, 0.16 * (dist / 110)));
         }
-
-        if (minDist === Infinity) {
-          minDist = camPos.distanceTo(controls.target);
-        }
-
-        // Adjust panSpeed proportionally to closest visible object on screen!
-        controls.panSpeed = Math.min(0.6, Math.max(0.01, 0.15 * (minDist / 100)));
       });
 
       forceInstance = inst;
@@ -582,28 +566,28 @@ export function GraphView() {
 
       inst
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => Math.max(link.isMerge ? 3.0 : 2.0, 1.2 / (inst.zoom() || 1)))
+        .linkWidth((link: any) => Math.max(link.isMerge ? 2.5 : 1.6, 1.0 / (inst.zoom() || 1)))
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
           const y = node.y;
 
-          // GUARANTEED MINIMUM SCREEN SIZE: Nodes never disappear when zoomed out!
-          const minScreenRadius = 3.8 / globalScale;
-          const baseR = Math.sqrt(Math.max(0, node.val || 4)) * 1.8;
+          // GUARANTEED MINIMUM SCREEN SIZE: Nodes never disappear when zoomed out
+          const minScreenRadius = 3.6 / globalScale;
+          const baseR = Math.sqrt(Math.max(0, node.val || 4)) * 1.6;
           const r = Math.max(baseR, minScreenRadius);
           const laneCol = COLORS[node.lane % COLORS.length];
 
-          // Node Circle with Vibrant Fill
+          // Node Circle with Saturated Fill
           canvasCtx.beginPath();
           canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
           canvasCtx.fillStyle = node.color || laneCol;
           canvasCtx.fill();
-          canvasCtx.lineWidth = Math.max(2.0 / globalScale, 1.0 / globalScale);
+          canvasCtx.lineWidth = Math.max(1.8 / globalScale, 0.8 / globalScale);
           canvasCtx.strokeStyle = node.isMerge ? "#38bdf8" : laneCol;
           canvasCtx.stroke();
 
-          // Render Branch Names & Tag Badges directly at nodes
-          if (node.refs && node.refs.length > 0) {
+          // Render Branch Names & Tag Badges only when close enough for readability
+          if (globalScale >= 0.4 && node.refs && node.refs.length > 0) {
             const fontSize = Math.max(10 / globalScale, 3);
             canvasCtx.font = `700 ${fontSize}px Space Mono, monospace`;
             let badgeX = x + r + 4 / globalScale;
@@ -637,10 +621,10 @@ export function GraphView() {
           }
         })
         .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
-        .linkDirectionalArrowLength(6)
+        .linkDirectionalArrowLength(5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkDirectionalParticles((link: any) => link.isMerge ? 4 : 1)
-        .linkDirectionalParticleWidth(3.0)
+        .linkDirectionalParticles((link: any) => link.isMerge ? 3 : 1)
+        .linkDirectionalParticleWidth(2.0)
         .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
