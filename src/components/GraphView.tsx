@@ -179,6 +179,7 @@ interface ForceLink {
   target: string;
   color: string;
   isMerge: boolean;
+  lane: number;
 }
 
 function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
@@ -187,22 +188,15 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
   const links: ForceLink[] = [];
   const nodeMap = new Map<string, ForceNode>();
 
-  const authorColors = new Map<string, string>();
-  const getAuthorColor = (author: string) => {
-    if (!authorColors.has(author)) {
-      const idx = authorColors.size % COLORS.length;
-      authorColors.set(author, COLORS[idx]);
-    }
-    return authorColors.get(author)!;
-  };
-
   const query = searchQuery.trim().toLowerCase();
 
   gData.rows.forEach((r, i) => {
     const isMerge = r.parents.length > 1;
     const hasRef = r.refs.length > 0;
     const baseSize = hasRef ? 8 : (isMerge ? 6 : 4);
-    const authorCol = getAuthorColor(r.author);
+    
+    // Distinct Branch Lane Color Coding
+    const branchColor = COLORS[r.lane % COLORS.length];
 
     const matchesSearch = query.length === 0 || (
       r.hash.toLowerCase().includes(query) ||
@@ -212,8 +206,12 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
     );
 
     const nodeColor = matchesSearch
-      ? (isMerge ? "#60cdff" : authorCol)
+      ? (isMerge ? "#60cdff" : branchColor)
       : "rgba(100, 116, 139, 0.2)";
+
+    // Initial column separation by branch lane
+    const columnX = (r.lane - (gData.laneCount - 1) / 2) * 70;
+    const depthZ = (r.lane % 2 === 0 ? 1 : -1) * (r.lane * 15);
 
     const node: ForceNode = {
       id: r.hash,
@@ -230,25 +228,32 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
       val: query && matchesSearch ? baseSize * 1.6 : baseSize,
       matchesSearch,
       isMerge,
+      x: columnX,
+      z: depthZ,
     };
     nodes.push(node);
     nodeMap.set(r.hash, node);
   });
 
-  // Reversed Link Flow: Parent ➔ Child (Chronological Ancestry Flow)
+  // Reversed Link Flow: Parent (Older) ➔ Child (Newer)
   gData.edges.forEach((edge) => {
     const fromNode = nodeMap.get(gData.rows[edge.fromRow]?.hash);
     if (fromNode && edge.toHash && nodeMap.has(edge.toHash)) {
+      const linkColor = edge.isMergeBranch
+        ? "rgba(96, 205, 255, 0.85)" // Distinct Glowing Cyan for Merge Arcs
+        : COLORS[edge.viaLane % COLORS.length]; // Color-coded by branch lane track
+
       links.push({
-        source: edge.toHash, // Parent (Older)
-        target: fromNode.id, // Child (Newer)
-        color: edge.isMergeBranch ? "rgba(96, 205, 255, 0.75)" : "rgba(245, 158, 11, 0.55)",
+        source: edge.toHash, // Parent
+        target: fromNode.id, // Child
+        color: linkColor,
         isMerge: edge.isMergeBranch,
+        lane: edge.viaLane,
       });
     }
   });
 
-  return { nodes, links };
+  return { nodes, links, laneCount: gData.laneCount, laneLabels: gData.laneLabels };
 }
 
 function createNode3DSprite(node: ForceNode): THREE.Object3D {
@@ -278,7 +283,7 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
       const text = labels.join(" • ");
 
       ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
-      ctx.strokeStyle = "#60cdff";
+      ctx.strokeStyle = node.color || "#60cdff";
       ctx.lineWidth = 3;
       if (typeof ctx.roundRect === "function") {
         ctx.roundRect(4, 6, canvas.width - 8, canvas.height - 12, 14);
@@ -289,7 +294,7 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
       ctx.stroke();
 
       ctx.font = "bold 24px Space Mono, monospace";
-      ctx.fillStyle = "#60cdff";
+      ctx.fillStyle = node.color || "#60cdff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(text.length > 22 ? text.slice(0, 22) + "…" : text, canvas.width / 2, canvas.height / 2);
@@ -426,7 +431,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph dynamically with unlimited zoom & empty space focus
+  // Render 3D WebGL / 2D Canvas force graph with distinct branch channels & curved merge links
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -476,16 +481,18 @@ export function GraphView() {
         .nodeThreeObject((node: any) => createNode3DSprite(node))
         .nodeLabel((node: any) => `
           <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.18); padding: 8px 12px; border-radius: 8px; font-family: monospace; font-size: 11px; color: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-            <div style="color: #f59e0b; font-weight: bold;">${node.shortHash} ${node.isMerge ? '🔀 MERGE' : ''} ${node.refs && node.refs.length ? '<span style="color:#60cdff;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
+            <div style="color: ${COLORS[node.lane % COLORS.length]}; font-weight: bold;">${node.shortHash} (Lane ${node.lane}) ${node.isMerge ? '🔀 MERGE' : ''} ${node.refs && node.refs.length ? '<span style="color:#60cdff;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
             <div style="margin: 4px 0; color: #f8fafc; font-weight: 500;">${node.message}</div>
             <div style="color: #94a3b8; font-size: 10px;">${node.author} • ${formatTimestamp(node.timestamp)}</div>
           </div>
         `)
+        .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08) // Curved arc links for clear branch connectivity
+        .linkWidth((link: any) => link.isMerge ? 2.5 : 1.8)
         .linkDirectionalArrowLength(5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkDirectionalParticles((link: any) => link.isMerge ? 3 : 1)
-        .linkDirectionalParticleWidth(1.8)
-        .linkDirectionalParticleSpeed(0.005)
+        .linkDirectionalParticles((link: any) => link.isMerge ? 4 : 1)
+        .linkDirectionalParticleWidth(2.2)
+        .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
         .onNodeHover((node: any) => setHoveredNode(node || null))
@@ -531,8 +538,8 @@ export function GraphView() {
         .enablePanInteraction(true)
         .enableZoomInteraction(true)
         .zoomSpeed(0.5)
-        .minZoom(0.005) // Unlimited zoom-out
-        .maxZoom(100);  // Unlimited zoom-in
+        .minZoom(0.005)
+        .maxZoom(100);
 
       if (dagMode !== "none") {
         if (dagMode === "radial") {
@@ -543,18 +550,21 @@ export function GraphView() {
       }
 
       inst
+        .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08) // Curved arc links for distinct branch tracks
+        .linkWidth((link: any) => link.isMerge ? 2.5 : 1.8)
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
           const y = node.y;
           const r = Math.sqrt(Math.max(0, node.val || 4)) * 1.8;
+          const laneCol = COLORS[node.lane % COLORS.length];
 
           // Node Circle
           canvasCtx.beginPath();
           canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
-          canvasCtx.fillStyle = node.color || "#f59e0b";
+          canvasCtx.fillStyle = node.color || laneCol;
           canvasCtx.fill();
-          canvasCtx.lineWidth = 1.5 / globalScale;
-          canvasCtx.strokeStyle = node.isMerge ? "#60cdff" : "rgba(0,0,0,0.6)";
+          canvasCtx.lineWidth = 1.8 / globalScale;
+          canvasCtx.strokeStyle = node.isMerge ? "#60cdff" : laneCol;
           canvasCtx.stroke();
 
           // Render Branch Names & Tag Badges directly at nodes
@@ -574,7 +584,7 @@ export function GraphView() {
               const badgeY = y - badgeH / 2;
 
               // Badge Pill Background
-              canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.9)" : (isHead ? "rgba(245, 158, 11, 0.95)" : "rgba(14, 165, 233, 0.9)");
+              canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.9)" : (isHead ? "rgba(245, 158, 11, 0.95)" : laneCol);
               canvasCtx.beginPath();
               if (typeof canvasCtx.roundRect === "function") {
                 canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 4 / globalScale);
@@ -591,12 +601,12 @@ export function GraphView() {
             });
           }
         })
-        .nodeLabel((node: any) => `${node.shortHash}${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
+        .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
         .linkDirectionalArrowLength(5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkDirectionalParticles((link: any) => link.isMerge ? 3 : 1)
-        .linkDirectionalParticleWidth(1.8)
-        .linkDirectionalParticleSpeed(0.005)
+        .linkDirectionalParticles((link: any) => link.isMerge ? 4 : 1)
+        .linkDirectionalParticleWidth(2.2)
+        .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
         .onNodeHover((node: any) => setHoveredNode(node || null))
