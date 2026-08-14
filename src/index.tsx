@@ -1,6 +1,10 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount } from "solid-js";
 import { GitProvider } from "./context";
-import { getRecentRepos, basename, setSurfaceOpacity, setButtonTintOpacity, surfaceBg, getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab } from "./utils";
+import {
+  getRecentRepos, basename, setSurfaceOpacity, setButtonTintOpacity,
+  setGraphPanSpeed, setGraphZoomSpeed, setGraphRotateSpeed,
+  surfaceBg, getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab,
+} from "./utils";
 import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
 import { RepoView } from "./components/RepoView";
@@ -58,11 +62,17 @@ function GitPanel(props: any) {
     if (p) openRepo(p);
   });
 
-  // Apply saved plugin settings on mount
-  const opacity = props.pluginSettings?.surfaceOpacity;
-  if (typeof opacity === "number") setSurfaceOpacity(opacity);
-  const btnOpacity = props.pluginSettings?.buttonTintOpacity;
-  if (typeof btnOpacity === "number") setButtonTintOpacity(btnOpacity);
+  // Apply saved plugin settings
+  createEffect(() => {
+    const ps = props.pluginSettings;
+    if (ps) {
+      if (typeof ps.surfaceOpacity === "number") setSurfaceOpacity(ps.surfaceOpacity);
+      if (typeof ps.buttonTintOpacity === "number") setButtonTintOpacity(ps.buttonTintOpacity);
+      if (typeof ps.graphPanSpeed === "number") setGraphPanSpeed(ps.graphPanSpeed);
+      if (typeof ps.graphZoomSpeed === "number") setGraphZoomSpeed(ps.graphZoomSpeed);
+      if (typeof ps.graphRotateSpeed === "number") setGraphRotateSpeed(ps.graphRotateSpeed);
+    }
+  });
 
   const showDashboard = () => tabs().length === 0 || showDashManual();
 

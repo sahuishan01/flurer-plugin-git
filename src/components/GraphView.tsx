@@ -3,7 +3,7 @@ import ForceGraph2D from "force-graph";
 import ForceGraph3D from "3d-force-graph";
 import * as THREE from "three";
 import { useGit } from "../context";
-import { formatTimestamp } from "../utils";
+import { formatTimestamp, getGraphPanSpeed, getGraphZoomSpeed, getGraphRotateSpeed } from "../utils";
 import type { GitGraphEntry } from "../types";
 import { EmptyState, Card, Button, CloseIcon, CommitContextMenu } from "./shared";
 import { S } from "../styles";
@@ -509,9 +509,9 @@ export function GraphView() {
         if (controls) {
           controls.enableDamping = true;
           controls.dampingFactor = 0.08;
-          controls.rotateSpeed = 0.6;
-          controls.zoomSpeed = 0.8;
-          controls.panSpeed = 0.8;
+          controls.rotateSpeed = 0.6 * getGraphRotateSpeed();
+          controls.zoomSpeed = 0.8 * getGraphZoomSpeed();
+          controls.panSpeed = 0.8 * getGraphPanSpeed();
           controls.minDistance = 1;
           controls.maxDistance = 25000;
           controls.screenSpacePanning = true;
@@ -530,7 +530,7 @@ export function GraphView() {
         .cooldownTime(1200)
         .enablePanInteraction(true)
         .enableZoomInteraction(true)
-        .zoomSpeed(0.6)
+        .zoomSpeed(0.6 * getGraphZoomSpeed())
         .minZoom(0.005)
         .maxZoom(100);
 
@@ -615,6 +615,26 @@ export function GraphView() {
         });
 
       forceInstance = inst;
+    }
+  });
+
+  // Dynamically update OrbitControls & Canvas zoom/pan/rotate sensitivity on setting changes
+  createEffect(() => {
+    const pan = getGraphPanSpeed();
+    const zoom = getGraphZoomSpeed();
+    const rot = getGraphRotateSpeed();
+    if (forceInstance) {
+      const mode = displayMode();
+      if (mode === "3d" && typeof forceInstance.controls === "function") {
+        const controls = forceInstance.controls();
+        if (controls) {
+          controls.rotateSpeed = 0.6 * rot;
+          controls.zoomSpeed = 0.8 * zoom;
+          controls.panSpeed = 0.8 * pan;
+        }
+      } else if (mode === "2d" && typeof forceInstance.zoomSpeed === "function") {
+        forceInstance.zoomSpeed(0.6 * zoom);
+      }
     }
   });
 

@@ -4,18 +4,48 @@ import { createSignal, createRoot } from "solid-js";
 const RECENT_REPOS_KEY = "flurer-git-recent-repos";
 const MAX_RECENT_REPOS = 20;
 
+const SETTINGS_KEY = "flurer-git-plugin-settings";
+
+export function loadPluginSettings(): Record<string, any> {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePluginSettings(settings: Record<string, any>): void {
+  try {
+    const current = loadPluginSettings();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...current, ...settings }));
+  } catch {}
+}
+
+const _initialSettings = loadPluginSettings();
+
 let _isLight: boolean | null = null;
 let _bgColor: string | null = null;
 const [_surfaceOpacity, _setSurfaceOpacity] = createRoot(() =>
-  createSignal(0.04)
+  createSignal(typeof _initialSettings.surfaceOpacity === "number" ? _initialSettings.surfaceOpacity : 0.04)
 );
 const [_buttonTintOpacity, _setButtonTintOpacity] = createRoot(() =>
-  createSignal(0.12)
+  createSignal(typeof _initialSettings.buttonTintOpacity === "number" ? _initialSettings.buttonTintOpacity : 0.12)
+);
+const [_graphPanSpeed, _setGraphPanSpeed] = createRoot(() =>
+  createSignal(typeof _initialSettings.graphPanSpeed === "number" ? _initialSettings.graphPanSpeed : 1.0)
+);
+const [_graphZoomSpeed, _setGraphZoomSpeed] = createRoot(() =>
+  createSignal(typeof _initialSettings.graphZoomSpeed === "number" ? _initialSettings.graphZoomSpeed : 1.0)
+);
+const [_graphRotateSpeed, _setGraphRotateSpeed] = createRoot(() =>
+  createSignal(typeof _initialSettings.graphRotateSpeed === "number" ? _initialSettings.graphRotateSpeed : 1.0)
 );
 
 /** Override the surface tint opacity (0–1). Passed via plugin settings. */
 export function setSurfaceOpacity(opacity: number) {
   _setSurfaceOpacity(Math.max(0, Math.min(1, opacity)));
+  savePluginSettings({ surfaceOpacity: opacity });
 }
 
 /** Get current surface tint opacity. */
@@ -26,11 +56,45 @@ export function getSurfaceOpacity(): number {
 /** Override the button tint opacity (0–1). Passed via plugin settings. */
 export function setButtonTintOpacity(opacity: number) {
   _setButtonTintOpacity(Math.max(0, Math.min(1, opacity)));
+  savePluginSettings({ buttonTintOpacity: opacity });
 }
 
 /** Get current button tint opacity. */
 export function getButtonTintOpacity(): number {
   return _buttonTintOpacity();
+}
+
+/** Override graph pan sensitivity (0.1–3.0x multiplier). */
+export function setGraphPanSpeed(speed: number) {
+  _setGraphPanSpeed(Math.max(0.1, Math.min(3.0, speed)));
+  savePluginSettings({ graphPanSpeed: speed });
+}
+
+/** Get current graph pan sensitivity multiplier. */
+export function getGraphPanSpeed(): number {
+  return _graphPanSpeed();
+}
+
+/** Override graph zoom sensitivity (0.1–3.0x multiplier). */
+export function setGraphZoomSpeed(speed: number) {
+  _setGraphZoomSpeed(Math.max(0.1, Math.min(3.0, speed)));
+  savePluginSettings({ graphZoomSpeed: speed });
+}
+
+/** Get current graph zoom sensitivity multiplier. */
+export function getGraphZoomSpeed(): number {
+  return _graphZoomSpeed();
+}
+
+/** Override graph 3D rotation sensitivity (0.1–3.0x multiplier). */
+export function setGraphRotateSpeed(speed: number) {
+  _setGraphRotateSpeed(Math.max(0.1, Math.min(3.0, speed)));
+  savePluginSettings({ graphRotateSpeed: speed });
+}
+
+/** Get current graph 3D rotation sensitivity multiplier. */
+export function getGraphRotateSpeed(): number {
+  return _graphRotateSpeed();
 }
 
 /** Detect whether Flurer's background is light or dark, and cache its hex. */
