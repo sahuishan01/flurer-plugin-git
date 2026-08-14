@@ -12,7 +12,7 @@ const LANE_W = 16;
 const ROW_H = 34;
 const DOT_R = 4.5;
 const LEGEND_H = 34;
-const COLORS = ["#f59e0b", "#60a5fa", "#4ade80", "#f87171", "#c084fc", "#2dd4bf", "#fb923c", "#a78bfa"];
+const COLORS = ["#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#a855f7", "#14b8a6", "#f97316", "#8b5cf6"];
 
 const GRAPH_CSS_ID = "flurer-git-graph-css";
 const GRAPH_CSS = `
@@ -193,9 +193,9 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
   gData.rows.forEach((r, i) => {
     const isMerge = r.parents.length > 1;
     const hasRef = r.refs.length > 0;
-    const baseSize = hasRef ? 8 : (isMerge ? 6 : 4);
+    const baseSize = hasRef ? 9 : (isMerge ? 7 : 5.5);
     
-    // Distinct Branch Lane Color Coding
+    // Vibrant & High-Contrast Branch Lane Colors
     const branchColor = COLORS[r.lane % COLORS.length];
 
     const matchesSearch = query.length === 0 || (
@@ -206,8 +206,8 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
     );
 
     const nodeColor = matchesSearch
-      ? (isMerge ? "#60cdff" : branchColor)
-      : "rgba(100, 116, 139, 0.2)";
+      ? (isMerge ? "#38bdf8" : branchColor)
+      : "rgba(148, 163, 184, 0.45)"; // Saturated, clear fallback color for non-matching nodes
 
     // Initial column separation by branch lane
     const columnX = (r.lane - (gData.laneCount - 1) / 2) * 70;
@@ -240,8 +240,8 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
     const fromNode = nodeMap.get(gData.rows[edge.fromRow]?.hash);
     if (fromNode && edge.toHash && nodeMap.has(edge.toHash)) {
       const linkColor = edge.isMergeBranch
-        ? "rgba(96, 205, 255, 0.85)" // Distinct Glowing Cyan for Merge Arcs
-        : COLORS[edge.viaLane % COLORS.length]; // Color-coded by branch lane track
+        ? "rgba(56, 189, 248, 0.95)" // Saturated Glowing Cyan for Merge Arcs
+        : COLORS[edge.viaLane % COLORS.length]; // Saturated branch track color
 
       links.push({
         source: edge.toHash, // Parent
@@ -259,15 +259,18 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
 function createNode3DSprite(node: ForceNode): THREE.Object3D {
   const group = new THREE.Group();
 
-  const radius = Math.sqrt(Math.max(0, node.val || 4)) * 1.2;
+  const radius = Math.max(3.5, Math.sqrt(Math.max(0, node.val || 4)) * 1.5);
   const geometry = node.isMerge
-    ? new THREE.OctahedronGeometry(radius * 1.1)
+    ? new THREE.OctahedronGeometry(radius * 1.15)
     : new THREE.SphereGeometry(radius, 16, 16);
 
-  const material = new THREE.MeshLambertMaterial({
+  // Glowing Emissive Material so 3D nodes stand out brightly
+  const material = new THREE.MeshStandardMaterial({
     color: node.color || "#f59e0b",
-    transparent: true,
-    opacity: node.matchesSearch ? 0.95 : 0.25,
+    emissive: node.color || "#f59e0b",
+    emissiveIntensity: 0.45,
+    roughness: 0.25,
+    metalness: 0.15,
   });
   const mesh = new THREE.Mesh(geometry, material);
   group.add(mesh);
@@ -282,9 +285,9 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
       const labels = node.refs.map(r => r.replace("HEAD -> ", "").replace("HEAD, ", ""));
       const text = labels.join(" • ");
 
-      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
-      ctx.strokeStyle = node.color || "#60cdff";
-      ctx.lineWidth = 3;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+      ctx.strokeStyle = node.color || "#38bdf8";
+      ctx.lineWidth = 4;
       if (typeof ctx.roundRect === "function") {
         ctx.roundRect(4, 6, canvas.width - 8, canvas.height - 12, 14);
       } else {
@@ -294,7 +297,7 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
       ctx.stroke();
 
       ctx.font = "bold 24px Space Mono, monospace";
-      ctx.fillStyle = node.color || "#60cdff";
+      ctx.fillStyle = node.color || "#38bdf8";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(text.length > 22 ? text.slice(0, 22) + "…" : text, canvas.width / 2, canvas.height / 2);
@@ -302,8 +305,8 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
       const texture = new THREE.CanvasTexture(canvas);
       const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
       const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.position.set(0, radius + 12, 0);
-      sprite.scale.set(32, 7.5, 1);
+      sprite.position.set(0, radius + 14, 0);
+      sprite.scale.set(34, 8, 1);
       group.add(sprite);
     }
   }
@@ -431,7 +434,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph with frustum-based dynamic pan sensitivity
+  // Render 3D WebGL / 2D Canvas force graph with vibrant colors & guaranteed zoomed-out visibility
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -467,6 +470,7 @@ export function GraphView() {
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
+        .nodeRelSize(5) // Guaranteed node size in 3D
         .nodeColor((node: any) => node.color);
 
       if (dagMode !== "none") {
@@ -481,17 +485,17 @@ export function GraphView() {
         .nodeThreeObject((node: any) => createNode3DSprite(node))
         .nodeLabel((node: any) => `
           <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.18); padding: 8px 12px; border-radius: 8px; font-family: monospace; font-size: 11px; color: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-            <div style="color: ${COLORS[node.lane % COLORS.length]}; font-weight: bold;">${node.shortHash} (Lane ${node.lane}) ${node.isMerge ? '🔀 MERGE' : ''} ${node.refs && node.refs.length ? '<span style="color:#60cdff;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
+            <div style="color: ${COLORS[node.lane % COLORS.length]}; font-weight: bold;">${node.shortHash} (Lane ${node.lane}) ${node.isMerge ? '🔀 MERGE' : ''} ${node.refs && node.refs.length ? '<span style="color:#38bdf8;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
             <div style="margin: 4px 0; color: #f8fafc; font-weight: 500;">${node.message}</div>
             <div style="color: #94a3b8; font-size: 10px;">${node.author} • ${formatTimestamp(node.timestamp)}</div>
           </div>
         `)
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => link.isMerge ? 2.5 : 1.8)
-        .linkDirectionalArrowLength(5)
+        .linkWidth((link: any) => link.isMerge ? 3.0 : 2.0)
+        .linkDirectionalArrowLength(6)
         .linkDirectionalArrowRelPos(0.85)
         .linkDirectionalParticles((link: any) => link.isMerge ? 4 : 1)
-        .linkDirectionalParticleWidth(2.2)
+        .linkDirectionalParticleWidth(3.0)
         .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
@@ -578,20 +582,24 @@ export function GraphView() {
 
       inst
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => link.isMerge ? 2.5 : 1.8)
+        .linkWidth((link: any) => Math.max(link.isMerge ? 3.0 : 2.0, 1.2 / (inst.zoom() || 1)))
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
           const y = node.y;
-          const r = Math.sqrt(Math.max(0, node.val || 4)) * 1.8;
+
+          // GUARANTEED MINIMUM SCREEN SIZE: Nodes never disappear when zoomed out!
+          const minScreenRadius = 3.8 / globalScale;
+          const baseR = Math.sqrt(Math.max(0, node.val || 4)) * 1.8;
+          const r = Math.max(baseR, minScreenRadius);
           const laneCol = COLORS[node.lane % COLORS.length];
 
-          // Node Circle
+          // Node Circle with Vibrant Fill
           canvasCtx.beginPath();
           canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
           canvasCtx.fillStyle = node.color || laneCol;
           canvasCtx.fill();
-          canvasCtx.lineWidth = 1.8 / globalScale;
-          canvasCtx.strokeStyle = node.isMerge ? "#60cdff" : laneCol;
+          canvasCtx.lineWidth = Math.max(2.0 / globalScale, 1.0 / globalScale);
+          canvasCtx.strokeStyle = node.isMerge ? "#38bdf8" : laneCol;
           canvasCtx.stroke();
 
           // Render Branch Names & Tag Badges directly at nodes
@@ -611,7 +619,7 @@ export function GraphView() {
               const badgeY = y - badgeH / 2;
 
               // Badge Pill Background
-              canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.9)" : (isHead ? "rgba(245, 158, 11, 0.95)" : laneCol);
+              canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.95)" : (isHead ? "rgba(245, 158, 11, 0.95)" : laneCol);
               canvasCtx.beginPath();
               if (typeof canvasCtx.roundRect === "function") {
                 canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 4 / globalScale);
@@ -629,10 +637,10 @@ export function GraphView() {
           }
         })
         .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
-        .linkDirectionalArrowLength(5)
+        .linkDirectionalArrowLength(6)
         .linkDirectionalArrowRelPos(0.85)
         .linkDirectionalParticles((link: any) => link.isMerge ? 4 : 1)
-        .linkDirectionalParticleWidth(2.2)
+        .linkDirectionalParticleWidth(3.0)
         .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
