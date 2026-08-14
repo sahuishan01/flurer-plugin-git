@@ -431,7 +431,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph with distinct branch channels & curved merge links
+  // Render 3D WebGL / 2D Canvas force graph with frustum-based dynamic pan sensitivity
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -486,7 +486,7 @@ export function GraphView() {
             <div style="color: #94a3b8; font-size: 10px;">${node.author} • ${formatTimestamp(node.timestamp)}</div>
           </div>
         `)
-        .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08) // Curved arc links for clear branch connectivity
+        .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
         .linkWidth((link: any) => link.isMerge ? 2.5 : 1.8)
         .linkDirectionalArrowLength(5)
         .linkDirectionalArrowRelPos(0.85)
@@ -512,20 +512,47 @@ export function GraphView() {
           controls.dampingFactor = 0.06;
           controls.rotateSpeed = 0.6;
           controls.zoomSpeed = 0.8;
-          controls.panSpeed = 0.25;
+          controls.panSpeed = 0.12;     // Smooth base pan speed
           controls.minDistance = 0.5;   // Unlimited zoom-in
           controls.maxDistance = 20000; // Unlimited zoom-out
           controls.screenSpacePanning = true;
         }
       }, 20);
 
-      // Dynamically scale panSpeed based on camera distance so close-up panning is steady and precise
-      inst.onEngineTick(() => {
+      // Frustum-Based Dynamic Pan Speed: Calculates distance to the CLOSEST visible node on screen
+      inst.onRenderFrame(() => {
         const controls = inst.controls();
-        if (controls && controls.object && controls.target) {
-          const dist = controls.object.position.distanceTo(controls.target);
-          controls.panSpeed = Math.min(0.6, Math.max(0.03, 0.22 * (dist / 140)));
+        const camera = inst.camera();
+        if (!controls || !camera) return;
+
+        const nodesData = inst.graphData().nodes;
+        if (!nodesData || nodesData.length === 0) return;
+
+        const frustum = new THREE.Frustum();
+        const projScreenMatrix = new THREE.Matrix4();
+        projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(projScreenMatrix);
+
+        const camPos = camera.position;
+        let minDist = Infinity;
+
+        for (let i = 0; i < nodesData.length; i++) {
+          const n = nodesData[i];
+          if (n.x === undefined || n.y === undefined || n.z === undefined) continue;
+
+          const pt = new THREE.Vector3(n.x, n.y, n.z);
+          if (frustum.containsPoint(pt)) {
+            const d = camPos.distanceTo(pt);
+            if (d < minDist) minDist = d;
+          }
         }
+
+        if (minDist === Infinity) {
+          minDist = camPos.distanceTo(controls.target);
+        }
+
+        // Adjust panSpeed proportionally to closest visible object on screen!
+        controls.panSpeed = Math.min(0.6, Math.max(0.01, 0.15 * (minDist / 100)));
       });
 
       forceInstance = inst;
@@ -550,7 +577,7 @@ export function GraphView() {
       }
 
       inst
-        .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08) // Curved arc links for distinct branch tracks
+        .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
         .linkWidth((link: any) => link.isMerge ? 2.5 : 1.8)
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
