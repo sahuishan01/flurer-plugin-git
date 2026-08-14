@@ -235,7 +235,7 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
     nodeMap.set(r.hash, node);
   });
 
-  // Reversed Link Flow: Parent (Older) ➔ Child (Newer)
+  // Flow: Parent (Older) ➔ Child (Newer)
   gData.edges.forEach((edge) => {
     const fromNode = nodeMap.get(gData.rows[edge.fromRow]?.hash);
     if (fromNode && edge.toHash && nodeMap.has(edge.toHash)) {
@@ -257,9 +257,10 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
 }
 
 // Shared, zero-allocation 3D Geometry and Material cache to prevent memory & GC lag
-const sharedSphereGeo = new THREE.SphereGeometry(1, 12, 12);
+const sharedSphereGeo = new THREE.SphereGeometry(1, 10, 10);
 const sharedOctaGeo = new THREE.OctahedronGeometry(1, 0);
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+const spriteMaterialCache = new Map<string, THREE.SpriteMaterial>();
 
 function getSharedMaterial(color: string): THREE.MeshStandardMaterial {
   if (!materialCache.has(color)) {
@@ -272,6 +273,41 @@ function getSharedMaterial(color: string): THREE.MeshStandardMaterial {
     }));
   }
   return materialCache.get(color)!;
+}
+
+function getBadgeSpriteMaterial(text: string, color: string): THREE.SpriteMaterial | null {
+  const key = `${text}|${color}`;
+  if (!spriteMaterialCache.has(key)) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    canvas.width = 320;
+    canvas.height = 72;
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+    ctx.strokeStyle = color || "#38bdf8";
+    ctx.lineWidth = 4;
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(4, 6, canvas.width - 8, canvas.height - 12, 14);
+    } else {
+      ctx.rect(4, 6, canvas.width - 8, canvas.height - 12);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = "bold 24px Space Mono, monospace";
+    ctx.fillStyle = color || "#38bdf8";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text.length > 22 ? text.slice(0, 22) + "…" : text, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    spriteMaterialCache.set(key, spriteMaterial);
+  }
+  return spriteMaterialCache.get(key) || null;
 }
 
 function createNode3DSprite(node: ForceNode): THREE.Object3D {
@@ -287,33 +323,10 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
 
   // Floating 3D Branch / Tag Badge Sprite (only when refs exist)
   if (node.refs && node.refs.length > 0) {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      canvas.width = 320;
-      canvas.height = 72;
-      const labels = node.refs.map(r => r.replace("HEAD -> ", "").replace("HEAD, ", ""));
-      const text = labels.join(" • ");
-
-      ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
-      ctx.strokeStyle = node.color || "#38bdf8";
-      ctx.lineWidth = 4;
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(4, 6, canvas.width - 8, canvas.height - 12, 14);
-      } else {
-        ctx.rect(4, 6, canvas.width - 8, canvas.height - 12);
-      }
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.font = "bold 24px Space Mono, monospace";
-      ctx.fillStyle = node.color || "#38bdf8";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(text.length > 22 ? text.slice(0, 22) + "…" : text, canvas.width / 2, canvas.height / 2);
-
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const labels = node.refs.map(r => r.replace("HEAD -> ", "").replace("HEAD, ", ""));
+    const text = labels.join(" • ");
+    const spriteMaterial = getBadgeSpriteMaterial(text, node.color || "#38bdf8");
+    if (spriteMaterial) {
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.set(0, radius + 12, 0);
       sprite.scale.set(32, 7.5, 1);
@@ -336,7 +349,9 @@ export function GraphView() {
   const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
   const [hoveredNode, setHoveredNode] = createSignal<ForceNode | null>(null);
   const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
-  let mousePos = { x: 0, y: 0 };
+
+  const [scrollTop, setScrollTop] = createSignal(0);
+  const [viewportH, setViewportH] = createSignal(700);
 
   let graphContainerRef!: HTMLDivElement;
   let forceInstance: any = null;
@@ -355,7 +370,7 @@ export function GraphView() {
       forceInstance.cameraPosition(
         { x: nx * distRatio, y: ny * distRatio + 10, z: nz * distRatio },
         { x: nx, y: ny, z: nz },
-        1000
+        900
       );
     } else if (mode === "2d") {
       forceInstance.centerAt(node.x, node.y, 750);
@@ -366,35 +381,10 @@ export function GraphView() {
     ctx.showCommitDetail(node.hash);
   }
 
-  function focusOnEmptySpace(clientX: number, clientY: number) {
+  function recenterGraph() {
     if (!forceInstance) return;
-    const mode = displayMode();
-    const container = graphContainerRef;
-    if (!container) return;
-
-    if (mode === "2d" && typeof forceInstance.screen2GraphCoords === "function") {
-      const rect = container.getBoundingClientRect();
-      const coords = forceInstance.screen2GraphCoords(clientX - rect.left, clientY - rect.top);
-      if (coords) {
-        forceInstance.centerAt(coords.x, coords.y, 700);
-      }
-    } else if (mode === "3d" && forceInstance.camera) {
-      const rect = container.getBoundingClientRect();
-      const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2(
-        ((clientX - rect.left) / rect.width) * 2 - 1,
-        -((clientY - rect.top) / rect.height) * 2 + 1
-      );
-      raycaster.setFromCamera(mouse, forceInstance.camera());
-      const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-      const targetPt = new THREE.Vector3();
-      if (raycaster.ray.intersectPlane(plane, targetPt)) {
-        forceInstance.cameraPosition(
-          { x: targetPt.x, y: targetPt.y, z: forceInstance.camera().position.z },
-          { x: targetPt.x, y: targetPt.y, z: 0 },
-          800
-        );
-      }
+    if (typeof forceInstance.zoomToFit === "function") {
+      forceInstance.zoomToFit(600, 30);
     }
   }
 
@@ -407,11 +397,6 @@ export function GraphView() {
       document.head.appendChild(st);
     }
 
-    const trackMouse = (e: MouseEvent) => {
-      mousePos = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener("mousemove", trackMouse);
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "f" || e.key === "F") {
         const tag = (document.activeElement?.tagName || "").toUpperCase();
@@ -423,14 +408,13 @@ export function GraphView() {
           focusOnNode(node);
         } else if (forceInstance) {
           e.preventDefault();
-          focusOnEmptySpace(mousePos.x, mousePos.y);
+          recenterGraph();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => {
-      window.removeEventListener("mousemove", trackMouse);
       window.removeEventListener("keydown", handleKeyDown);
     });
   });
@@ -444,7 +428,7 @@ export function GraphView() {
     }
   });
 
-  // Render 3D WebGL / 2D Canvas force graph with high performance & 0 GC lag
+  // Render 3D WebGL / 2D Canvas force graph with high performance & silky smooth interaction
   createEffect(() => {
     const mode = displayMode();
     const dagMode = dagLayout();
@@ -481,7 +465,10 @@ export function GraphView() {
         .nodeId("id")
         .nodeVal("val")
         .nodeRelSize(4.5)
-        .nodeColor((node: any) => node.color);
+        .nodeColor((node: any) => node.color)
+        .warmupTicks(30)
+        .cooldownTicks(50)
+        .cooldownTime(1200);
 
       if (dagMode !== "none") {
         if (dagMode === "radial") {
@@ -501,12 +488,9 @@ export function GraphView() {
           </div>
         `)
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => link.isMerge ? 2.5 : 1.6)
-        .linkDirectionalArrowLength(5)
+        .linkWidth((link: any) => link.isMerge ? 2.2 : 1.4)
+        .linkDirectionalArrowLength(4.5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkDirectionalParticles((link: any) => link.isMerge ? 3 : 1)
-        .linkDirectionalParticleWidth(2.0)
-        .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
         .onNodeHover((node: any) => setHoveredNode(node || null))
@@ -514,34 +498,25 @@ export function GraphView() {
           if (!node) return;
           focusOnNode(node);
         })
-        .onBackgroundClick((e: MouseEvent) => {
-          focusOnEmptySpace(e.clientX, e.clientY);
+        .onBackgroundClick(() => {
+          setSelectedHash(null);
+          ctx.closeCommitDetail();
         });
 
-      // Configure OrbitControls for unlimited zoom & smooth damping
+      // Configure OrbitControls for smooth damping and reliable panning
       setTimeout(() => {
         const controls = inst.controls();
         if (controls) {
           controls.enableDamping = true;
-          controls.dampingFactor = 0.06;
+          controls.dampingFactor = 0.08;
           controls.rotateSpeed = 0.6;
           controls.zoomSpeed = 0.8;
-          controls.panSpeed = 0.15;
-          controls.minDistance = 0.5;
-          controls.maxDistance = 20000;
+          controls.panSpeed = 0.8;
+          controls.minDistance = 1;
+          controls.maxDistance = 25000;
           controls.screenSpacePanning = true;
         }
       }, 20);
-
-      // Silky Smooth, Zero-Allocation Dynamic Pan Speed Calculation
-      inst.onEngineTick(() => {
-        const controls = inst.controls();
-        const camera = inst.camera();
-        if (controls && camera && controls.target) {
-          const dist = camera.position.distanceTo(controls.target);
-          controls.panSpeed = Math.min(0.55, Math.max(0.015, 0.16 * (dist / 110)));
-        }
-      });
 
       forceInstance = inst;
     } else if (mode === "2d") {
@@ -550,9 +525,12 @@ export function GraphView() {
         .nodeId("id")
         .nodeVal("val")
         .nodeColor((node: any) => node.color)
+        .warmupTicks(30)
+        .cooldownTicks(50)
+        .cooldownTime(1200)
         .enablePanInteraction(true)
         .enableZoomInteraction(true)
-        .zoomSpeed(0.5)
+        .zoomSpeed(0.6)
         .minZoom(0.005)
         .maxZoom(100);
 
@@ -566,7 +544,7 @@ export function GraphView() {
 
       inst
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => Math.max(link.isMerge ? 2.5 : 1.6, 1.0 / (inst.zoom() || 1)))
+        .linkWidth((link: any) => Math.max(link.isMerge ? 2.2 : 1.4, 0.9 / (inst.zoom() || 1)))
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
           const y = node.y;
@@ -587,12 +565,13 @@ export function GraphView() {
           canvasCtx.stroke();
 
           // Render Branch Names & Tag Badges only when close enough for readability
-          if (globalScale >= 0.4 && node.refs && node.refs.length > 0) {
+          if (globalScale >= 0.55 && node.refs && node.refs.length > 0) {
             const fontSize = Math.max(10 / globalScale, 3);
             canvasCtx.font = `700 ${fontSize}px Space Mono, monospace`;
             let badgeX = x + r + 4 / globalScale;
 
-            node.refs.forEach((ref: string) => {
+            for (let i = 0; i < Math.min(node.refs.length, 3); i++) {
+              const ref = node.refs[i];
               const isTag = ref.startsWith("tag:") || ref.includes("v0.") || ref.startsWith("v");
               const isHead = ref.includes("HEAD");
               const label = ref.replace("HEAD -> ", "").replace("HEAD, ", "");
@@ -617,15 +596,12 @@ export function GraphView() {
               canvasCtx.fillText(label, badgeX + paddingX, badgeY + badgeH - 3 / globalScale);
 
               badgeX += badgeW + 3 / globalScale;
-            });
+            }
           }
         })
         .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
-        .linkDirectionalArrowLength(5)
+        .linkDirectionalArrowLength(4.5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkDirectionalParticles((link: any) => link.isMerge ? 3 : 1)
-        .linkDirectionalParticleWidth(2.0)
-        .linkDirectionalParticleSpeed(0.006)
         .linkColor((link: any) => link.color)
         .backgroundColor("rgba(0,0,0,0)")
         .onNodeHover((node: any) => setHoveredNode(node || null))
@@ -633,8 +609,9 @@ export function GraphView() {
           if (!node) return;
           focusOnNode(node);
         })
-        .onBackgroundClick((e: MouseEvent) => {
-          focusOnEmptySpace(e.clientX, e.clientY);
+        .onBackgroundClick(() => {
+          setSelectedHash(null);
+          ctx.closeCommitDetail();
         });
 
       forceInstance = inst;
@@ -672,11 +649,44 @@ export function GraphView() {
 
   function handleScroll(e: Event) {
     const el = e.currentTarget as HTMLDivElement;
-    if (!el || ctx.graphLoading() || !ctx.graphHasMore()) return;
+    if (!el) return;
+    setScrollTop(el.scrollTop);
+    setViewportH(el.clientHeight || 700);
+    if (ctx.graphLoading() || !ctx.graphHasMore()) return;
     if (el.scrollTop > 50 && el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
       ctx.loadMoreGraph();
     }
   }
+
+  const BUFFER_ROWS = 25;
+  const visibleRange = createMemo(() => {
+    const total = data().rows.length;
+    if (total === 0) return { start: 0, end: 0 };
+    const st = scrollTop();
+    const vh = viewportH();
+    const start = Math.max(0, Math.floor((st - LEGEND_H) / ROW_H) - BUFFER_ROWS);
+    const end = Math.min(total, Math.ceil((st + vh - LEGEND_H) / ROW_H) + BUFFER_ROWS);
+    return { start, end };
+  });
+
+  const visibleRows = createMemo(() => {
+    const { start, end } = visibleRange();
+    return data().rows.slice(start, end).map((r, i) => ({
+      row: r,
+      index: start + i,
+    }));
+  });
+
+  const visibleEdges = createMemo(() => {
+    const { start, end } = visibleRange();
+    const allEdges = data().edges;
+    const totalRows = data().rows.length;
+    return allEdges.filter((e) => {
+      const from = e.fromRow;
+      const to = e.toRow !== null ? e.toRow : totalRows - 1;
+      return from <= end && to >= start;
+    });
+  });
 
   function handleRowClick(hash: string) {
     setSelectedHash(hash);
@@ -810,12 +820,8 @@ export function GraphView() {
           />
           <Show when={displayMode() !== "tree"}>
             <button
-              onClick={() => {
-                if (forceInstance && typeof forceInstance.zoomToFit === "function") {
-                  forceInstance.zoomToFit(400, 20);
-                }
-              }}
-              title="Recenter / Fit Graph"
+              onClick={recenterGraph}
+              title="Recenter / Fit Graph (or press 'F')"
               style={{
                 padding: "6px 10px",
                 "font-size": "11px",
@@ -843,7 +849,7 @@ export function GraphView() {
         <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
           <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.7))", "pointer-events": "none", "font-family": "Space Mono, monospace", background: "rgba(10, 14, 23, 0.8)", padding: "5px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.12)", "box-shadow": "0 4px 12px rgba(0,0,0,0.3)" }}>
-            {displayMode() === "3d" ? "Pan: Right Click Drag • Focus: Click Node or Empty Space • 'F': Focus Cursor" : "Pan: Drag • Zoom: Unlimited • Focus: Click Node or Empty Space • 'F': Focus Cursor"}
+            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Drag • Zoom: Scroll • Focus: Click Node • 'F': Recenter" : "Pan: Drag • Zoom: Scroll • Focus: Click Node • 'F': Recenter"}
           </div>
         </div>
       </Show>
@@ -877,7 +883,7 @@ export function GraphView() {
                   )}
                 </Index>
               </defs>
-              <Index each={data().edges}>
+              <Index each={visibleEdges()}>
                 {(edge) => {
                   const isMerge = () => edge().isMergeBranch || edge().parentIndex > 0;
                   const strokeCol = () => laneColor(edge().viaLane);
@@ -887,8 +893,10 @@ export function GraphView() {
                   );
                 }}
               </Index>
-              <Index each={data().rows}>
-                {(row, i) => {
+              <Index each={visibleRows()}>
+                {(item) => {
+                  const i = item().index;
+                  const row = () => item().row;
                   const y = rowY(i);
                   const cx = laneX(row().lane);
                   const color = laneColor(row().lane);
