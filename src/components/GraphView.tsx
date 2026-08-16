@@ -384,6 +384,7 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
     }
   }
 
+  group.userData = { isNodeGroup: true, node, baseRadius: radius };
   return group;
 }
 
@@ -797,10 +798,40 @@ export function GraphView() {
           </div>
         `)
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => link.isMerge ? 2.2 : 1.4)
+        .linkWidth((link: any) => {
+          const srcId = typeof link.source === "object" ? link.source.id : link.source;
+          const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+          const activeId = hoveredNode()?.id || selectedHash();
+          const isHigh = activeId && (srcId === activeId || tgtId === activeId);
+          return isHigh ? 4.0 : (link.isMerge ? 2.2 : 1.4);
+        })
         .linkDirectionalArrowLength(4.5)
         .linkDirectionalArrowRelPos(0.85)
-        .linkColor((link: any) => link.color)
+        .linkColor((link: any) => {
+          const srcId = typeof link.source === "object" ? link.source.id : link.source;
+          const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+          const activeId = hoveredNode()?.id || selectedHash();
+          if (activeId) {
+            if (srcId === activeId || tgtId === activeId) return "#38bdf8";
+            return "rgba(100, 116, 139, 0.2)";
+          }
+          return link.color;
+        })
+        .linkDirectionalParticles((link: any) => {
+          const srcId = typeof link.source === "object" ? link.source.id : link.source;
+          const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+          const activeId = hoveredNode()?.id || selectedHash();
+          if (activeId && (srcId === activeId || tgtId === activeId)) return 6;
+          return link.isMerge ? 2 : 0;
+        })
+        .linkDirectionalParticleWidth((link: any) => {
+          const srcId = typeof link.source === "object" ? link.source.id : link.source;
+          const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+          const activeId = hoveredNode()?.id || selectedHash();
+          return (activeId && (srcId === activeId || tgtId === activeId)) ? 3.8 : 1.8;
+        })
+        .linkDirectionalParticleSpeed(0.008)
+        .linkDirectionalParticleColor(() => "#38bdf8")
         .backgroundColor("rgba(0,0,0,0)")
         .onNodeHover((node: any) => setHoveredNode(node || null))
         .onNodeClick((node: any) => {
@@ -811,6 +842,21 @@ export function GraphView() {
           setSelectedHash(null);
           ctx.closeCommitDetail();
         });
+
+      // Dynamic distance scaling: nodes scale smoothly with camera distance so they never vanish
+      if (typeof inst.onRenderFramePost === "function") {
+        inst.onRenderFramePost(({ camera, scene }: any) => {
+          if (!camera || !scene) return;
+          const camPos = camera.position;
+          scene.traverse((obj: any) => {
+            if (obj.userData?.isNodeGroup) {
+              const dist = camPos.distanceTo(obj.position);
+              const scale = Math.max(1.0, Math.pow(dist / 140, 0.58));
+              obj.scale.set(scale, scale, scale);
+            }
+          });
+        });
+      }
 
       // Configure OrbitControls for smooth damping and reliable panning
       setTimeout(() => {
@@ -853,21 +899,63 @@ export function GraphView() {
 
       inst
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
-        .linkWidth((link: any) => Math.max(link.isMerge ? 2.2 : 1.4, 0.9 / (inst.zoom() || 1)))
+        .linkWidth((link: any) => {
+          const srcId = typeof link.source === "object" ? link.source.id : link.source;
+          const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+          const activeId = hoveredNode()?.id || selectedHash();
+          const isHigh = activeId && (srcId === activeId || tgtId === activeId);
+
+          const curZoom = inst.zoom() || 1;
+          const minScreenW = (isHigh ? 3.5 : (link.isMerge ? 2.2 : 1.4)) / curZoom;
+          return Math.max(isHigh ? 4.0 : (link.isMerge ? 2.2 : 1.4), minScreenW);
+        })
+        .linkColor((link: any) => {
+          const srcId = typeof link.source === "object" ? link.source.id : link.source;
+          const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+          const activeId = hoveredNode()?.id || selectedHash();
+          if (activeId) {
+            if (srcId === activeId || tgtId === activeId) return "#38bdf8";
+            return "rgba(100, 116, 139, 0.18)";
+          }
+          return link.color;
+        })
+        .onNodeHover((node: any) => setHoveredNode(node || null))
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
           const y = node.y;
           const isBranchEnd = node.isBranchTip || (node.refs && node.refs.length > 0);
+          const activeId = hoveredNode()?.id || selectedHash();
+          const isSelf = activeId === node.id;
+          const isConnected = activeId && (node.parents?.includes(activeId) || (hoveredNode()?.parents?.includes(node.id)));
+          const isHigh = isSelf || isConnected;
+          const isDimmed = activeId && !isHigh;
 
-          // GUARANTEED MINIMUM SCREEN SIZE: Branch ends stay prominent, intermediate nodes stay compact
-          const minScreenRadius = (isBranchEnd ? 5.2 : 3.0) / globalScale;
+          if (isDimmed) {
+            canvasCtx.globalAlpha = 0.30;
+          } else {
+            canvasCtx.globalAlpha = 1.0;
+          }
+
+          // Dynamic screen radius scaling: as globalScale decreases (zoomed out), screen radius dynamically adapts
+          const zoomComp = Math.pow(Math.max(0.005, globalScale), 0.36);
+          const targetScreenR = (isHigh ? 8.5 : (isBranchEnd ? 6.8 : 4.2)) / zoomComp;
           const baseR = Math.sqrt(Math.max(0, node.val || 4)) * 1.6;
+          const minScreenRadius = targetScreenR / globalScale;
           const r = Math.max(baseR, minScreenRadius);
           const laneCol = COLORS[node.lane % COLORS.length];
 
-          // 1. Radiant Glowing Beacon Halo for Branch Ending Nodes
-          if (isBranchEnd) {
-            const beaconRadius = Math.max(r * 2.2, 11 / globalScale);
+          // 1. Highlight Connectivity Beacon Halo
+          if (isHigh) {
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, r * 2.4, 0, 2 * Math.PI, false);
+            canvasCtx.fillStyle = "rgba(56, 189, 248, 0.35)";
+            canvasCtx.fill();
+            canvasCtx.lineWidth = Math.max(2.2 / globalScale, 1.2 / globalScale);
+            canvasCtx.strokeStyle = "#38bdf8";
+            canvasCtx.stroke();
+          } else if (isBranchEnd) {
+            // Radiant glowing beacon halo for branch ends
+            const beaconRadius = Math.max(r * 2.1, 12 / globalScale);
             canvasCtx.beginPath();
             canvasCtx.arc(x, y, beaconRadius, 0, 2 * Math.PI, false);
             canvasCtx.fillStyle = node.color ? `${node.color}33` : "rgba(56, 189, 248, 0.25)";
@@ -880,14 +968,14 @@ export function GraphView() {
           // 2. Node Circle with Saturated Fill
           canvasCtx.beginPath();
           canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
-          canvasCtx.fillStyle = node.color || laneCol;
+          canvasCtx.fillStyle = isHigh ? "#38bdf8" : (node.color || laneCol);
           canvasCtx.fill();
-          canvasCtx.lineWidth = Math.max(isBranchEnd ? 2.5 / globalScale : 1.6 / globalScale, 0.8 / globalScale);
-          canvasCtx.strokeStyle = isBranchEnd ? "#ffffff" : (node.isMerge ? "#38bdf8" : laneCol);
+          canvasCtx.lineWidth = Math.max(isHigh ? 2.8 / globalScale : (isBranchEnd ? 2.5 / globalScale : 1.6 / globalScale), 0.8 / globalScale);
+          canvasCtx.strokeStyle = isHigh ? "#ffffff" : (isBranchEnd ? "#ffffff" : (node.isMerge ? "#38bdf8" : laneCol));
           canvasCtx.stroke();
 
-          // 3. High-Contrast Center Dot on Branch Ends for Instant Visibility
-          if (isBranchEnd) {
+          // 3. High-Contrast Center Dot on Branch Ends & Active Nodes
+          if (isHigh || isBranchEnd) {
             canvasCtx.beginPath();
             canvasCtx.arc(x, y, r * 0.45, 0, 2 * Math.PI, false);
             canvasCtx.fillStyle = "#ffffff";
@@ -929,10 +1017,10 @@ export function GraphView() {
 
               badgeX += badgeW + 4 / globalScale;
             }
-          } else if (node.isBranchTip) {
-            // Unnamed branch tip node
+          } else if (node.isBranchTip || isHigh) {
+            // Branch tip or highlighted node
             canvasCtx.font = `700 ${badgeGraphFontSize}px Space Mono, monospace`;
-            const tipLabel = `Tip: ${node.shortHash}`;
+            const tipLabel = isSelf ? `Active: ${node.shortHash}` : (node.isBranchTip ? `Tip: ${node.shortHash}` : node.shortHash);
             const textWidth = canvasCtx.measureText(tipLabel).width;
             const paddingX = 6 / globalScale;
             const badgeH = badgeGraphFontSize + 6 / globalScale;
@@ -940,7 +1028,7 @@ export function GraphView() {
             const badgeX = x + r + 6 / globalScale;
             const badgeY = y - badgeH / 2;
 
-            canvasCtx.fillStyle = "rgba(15, 23, 42, 0.9)";
+            canvasCtx.fillStyle = "rgba(15, 23, 42, 0.92)";
             canvasCtx.beginPath();
             if (typeof canvasCtx.roundRect === "function") {
               canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 5 / globalScale);
@@ -948,11 +1036,11 @@ export function GraphView() {
               canvasCtx.rect(badgeX, badgeY, badgeW, badgeH);
             }
             canvasCtx.fill();
-            canvasCtx.strokeStyle = node.color || "#38bdf8";
+            canvasCtx.strokeStyle = isHigh ? "#38bdf8" : (node.color || "#38bdf8");
             canvasCtx.lineWidth = 1.5 / globalScale;
             canvasCtx.stroke();
 
-            canvasCtx.fillStyle = "#38bdf8";
+            canvasCtx.fillStyle = isHigh ? "#38bdf8" : "#f8fafc";
             canvasCtx.fillText(tipLabel, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
           } else if (globalScale >= 0.22) {
             // Show commit hash & message snippet with subtle backdrop when zoomed in
@@ -980,6 +1068,8 @@ export function GraphView() {
             canvasCtx.fillStyle = "rgba(255, 255, 255, 0.88)";
             canvasCtx.fillText(shortText, labelX + padX, labelY + labelH - 2.8 / globalScale);
           }
+
+          canvasCtx.globalAlpha = 1.0;
         })
         .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
         .linkDirectionalArrowLength(4.5)
