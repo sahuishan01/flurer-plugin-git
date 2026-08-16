@@ -361,21 +361,38 @@ export function GraphView() {
     if (!node || !forceInstance) return;
     const mode = displayMode();
 
-    if (mode === "3d") {
-      const distance = 42;
+    if (mode === "3d" && forceInstance.camera) {
+      const camera = forceInstance.camera();
+      const controls = forceInstance.controls ? forceInstance.controls() : null;
       const nx = node.x || 0;
       const ny = node.y || 0;
       const nz = node.z || 0;
-      const distRatio = 1 + distance / (Math.hypot(nx, ny, nz) || 1);
+
+      // Calculate camera offset relative to the node, ensuring healthy positive Z in front of graph
+      let offset = new THREE.Vector3(0, 0, 75);
+      if (camera && controls && controls.target) {
+        const curOffset = camera.position.clone().sub(controls.target);
+        if (curOffset.z > 15) {
+          const curDist = curOffset.length();
+          const targetDist = Math.max(50, Math.min(95, curDist));
+          offset = curOffset.normalize().multiplyScalar(targetDist);
+        } else {
+          offset.set(0, 0, 75);
+        }
+      }
+
+      const camX = nx + offset.x;
+      const camY = ny + offset.y;
+      const camZ = nz + offset.z;
 
       forceInstance.cameraPosition(
-        { x: nx * distRatio, y: ny * distRatio + 10, z: nz * distRatio },
+        { x: camX, y: camY, z: camZ },
         { x: nx, y: ny, z: nz },
-        900
+        800
       );
     } else if (mode === "2d") {
       forceInstance.centerAt(node.x, node.y, 750);
-      forceInstance.zoom(3, 750);
+      forceInstance.zoom(2.8, 750);
     }
 
     setSelectedHash(node.hash);
@@ -419,8 +436,15 @@ export function GraphView() {
         if (controls && controls.target) {
           const currentTarget = controls.target.clone();
           const currentCamPos = camera.position.clone();
-          const delta = new THREE.Vector3(cx - currentTarget.x, cy - currentTarget.y, cz - currentTarget.z);
-          const targetCamPos = currentCamPos.clone().add(delta);
+          const curOffset = currentCamPos.clone().sub(currentTarget);
+
+          let offset = curOffset;
+          // Ensure camera stays safely in front of the target in positive Z space
+          if (offset.z < 25) {
+            offset = new THREE.Vector3(0, 0, Math.max(80, curOffset.length() || 100));
+          }
+
+          const targetCamPos = new THREE.Vector3(cx, cy, cz).add(offset);
 
           forceInstance.cameraPosition(
             { x: targetCamPos.x, y: targetCamPos.y, z: targetCamPos.z },
