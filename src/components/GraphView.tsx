@@ -281,30 +281,31 @@ function getBadgeSpriteMaterial(text: string, color: string): THREE.SpriteMateri
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    canvas.width = 320;
-    canvas.height = 72;
+    canvas.width = 512;
+    canvas.height = 112;
 
     ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
     ctx.strokeStyle = color || "#38bdf8";
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(4, 6, canvas.width - 8, canvas.height - 12, 14);
+      ctx.roundRect(6, 8, canvas.width - 12, canvas.height - 16, 22);
     } else {
-      ctx.rect(4, 6, canvas.width - 8, canvas.height - 12);
+      ctx.rect(6, 8, canvas.width - 12, canvas.height - 16);
     }
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = "bold 24px Space Mono, monospace";
-    ctx.fillStyle = color || "#38bdf8";
+    ctx.font = "bold 34px Space Mono, monospace";
+    ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text.length > 22 ? text.slice(0, 22) + "…" : text, canvas.width / 2, canvas.height / 2);
+    const displayText = text.length > 25 ? text.slice(0, 25) + "…" : text;
+    ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
-    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
     spriteMaterialCache.set(key, spriteMaterial);
   }
   return spriteMaterialCache.get(key) || null;
@@ -313,7 +314,7 @@ function getBadgeSpriteMaterial(text: string, color: string): THREE.SpriteMateri
 function createNode3DSprite(node: ForceNode): THREE.Object3D {
   const group = new THREE.Group();
 
-  const radius = Math.max(3, Math.sqrt(Math.max(0, node.val || 4)) * 1.3);
+  const radius = Math.max(3.5, Math.sqrt(Math.max(0, node.val || 4)) * 1.4);
   const mesh = new THREE.Mesh(
     node.isMerge ? sharedOctaGeo : sharedSphereGeo,
     getSharedMaterial(node.color || "#f59e0b")
@@ -328,8 +329,8 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
     const spriteMaterial = getBadgeSpriteMaterial(text, node.color || "#38bdf8");
     if (spriteMaterial) {
       const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.position.set(0, radius + 12, 0);
-      sprite.scale.set(32, 7.5, 1);
+      sprite.position.set(0, radius + 15, 0);
+      sprite.scale.set(54, 13.5, 1);
       group.add(sprite);
     }
   }
@@ -369,16 +370,16 @@ export function GraphView() {
       const ny = node.y || 0;
       const nz = node.z || 0;
 
-      // Calculate camera offset relative to the node, ensuring healthy positive Z in front of graph
-      let offset = new THREE.Vector3(0, 0, 75);
+      // Calculate camera offset relative to the node, zooming in ~20% of current distance
+      let offset = new THREE.Vector3(0, 0, 100);
       if (camera && controls && controls.target) {
         const curOffset = camera.position.clone().sub(controls.target);
         if (curOffset.z > 15) {
           const curDist = curOffset.length();
-          const targetDist = Math.max(50, Math.min(95, curDist));
+          const targetDist = Math.max(65, curDist * 0.80);
           offset = curOffset.normalize().multiplyScalar(targetDist);
         } else {
-          offset.set(0, 0, 75);
+          offset.set(0, 0, Math.max(65, curOffset.length() * 0.80 || 100));
         }
       }
 
@@ -389,11 +390,13 @@ export function GraphView() {
       forceInstance.cameraPosition(
         { x: camX, y: camY, z: camZ },
         { x: nx, y: ny, z: nz },
-        800
+        750
       );
     } else if (mode === "2d") {
+      const curZoom = typeof forceInstance.zoom === "function" ? forceInstance.zoom() : 1;
+      const targetZoom = Math.min(8, Math.max(1, curZoom * 1.25));
       forceInstance.centerAt(node.x, node.y, 750);
-      forceInstance.zoom(2.8, 750);
+      forceInstance.zoom(targetZoom, 750);
     }
 
     setSelectedHash(node.hash);
@@ -577,10 +580,12 @@ export function GraphView() {
           const curCamPos = camera.position.clone();
           const curTarget = controls.target.clone();
           const curOffset = curCamPos.clone().sub(curTarget);
+          const curDist = curOffset.length();
+          const targetDist = Math.max(65, curDist * 0.80);
 
-          let offset = curOffset;
+          let offset = curOffset.normalize().multiplyScalar(targetDist);
           if (offset.z < 25) {
-            offset = new THREE.Vector3(0, 0, Math.max(80, curOffset.length() || 100));
+            offset = new THREE.Vector3(0, 0, Math.max(65, targetDist));
           }
 
           const targetCamPos = hitPoint.clone().add(offset);
@@ -616,8 +621,10 @@ export function GraphView() {
           return;
         }
 
+        const curZoom = typeof forceInstance.zoom === "function" ? forceInstance.zoom() : 1;
+        const targetZoom = Math.min(8, Math.max(1, curZoom * 1.25));
         forceInstance.centerAt(graphCoords.x, graphCoords.y, 700);
-        forceInstance.zoom(2.8, 700);
+        forceInstance.zoom(targetZoom, 700);
         return;
       }
     }
@@ -803,7 +810,7 @@ export function GraphView() {
           const y = node.y;
 
           // GUARANTEED MINIMUM SCREEN SIZE: Nodes never disappear when zoomed out
-          const minScreenRadius = 3.6 / globalScale;
+          const minScreenRadius = 4 / globalScale;
           const baseR = Math.sqrt(Math.max(0, node.val || 4)) * 1.6;
           const r = Math.max(baseR, minScreenRadius);
           const laneCol = COLORS[node.lane % COLORS.length];
@@ -813,15 +820,17 @@ export function GraphView() {
           canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
           canvasCtx.fillStyle = node.color || laneCol;
           canvasCtx.fill();
-          canvasCtx.lineWidth = Math.max(1.8 / globalScale, 0.8 / globalScale);
+          canvasCtx.lineWidth = Math.max(2 / globalScale, 0.8 / globalScale);
           canvasCtx.strokeStyle = node.isMerge ? "#38bdf8" : laneCol;
           canvasCtx.stroke();
 
-          // Render Branch Names & Tag Badges only when close enough for readability
-          if (globalScale >= 0.55 && node.refs && node.refs.length > 0) {
-            const fontSize = Math.max(10 / globalScale, 3);
-            canvasCtx.font = `700 ${fontSize}px Space Mono, monospace`;
-            let badgeX = x + r + 4 / globalScale;
+          // DYNAMIC TEXT SIZING: Screen-constant font size so names are ALWAYS readable even when zoomed out
+          const badgeScreenFontSize = globalScale < 0.4 ? 13 : 11.5;
+          const badgeGraphFontSize = badgeScreenFontSize / globalScale;
+
+          if (node.refs && node.refs.length > 0) {
+            canvasCtx.font = `700 ${badgeGraphFontSize}px Space Mono, monospace`;
+            let badgeX = x + r + 6 / globalScale;
 
             for (let i = 0; i < Math.min(node.refs.length, 3); i++) {
               const ref = node.refs[i];
@@ -829,8 +838,8 @@ export function GraphView() {
               const isHead = ref.includes("HEAD");
               const label = ref.replace("HEAD -> ", "").replace("HEAD, ", "");
               const textWidth = canvasCtx.measureText(label).width;
-              const paddingX = 4 / globalScale;
-              const badgeH = fontSize + 4 / globalScale;
+              const paddingX = 6 / globalScale;
+              const badgeH = badgeGraphFontSize + 6 / globalScale;
               const badgeW = textWidth + paddingX * 2;
               const badgeY = y - badgeH / 2;
 
@@ -838,7 +847,7 @@ export function GraphView() {
               canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.95)" : (isHead ? "rgba(245, 158, 11, 0.95)" : laneCol);
               canvasCtx.beginPath();
               if (typeof canvasCtx.roundRect === "function") {
-                canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 4 / globalScale);
+                canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 5 / globalScale);
               } else {
                 canvasCtx.rect(badgeX, badgeY, badgeW, badgeH);
               }
@@ -846,10 +855,35 @@ export function GraphView() {
 
               // Badge Text
               canvasCtx.fillStyle = "#ffffff";
-              canvasCtx.fillText(label, badgeX + paddingX, badgeY + badgeH - 3 / globalScale);
+              canvasCtx.fillText(label, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
 
-              badgeX += badgeW + 3 / globalScale;
+              badgeX += badgeW + 4 / globalScale;
             }
+          } else if (globalScale >= 0.22) {
+            // Show commit hash & message snippet with subtle backdrop when zoomed out/in
+            const msgScreenFontSize = 10.5;
+            const msgGraphFontSize = msgScreenFontSize / globalScale;
+            canvasCtx.font = `500 ${msgGraphFontSize}px Space Mono, monospace`;
+
+            const shortText = `${node.shortHash} ${node.message?.slice(0, 26) || ""}`;
+            const textWidth = canvasCtx.measureText(shortText).width;
+            const padX = 5 / globalScale;
+            const labelH = msgGraphFontSize + 5 / globalScale;
+            const labelW = textWidth + padX * 2;
+            const labelX = x + r + 5 / globalScale;
+            const labelY = y - labelH / 2;
+
+            canvasCtx.fillStyle = "rgba(15, 23, 42, 0.78)";
+            canvasCtx.beginPath();
+            if (typeof canvasCtx.roundRect === "function") {
+              canvasCtx.roundRect(labelX, labelY, labelW, labelH, 4 / globalScale);
+            } else {
+              canvasCtx.rect(labelX, labelY, labelW, labelH);
+            }
+            canvasCtx.fill();
+
+            canvasCtx.fillStyle = "rgba(255, 255, 255, 0.88)";
+            canvasCtx.fillText(shortText, labelX + padX, labelY + labelH - 2.8 / globalScale);
           }
         })
         .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
