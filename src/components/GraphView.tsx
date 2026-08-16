@@ -354,6 +354,7 @@ export function GraphView() {
   const [viewportH, setViewportH] = createSignal(700);
 
   let graphContainerRef!: HTMLDivElement;
+  let treeContainerRef: HTMLDivElement | undefined;
   let forceInstance: any = null;
 
   function focusOnNode(node: ForceNode) {
@@ -381,10 +382,99 @@ export function GraphView() {
     ctx.showCommitDetail(node.hash);
   }
 
-  function recenterGraph() {
-    if (!forceInstance) return;
-    if (typeof forceInstance.zoomToFit === "function") {
-      forceInstance.zoomToFit(600, 30);
+  function focusVisibleCenter() {
+    const mode = displayMode();
+    if (mode === "3d" && forceInstance && forceInstance.camera) {
+      const camera = forceInstance.camera();
+      if (!camera) return;
+      const frustum = new THREE.Frustum();
+      const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      frustum.setFromProjectionMatrix(matrix);
+
+      const graphData = forceInstance.graphData();
+      const nodes: ForceNode[] = graphData?.nodes || [];
+      const visibleNodes: ForceNode[] = [];
+
+      for (const n of nodes) {
+        if (typeof n.x === "number" && typeof n.y === "number") {
+          const pos = new THREE.Vector3(n.x, n.y, n.z || 0);
+          if (frustum.containsPoint(pos)) {
+            visibleNodes.push(n);
+          }
+        }
+      }
+
+      if (visibleNodes.length > 0) {
+        let sumX = 0, sumY = 0, sumZ = 0;
+        for (const n of visibleNodes) {
+          sumX += n.x!;
+          sumY += n.y!;
+          sumZ += (n.z || 0);
+        }
+        const cx = sumX / visibleNodes.length;
+        const cy = sumY / visibleNodes.length;
+        const cz = sumZ / visibleNodes.length;
+
+        const controls = forceInstance.controls();
+        if (controls && controls.target) {
+          const currentTarget = controls.target.clone();
+          const currentCamPos = camera.position.clone();
+          const delta = new THREE.Vector3(cx - currentTarget.x, cy - currentTarget.y, cz - currentTarget.z);
+          const targetCamPos = currentCamPos.clone().add(delta);
+
+          forceInstance.cameraPosition(
+            { x: targetCamPos.x, y: targetCamPos.y, z: targetCamPos.z },
+            { x: cx, y: cy, z: cz },
+            600
+          );
+        }
+      } else if (typeof forceInstance.zoomToFit === "function") {
+        forceInstance.zoomToFit(600, 30);
+      }
+    } else if (mode === "2d" && forceInstance && typeof forceInstance.screen2GraphCoords === "function") {
+      const container = graphContainerRef;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const topLeft = forceInstance.screen2GraphCoords(0, 0);
+      const bottomRight = forceInstance.screen2GraphCoords(rect.width, rect.height);
+
+      if (topLeft && bottomRight) {
+        const minX = Math.min(topLeft.x, bottomRight.x);
+        const maxX = Math.max(topLeft.x, bottomRight.x);
+        const minY = Math.min(topLeft.y, bottomRight.y);
+        const maxY = Math.max(topLeft.y, bottomRight.y);
+
+        const graphData = forceInstance.graphData();
+        const nodes: ForceNode[] = graphData?.nodes || [];
+        const visibleNodes = nodes.filter((n: any) =>
+          typeof n.x === "number" && typeof n.y === "number" &&
+          n.x >= minX && n.x <= maxX && n.y >= minY && n.y <= maxY
+        );
+
+        if (visibleNodes.length > 0) {
+          let sumX = 0, sumY = 0;
+          for (const n of visibleNodes) {
+            sumX += n.x!;
+            sumY += n.y!;
+          }
+          const cx = sumX / visibleNodes.length;
+          const cy = sumY / visibleNodes.length;
+          forceInstance.centerAt(cx, cy, 600);
+        } else if (typeof forceInstance.zoomToFit === "function") {
+          forceInstance.zoomToFit(600, 30);
+        }
+      }
+    } else if (mode === "tree") {
+      const hash = selectedHash();
+      if (hash && treeContainerRef) {
+        const idx = data().rows.findIndex((r: any) => r.hash === hash);
+        if (idx !== -1) {
+          const targetY = rowY(idx) - viewportH() / 2;
+          treeContainerRef.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+        }
+      } else if (treeContainerRef) {
+        treeContainerRef.scrollTo({ left: 0, behavior: "smooth" });
+      }
     }
   }
 
@@ -406,9 +496,9 @@ export function GraphView() {
         if (node) {
           e.preventDefault();
           focusOnNode(node);
-        } else if (forceInstance) {
+        } else {
           e.preventDefault();
-          recenterGraph();
+          focusVisibleCenter();
         }
       }
     };
@@ -840,8 +930,8 @@ export function GraphView() {
           />
           <Show when={displayMode() !== "tree"}>
             <button
-              onClick={recenterGraph}
-              title="Recenter / Fit Graph (or press 'F')"
+              onClick={focusVisibleCenter}
+              title="Focus Center of Visible Section / Recenter (or press 'F')"
               style={{
                 padding: "6px 10px",
                 "font-size": "11px",
@@ -854,7 +944,7 @@ export function GraphView() {
                 "white-space": "nowrap",
               }}
             >
-              🎯 Fit
+              🎯 Center
             </button>
           </Show>
         </div>
@@ -869,14 +959,14 @@ export function GraphView() {
         <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
           <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.7))", "pointer-events": "none", "font-family": "Space Mono, monospace", background: "rgba(10, 14, 23, 0.8)", padding: "5px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.12)", "box-shadow": "0 4px 12px rgba(0,0,0,0.3)" }}>
-            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Drag • Zoom: Scroll • Focus: Click Node • 'F': Recenter" : "Pan: Drag • Zoom: Scroll • Focus: Click Node • 'F': Recenter"}
+            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Drag • Zoom: Scroll • Focus: Click Node • 'F': Focus Visible Center" : "Pan: Drag • Zoom: Scroll • Focus: Click Node • 'F': Focus Visible Center"}
           </div>
         </div>
       </Show>
 
       {/* Standard Git Tree View */}
       <Show when={displayMode() === "tree" && data().rows.length > 0}>
-        <div onScroll={handleScroll} style={{ flex: 1, width: "100%", overflow: "auto" }}>
+        <div ref={treeContainerRef} onScroll={handleScroll} style={{ flex: 1, width: "100%", overflow: "auto" }}>
           <div class="flurer-git-tree" style={{ width: "100%", "min-width": `calc(${graphW() + 340}px)`, position: "relative", height: `${svgH()}px` }}>
             {/* Legend: lane → branch name */}
             <div class="flurer-git-legend" style={{ position: "absolute", left: 0, top: 0, width: "100%", height: `${LEGEND_H}px`, display: "flex", "align-items": "center", gap: "8px", padding: `0 14px 0 ${laneW() + 10}px`, "box-sizing": "border-box", overflow: "hidden", "border-bottom": "1px solid var(--border-subtle, rgba(255,255,255,0.06))" }}>
