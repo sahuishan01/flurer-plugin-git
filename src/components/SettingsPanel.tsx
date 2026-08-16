@@ -4,6 +4,8 @@ import {
   setGraphPanSpeed, getGraphPanSpeed,
   setGraphZoomSpeed, getGraphZoomSpeed,
   setGraphRotateSpeed, getGraphRotateSpeed,
+  setGraphFocusZoomStep, getGraphFocusZoomStep,
+  setGraphFocusTransitionTime, getGraphFocusTransitionTime,
 } from "../utils";
 
 const S = {
@@ -75,6 +77,12 @@ export function SettingsPanel(props: any) {
   const initialRotate = props.pluginSettings?.graphRotateSpeed ?? getGraphRotateSpeed();
   if (initialRotate !== getGraphRotateSpeed()) setGraphRotateSpeed(initialRotate);
 
+  const initialFocusStep = props.pluginSettings?.graphFocusZoomStep ?? getGraphFocusZoomStep();
+  if (initialFocusStep !== getGraphFocusZoomStep()) setGraphFocusZoomStep(initialFocusStep);
+
+  const initialFocusTime = props.pluginSettings?.graphFocusTransitionTime ?? getGraphFocusTransitionTime();
+  if (initialFocusTime !== getGraphFocusTransitionTime()) setGraphFocusTransitionTime(initialFocusTime);
+
   function syncAll() {
     props.onPluginSettingsChange?.({
       surfaceOpacity: getSurfaceOpacity(),
@@ -82,6 +90,8 @@ export function SettingsPanel(props: any) {
       graphPanSpeed: getGraphPanSpeed(),
       graphZoomSpeed: getGraphZoomSpeed(),
       graphRotateSpeed: getGraphRotateSpeed(),
+      graphFocusZoomStep: getGraphFocusZoomStep(),
+      graphFocusTransitionTime: getGraphFocusTransitionTime(),
     });
   }
 
@@ -112,6 +122,18 @@ export function SettingsPanel(props: any) {
   function onRotateChange(e: Event) {
     const val = parseFloat((e.target as HTMLInputElement).value);
     setGraphRotateSpeed(val);
+    syncAll();
+  }
+
+  function onFocusStepChange(e: Event) {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    setGraphFocusZoomStep(val);
+    syncAll();
+  }
+
+  function onFocusTimeChange(e: Event) {
+    const val = parseInt((e.target as HTMLInputElement).value, 10);
+    setGraphFocusTransitionTime(val);
     syncAll();
   }
 
@@ -170,6 +192,44 @@ export function SettingsPanel(props: any) {
       </div>
       <div style={S.hint}>
         Controls 3D camera rotation speed when dragging.
+      </div>
+
+      <div style={S.header}>
+        🎯 Focus & Framing Behavior
+      </div>
+
+      <label style={S.label}>Focus Zoom Step (Distance Delta)</label>
+      <div style={S.row}>
+        <input
+          type="range"
+          min="0.05"
+          max="0.50"
+          step="0.05"
+          value={getGraphFocusZoomStep()}
+          onInput={onFocusStepChange}
+          style={S.slider}
+        />
+        <span style={S.value}>{Math.round(getGraphFocusZoomStep() * 100)}%</span>
+      </div>
+      <div style={S.hint}>
+        Percentage of camera distance zoomed in per [F] focus action (e.g. 20% zooms in 1/5 closer).
+      </div>
+
+      <label style={S.label}>Focus Camera Transition Time</label>
+      <div style={S.row}>
+        <input
+          type="range"
+          min="200"
+          max="1500"
+          step="50"
+          value={getGraphFocusTransitionTime()}
+          onInput={onFocusTimeChange}
+          style={S.slider}
+        />
+        <span style={S.value}>{getGraphFocusTransitionTime()}ms</span>
+      </div>
+      <div style={S.hint}>
+        Smooth camera interpolation duration during [F] focus, branch framing, and search selection.
       </div>
 
       <div style={S.header}>

@@ -41,6 +41,12 @@ const [_graphZoomSpeed, _setGraphZoomSpeed] = createRoot(() =>
 const [_graphRotateSpeed, _setGraphRotateSpeed] = createRoot(() =>
   createSignal(typeof _initialSettings.graphRotateSpeed === "number" ? _initialSettings.graphRotateSpeed : 1.0)
 );
+const [_graphFocusZoomStep, _setGraphFocusZoomStep] = createRoot(() =>
+  createSignal(typeof _initialSettings.graphFocusZoomStep === "number" ? _initialSettings.graphFocusZoomStep : 0.20)
+);
+const [_graphFocusTransitionTime, _setGraphFocusTransitionTime] = createRoot(() =>
+  createSignal(typeof _initialSettings.graphFocusTransitionTime === "number" ? _initialSettings.graphFocusTransitionTime : 650)
+);
 
 /** Override the surface tint opacity (0–1). Passed via plugin settings. */
 export function setSurfaceOpacity(opacity: number) {
@@ -95,6 +101,28 @@ export function setGraphRotateSpeed(speed: number) {
 /** Get current graph 3D rotation sensitivity multiplier. */
 export function getGraphRotateSpeed(): number {
   return _graphRotateSpeed();
+}
+
+/** Override graph focus zoom step ratio (0.05–0.60, default 0.20 for 20% zoom-in). */
+export function setGraphFocusZoomStep(step: number) {
+  _setGraphFocusZoomStep(Math.max(0.05, Math.min(0.60, step)));
+  savePluginSettings({ graphFocusZoomStep: step });
+}
+
+/** Get current graph focus zoom step ratio. */
+export function getGraphFocusZoomStep(): number {
+  return _graphFocusZoomStep();
+}
+
+/** Override graph focus transition time in milliseconds (200–2000ms, default 650ms). */
+export function setGraphFocusTransitionTime(ms: number) {
+  _setGraphFocusTransitionTime(Math.max(200, Math.min(2000, ms)));
+  savePluginSettings({ graphFocusTransitionTime: ms });
+}
+
+/** Get current graph focus transition time in milliseconds. */
+export function getGraphFocusTransitionTime(): number {
+  return _graphFocusTransitionTime();
 }
 
 /** Detect whether Flurer's background is light or dark, and cache its hex. */

@@ -3,7 +3,7 @@ import ForceGraph2D from "force-graph";
 import ForceGraph3D from "3d-force-graph";
 import * as THREE from "three";
 import { useGit } from "../context";
-import { formatTimestamp, getGraphPanSpeed, getGraphZoomSpeed, getGraphRotateSpeed } from "../utils";
+import { formatTimestamp, getGraphPanSpeed, getGraphZoomSpeed, getGraphRotateSpeed, getGraphFocusZoomStep, getGraphFocusTransitionTime } from "../utils";
 import type { GitGraphEntry } from "../types";
 import { EmptyState, Card, Button, CloseIcon, CommitContextMenu } from "./shared";
 import { S } from "../styles";
@@ -409,9 +409,11 @@ export function GraphView() {
   let forceInstance: any = null;
   let mousePos: { x: number; y: number; inContainer: boolean } = { x: 0, y: 0, inContainer: false };
 
-  function focusOnNode(node: ForceNode) {
+  function focusOnNode(node: ForceNode, zoomRatio?: number, customDuration?: number) {
     if (!node || !forceInstance) return;
     const mode = displayMode();
+    const duration = customDuration ?? getGraphFocusTransitionTime();
+    const zoomStep = zoomRatio ?? getGraphFocusZoomStep();
 
     if (mode === "3d" && forceInstance.camera) {
       const camera = forceInstance.camera();
@@ -420,16 +422,16 @@ export function GraphView() {
       const ny = node.y || 0;
       const nz = node.z || 0;
 
-      // Calculate camera offset relative to the node, zooming in ~20% of current distance
+      // Calculate camera offset relative to the node, zooming in by configured zoomStep
       let offset = new THREE.Vector3(0, 0, 100);
       if (camera && controls && controls.target) {
         const curOffset = camera.position.clone().sub(controls.target);
         if (curOffset.z > 15) {
           const curDist = curOffset.length();
-          const targetDist = Math.max(65, curDist * 0.80);
+          const targetDist = Math.max(55, curDist * (1.0 - zoomStep));
           offset = curOffset.normalize().multiplyScalar(targetDist);
         } else {
-          offset.set(0, 0, Math.max(65, curOffset.length() * 0.80 || 100));
+          offset.set(0, 0, Math.max(65, (curOffset.length() || 100) * (1.0 - zoomStep)));
         }
       }
 
@@ -440,21 +442,122 @@ export function GraphView() {
       forceInstance.cameraPosition(
         { x: camX, y: camY, z: camZ },
         { x: nx, y: ny, z: nz },
-        750
+        duration
       );
     } else if (mode === "2d") {
       const curZoom = typeof forceInstance.zoom === "function" ? forceInstance.zoom() : 1;
-      const targetZoom = Math.min(8, Math.max(1, curZoom * 1.25));
-      forceInstance.centerAt(node.x, node.y, 750);
-      forceInstance.zoom(targetZoom, 750);
+      const targetZoom = Math.min(10, Math.max(0.2, curZoom * (1.0 + zoomStep * 1.5)));
+      forceInstance.centerAt(node.x, node.y, duration);
+      forceInstance.zoom(targetZoom, duration);
     }
 
     setSelectedHash(node.hash);
     ctx.showCommitDetail(node.hash);
   }
 
+  function focusBranch(branchIdentifier: number | string) {
+    const mode = displayMode();
+    const duration = getGraphFocusTransitionTime();
+
+    if (mode === "tree") {
+      const idx = data().rows.findIndex((r: any) =>
+        typeof branchIdentifier === "number"
+          ? r.lane === branchIdentifier
+          : (r.refs && r.refs.some((ref: string) => ref.toLowerCase().includes(String(branchIdentifier).toLowerCase())))
+      );
+      if (idx !== -1 && treeContainerRef) {
+        const targetY = rowY(idx) - viewportH() / 2;
+        treeContainerRef.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+        setSelectedHash(data().rows[idx].hash);
+        ctx.showCommitDetail(data().rows[idx].hash);
+      }
+      return;
+    }
+
+    if (!forceInstance) return;
+    const graphData = forceInstance.graphData();
+    const nodes: ForceNode[] = graphData?.nodes || [];
+    const branchNodes = nodes.filter((n) => {
+      if (typeof branchIdentifier === "number") {
+        return n.lane === branchIdentifier;
+      }
+      const str = String(branchIdentifier).toLowerCase();
+      return (
+        n.refs?.some((ref) => ref.toLowerCase().includes(str)) ||
+        (data().laneLabels[n.lane] && data().laneLabels[n.lane]?.toLowerCase().includes(str))
+      );
+    });
+
+    if (branchNodes.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
+    branchNodes.forEach((n) => {
+      const x = n.x || 0;
+      const y = n.y || 0;
+      const z = n.z || 0;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    });
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const spanX = Math.max(40, maxX - minX);
+    const spanY = Math.max(40, maxY - minY);
+    const spanZ = Math.max(10, maxZ - minZ);
+    const radius = Math.hypot(spanX, spanY, spanZ) / 2;
+
+    if (mode === "3d" && forceInstance.camera) {
+      const camera = forceInstance.camera();
+      const fov = (((camera?.fov || 50)) * Math.PI) / 180;
+      const frameDist = Math.max(85, (radius / Math.tan(fov / 2)) * 1.30);
+
+      forceInstance.cameraPosition(
+        { x: cx, y: cy, z: cz + frameDist },
+        { x: cx, y: cy, z: cz },
+        duration
+      );
+    } else if (mode === "2d") {
+      const container = graphContainerRef;
+      const w = container ? container.clientWidth : 800;
+      const h = container ? container.clientHeight : 600;
+      const targetZoom = Math.min(4, Math.max(0.02, Math.min(w / (spanX + 160), h / (spanY + 160))));
+
+      forceInstance.centerAt(cx, cy, duration);
+      forceInstance.zoom(targetZoom, duration);
+    }
+
+    const tipNode = branchNodes.find((n) => n.isBranchTip) || branchNodes[0];
+    if (tipNode) {
+      setSelectedHash(tipNode.hash);
+      ctx.showCommitDetail(tipNode.hash);
+    }
+  }
+
+  function resetToFit() {
+    const mode = displayMode();
+    const duration = getGraphFocusTransitionTime();
+
+    if (mode === "tree") {
+      if (treeContainerRef) {
+        treeContainerRef.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }
+    } else if (forceInstance && typeof forceInstance.zoomToFit === "function") {
+      forceInstance.zoomToFit(duration, 45);
+    }
+  }
+
   function focusVisibleCenter() {
     const mode = displayMode();
+    const duration = getGraphFocusTransitionTime();
+
     if (mode === "3d" && forceInstance && forceInstance.camera) {
       const camera = forceInstance.camera();
       if (!camera) return;
@@ -503,11 +606,11 @@ export function GraphView() {
           forceInstance.cameraPosition(
             { x: targetCamPos.x, y: targetCamPos.y, z: targetCamPos.z },
             { x: cx, y: cy, z: cz },
-            600
+            duration
           );
         }
       } else if (typeof forceInstance.zoomToFit === "function") {
-        forceInstance.zoomToFit(600, 30);
+        forceInstance.zoomToFit(duration, 35);
       }
     } else if (mode === "2d" && forceInstance && typeof forceInstance.screen2GraphCoords === "function") {
       const container = graphContainerRef;
@@ -537,9 +640,9 @@ export function GraphView() {
           }
           const cx = sumX / visibleNodes.length;
           const cy = sumY / visibleNodes.length;
-          forceInstance.centerAt(cx, cy, 600);
+          forceInstance.centerAt(cx, cy, duration);
         } else if (typeof forceInstance.zoomToFit === "function") {
-          forceInstance.zoomToFit(600, 30);
+          forceInstance.zoomToFit(duration, 35);
         }
       }
     } else if (mode === "tree") {
@@ -565,6 +668,8 @@ export function GraphView() {
 
     const mode = displayMode();
     const container = graphContainerRef;
+    const duration = getGraphFocusTransitionTime();
+    const zoomStep = getGraphFocusZoomStep();
 
     if (mode === "3d" && forceInstance && forceInstance.camera && container && mousePos.inContainer) {
       const camera = forceInstance.camera();
@@ -631,7 +736,7 @@ export function GraphView() {
           const curTarget = controls.target.clone();
           const curOffset = curCamPos.clone().sub(curTarget);
           const curDist = curOffset.length();
-          const targetDist = Math.max(65, curDist * 0.80);
+          const targetDist = Math.max(60, curDist * (1.0 - zoomStep));
 
           let offset = curOffset.normalize().multiplyScalar(targetDist);
           if (offset.z < 25) {
@@ -642,7 +747,7 @@ export function GraphView() {
           forceInstance.cameraPosition(
             { x: targetCamPos.x, y: targetCamPos.y, z: targetCamPos.z },
             { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
-            700
+            duration
           );
           return;
         }
@@ -654,7 +759,7 @@ export function GraphView() {
         const nodes: ForceNode[] = graphData?.nodes || [];
 
         let closestNode: ForceNode | null = null;
-        let minDist = 40;
+        let minDist = 45;
 
         for (const n of nodes) {
           if (typeof n.x === "number" && typeof n.y === "number") {
@@ -672,9 +777,9 @@ export function GraphView() {
         }
 
         const curZoom = typeof forceInstance.zoom === "function" ? forceInstance.zoom() : 1;
-        const targetZoom = Math.min(8, Math.max(1, curZoom * 1.25));
-        forceInstance.centerAt(graphCoords.x, graphCoords.y, 700);
-        forceInstance.zoom(targetZoom, 700);
+        const targetZoom = Math.min(10, Math.max(0.2, curZoom * (1.0 + zoomStep * 1.5)));
+        forceInstance.centerAt(graphCoords.x, graphCoords.y, duration);
+        forceInstance.zoom(targetZoom, duration);
         return;
       }
     }
@@ -712,20 +817,47 @@ export function GraphView() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "f" || e.key === "F") {
-        const tag = (document.activeElement?.tagName || "").toUpperCase();
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const tag = (document.activeElement?.tagName || "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
 
+      if (e.key === "f" || e.key === "F") {
         e.preventDefault();
-        focusAtCursor();
+        if (e.shiftKey) {
+          const hNode = hoveredNode();
+          const sHash = selectedHash();
+          const targetNode = hNode || (sHash ? data().rows.find((r: any) => r.hash === sHash) : null);
+          if (targetNode) {
+            focusBranch(targetNode.lane);
+          } else {
+            focusBranch(0);
+          }
+        } else {
+          focusAtCursor();
+        }
+      } else if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        resetToFit();
+      } else if (e.key === "Escape") {
+        setSelectedHash(null);
+        ctx.closeCommitDetail();
+      }
+    };
+
+    const handleDblClick = (e: MouseEvent) => {
+      const tag = (document.activeElement?.tagName || "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (graphContainerRef && graphContainerRef.contains(e.target as Node)) {
+        resetToFit();
       }
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("dblclick", handleDblClick);
     onCleanup(() => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("dblclick", handleDblClick);
     });
   });
 
@@ -1228,6 +1360,37 @@ export function GraphView() {
     return d;
   };
 
+  function handleSearchKeyDown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      const q = searchQuery().trim().toLowerCase();
+      if (!q) return;
+      const entries = ctx.graph();
+      const match = entries.find((r) =>
+        r.hash.toLowerCase().includes(q) ||
+        r.message.toLowerCase().includes(q) ||
+        r.author.toLowerCase().includes(q) ||
+        r.refs.some((ref) => ref.toLowerCase().includes(q))
+      );
+      if (match) {
+        if (displayMode() === "tree") {
+          const idx = data().rows.findIndex((r: any) => r.hash === match.hash);
+          if (idx !== -1 && treeContainerRef) {
+            const targetY = rowY(idx) - viewportH() / 2;
+            treeContainerRef.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+            setSelectedHash(match.hash);
+            ctx.showCommitDetail(match.hash);
+          }
+        } else if (forceInstance) {
+          const graphData = forceInstance.graphData();
+          const n = graphData?.nodes?.find((item: any) => item.hash === match.hash);
+          if (n) {
+            focusOnNode(n);
+          }
+        }
+      }
+    }
+  }
+
   return (
     <div style={{ display: "flex", "flex-direction": "column", height: "100%", width: "100%", overflow: "hidden", padding: "16px 20px", "box-sizing": "border-box" }}>
       {/* Dynamic Graph Toolbar */}
@@ -1293,40 +1456,58 @@ export function GraphView() {
         </div>
 
         {/* Filter Input & Controls */}
-        <div style={{ display: "flex", "align-items": "center", gap: "8px", flex: 1, "max-width": "360px" }}>
+        <div style={{ display: "flex", "align-items": "center", gap: "8px", flex: 1, "max-width": "500px", "justify-content": "flex-end" }}>
           <input
             type="text"
-            placeholder="🔍 Search commits, authors, hashes..."
+            placeholder="🔍 Search commits, branches (Enter to focus)..."
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={handleSearchKeyDown}
             style={{
-              width: "100%",
+              flex: 1,
+              "min-width": "180px",
               padding: "6px 12px",
               "font-size": "12px",
               "border-radius": "6px",
               border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
-              background: "var(--input-bg, rgba(0,0,0,0.2))",
+              background: "var(--input-bg, rgba(0,0,0,0.25))",
               color: "var(--text-primary, #fff)",
               outline: "none",
             }}
           />
           <Show when={displayMode() !== "tree"}>
             <button
-              onClick={focusVisibleCenter}
-              title="Focus Center of Visible Section / Recenter (or press 'F')"
-              style={{
-                padding: "6px 10px",
-                "font-size": "11px",
-                "font-weight": 600,
-                "border-radius": "6px",
-                border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
-                background: "var(--control-bg, rgba(255,255,255,0.06))",
-                color: "var(--text-primary, #fff)",
-                cursor: "pointer",
-                "white-space": "nowrap",
-              }}
+              onClick={focusAtCursor}
+              title="Focus Target Node / Cursor Point (Key: 'F')"
+              class="flurer-git-modebtn flurer-git-modebtn-inactive"
+              style={{ padding: "5px 9px", "font-size": "11px", display: "inline-flex", "align-items": "center", gap: "4px", "white-space": "nowrap" }}
             >
-              🎯 Center
+              🎯 Focus <span style={{ opacity: 0.6, "font-size": "10px", "font-family": "Space Mono, monospace" }}>[F]</span>
+            </button>
+            <button
+              onClick={() => {
+                const hNode = hoveredNode();
+                const sHash = selectedHash();
+                const targetNode = hNode || (sHash ? data().rows.find((r: any) => r.hash === sHash) : null);
+                if (targetNode) {
+                  focusBranch(targetNode.lane);
+                } else {
+                  focusBranch(0);
+                }
+              }}
+              title="Frame Active / Selected Branch (Key: 'Shift + F')"
+              class="flurer-git-modebtn flurer-git-modebtn-inactive"
+              style={{ padding: "5px 9px", "font-size": "11px", display: "inline-flex", "align-items": "center", gap: "4px", "white-space": "nowrap" }}
+            >
+              🌿 Branch <span style={{ opacity: 0.6, "font-size": "10px", "font-family": "Space Mono, monospace" }}>[⇧F]</span>
+            </button>
+            <button
+              onClick={resetToFit}
+              title="Reset & Frame Full Graph (Key: 'Space' or Dbl-Click)"
+              class="flurer-git-modebtn flurer-git-modebtn-inactive"
+              style={{ padding: "5px 9px", "font-size": "11px", display: "inline-flex", "align-items": "center", gap: "4px", "white-space": "nowrap" }}
+            >
+              🔍 Fit <span style={{ opacity: 0.6, "font-size": "10px", "font-family": "Space Mono, monospace" }}>[Space]</span>
             </button>
           </Show>
         </div>
@@ -1339,9 +1520,83 @@ export function GraphView() {
       {/* Force-directed Interactive 2D/3D Container */}
       <Show when={displayMode() !== "tree" && ctx.graph().length > 0}>
         <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
+          {/* Top Floating Branch Chips Bar */}
+          <Show when={data().laneLabels.some(Boolean)}>
+            <div style={{
+              position: "absolute",
+              top: "10px",
+              left: "14px",
+              "z-index": 10,
+              display: "flex",
+              "align-items": "center",
+              gap: "6px",
+              "flex-wrap": "wrap",
+              "max-width": "calc(100% - 28px)",
+              "pointer-events": "auto",
+            }}>
+              <For each={data().laneLabels}>
+                {(label, idx) => (
+                  <Show when={label}>
+                    <span
+                      class="flurer-git-lanechip"
+                      onClick={() => focusBranch(idx())}
+                      title={`Click to focus & frame branch: ${label}`}
+                      style={{
+                        display: "inline-flex",
+                        "align-items": "center",
+                        gap: "6px",
+                        padding: "3px 10px",
+                        "border-radius": "999px",
+                        "font-size": "10.5px",
+                        "font-weight": 600,
+                        "font-family": "Space Mono, monospace",
+                        background: "rgba(15, 23, 42, 0.82)",
+                        "backdrop-filter": "blur(8px)",
+                        border: `1px solid ${lighten(laneColor(idx()), 0.45)}`,
+                        color: laneColor(idx()),
+                        "white-space": "nowrap",
+                        cursor: "pointer",
+                        "box-shadow": "0 2px 8px rgba(0,0,0,0.3)",
+                      }}
+                    >
+                      <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: laneColor(idx()), display: "inline-block", "flex-shrink": 0 }} />
+                      {label}
+                    </span>
+                  </Show>
+                )}
+              </For>
+            </div>
+          </Show>
+
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
-          <div style={{ position: "absolute", bottom: "10px", left: "14px", "font-size": "11px", color: "var(--text-secondary, rgba(255,255,255,0.7))", "pointer-events": "none", "font-family": "Space Mono, monospace", background: "rgba(10, 14, 23, 0.8)", padding: "5px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.12)", "box-shadow": "0 4px 12px rgba(0,0,0,0.3)" }}>
-            {displayMode() === "3d" ? "Pan: Right Click Drag • Rotate: Drag • Zoom: Scroll • Focus: Click Node • 'F': Focus Visible Center" : "Pan: Drag • Zoom: Scroll • Focus: Click Node • 'F': Focus Visible Center"}
+
+          {/* Bottom Modern Glass HUD Pill */}
+          <div style={{
+            position: "absolute",
+            bottom: "10px",
+            left: "14px",
+            display: "flex",
+            "align-items": "center",
+            gap: "10px",
+            "font-size": "11px",
+            color: "var(--text-secondary, rgba(255,255,255,0.75))",
+            "font-family": "Space Mono, monospace",
+            background: "rgba(10, 14, 23, 0.85)",
+            "backdrop-filter": "blur(12px)",
+            padding: "5px 12px",
+            "border-radius": "6px",
+            border: "1px solid rgba(255,255,255,0.12)",
+            "box-shadow": "0 4px 14px rgba(0,0,0,0.4)",
+            "pointer-events": "none",
+            "user-select": "none",
+          }}>
+            <span><strong style={{ color: "#38bdf8" }}>[F]</strong> Focus</span>
+            <span style={{ opacity: 0.35 }}>•</span>
+            <span><strong style={{ color: "#38bdf8" }}>[⇧F]</strong> Branch</span>
+            <span style={{ opacity: 0.35 }}>•</span>
+            <span><strong style={{ color: "#38bdf8" }}>[Space]</strong> Fit</span>
+            <span style={{ opacity: 0.35 }}>•</span>
+            <span>{displayMode() === "3d" ? "Right-Drag: Pan • Drag: Orbit" : "Drag: Pan • Scroll: Zoom"}</span>
           </div>
         </div>
       </Show>
@@ -1355,7 +1610,12 @@ export function GraphView() {
               <For each={data().laneLabels}>
                 {(label, idx) => (
                   <Show when={label}>
-                    <span class="flurer-git-lanechip" style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "3px 10px", "border-radius": "999px", "font-size": "10.5px", "font-weight": 600, "font-family": "Space Mono,monospace", background: lighten(laneColor(idx()), 0.14), border: `1px solid ${lighten(laneColor(idx()), 0.4)}`, color: laneColor(idx()), "white-space": "nowrap", cursor: "default" }}>
+                    <span
+                      class="flurer-git-lanechip"
+                      onClick={() => focusBranch(idx())}
+                      title={`Click to scroll to branch: ${label}`}
+                      style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "3px 10px", "border-radius": "999px", "font-size": "10.5px", "font-weight": 600, "font-family": "Space Mono,monospace", background: lighten(laneColor(idx()), 0.14), border: `1px solid ${lighten(laneColor(idx()), 0.4)}`, color: laneColor(idx()), "white-space": "nowrap", cursor: "pointer" }}
+                    >
                       <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: laneColor(idx()), display: "inline-block", "flex-shrink": 0 }} />
                       {label}
                     </span>
