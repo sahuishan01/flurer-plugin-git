@@ -110,17 +110,18 @@ export function CloseIcon(props: { size?: number }) {
   );
 }
 
-export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: () => void; children: JSX.Element; style?: any }) {
-  const base = { ...S.btn, ...(props.size === "sm" ? { padding: "4px 10px", "font-size": "11px" } : {}) };
+export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: () => void; children: JSX.Element; style?: any; title?: string }) {
+  const base = { ...S.btn, ...(props.size === "sm" ? { padding: "4px 10px", "font-size": "11.5px" } : {}) };
   const variantStyle = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : S.btnSecondary;
   return (
     <button
       type="button"
+      title={props.title}
       style={{
         ...base,
         ...variantStyle,
-        ...(props.variant === "primary" ? { background: buttonBg("#0078d4") } : {}),
-        ...(props.variant === "danger" ? { background: buttonBg("#ef4444") } : {}),
+        opacity: props.disabled ? 0.5 : 1,
+        cursor: props.disabled ? "not-allowed" : "pointer",
         ...props.style,
       }}
       disabled={props.disabled}
@@ -144,15 +145,22 @@ export function TabBar(props: { tabs: { id: string; label: string; count?: numbe
   return (
     <div style={S.tabBar}>
       {props.tabs.map((tab) => (
-        <div
-          style={{ ...S.tab, ...(props.activeTab === tab.id ? S.tabActive : {}) }}
+        <button
+          type="button"
+          style={{
+            ...S.tab,
+            background: props.activeTab === tab.id ? "rgba(56, 189, 248, 0.08)" : "transparent",
+            ...(props.activeTab === tab.id ? S.tabActive : {}),
+            border: "none",
+            "border-bottom": props.activeTab === tab.id ? "2px solid var(--accent-default, #38bdf8)" : "2px solid transparent",
+          }}
           onClick={() => props.onSelect(tab.id)}
         >
           {tab.label}
           <Show when={tab.count !== undefined && tab.count > 0}>
-            <span style={{ ...S.badge, background: "var(--control-bg, rgba(255,255,255,0.12))", color: "var(--text-secondary, #c0c0c0)", padding: "1px 6px", "font-size": "10px" }}>{tab.count}</span>
+            <span style={{ ...S.badge, background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8", padding: "1px 6px", "font-size": "10px", "border-radius": "999px" }}>{tab.count}</span>
           </Show>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -164,6 +172,7 @@ export function Toast() {
     <Show when={ctx.toast()}>
       {(t) => (
         <div style={{ ...S.toast, ...(t().type === "success" ? S.toastSuccess : S.toastError) }}>
+          <span style={{ "margin-right": "8px" }}>{t().type === "success" ? "✓" : "⚠"}</span>
           {t().message}
         </div>
       )}
@@ -175,7 +184,7 @@ export function EmptyState(props: { message: string; children?: JSX.Element }) {
   return (
     <div style={S.emptyState}>
       {props.children}
-      <div style={{ margin: "8px 0 0" }}>{props.message}</div>
+      <div style={{ margin: "10px 0 0", "font-weight": 500 }}>{props.message}</div>
     </div>
   );
 }
@@ -184,7 +193,7 @@ export function Spinner(props: { size?: number }) {
   const size = props.size ?? 20;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
-      <circle cx="12" cy="12" r="10" fill="none" stroke="var(--text-secondary, #888)" stroke-width="2" stroke-dasharray="31.4 31.4" />
+      <circle cx="12" cy="12" r="10" fill="none" stroke="var(--accent-default, #38bdf8)" stroke-width="2.5" stroke-dasharray="31.4 31.4" />
     </svg>
   );
 }
@@ -192,10 +201,10 @@ export function Spinner(props: { size?: number }) {
 export function ConfirmDialog(props: { open: boolean; message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
   return (
     <Show when={props.open}>
-      <div style={{ position: "fixed", inset: "0", background: "rgba(0,0,0,0.6)", "backdrop-filter": "blur(8px)", display: "flex", "align-items": "center", "justify-content": "center", "z-index": 10000 }} onClick={props.onCancel}>
-        <div style={{ ...S.card, "max-width": "360px", width: "90%", padding: "20px" }} onClick={(e) => e.stopPropagation()}>
-          <div style={{ "font-size": "14px", "margin-bottom": "16px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>{props.message}</div>
-          <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
+      <div style={{ position: "fixed", inset: "0", background: "rgba(0,0,0,0.65)", "backdrop-filter": "blur(12px)", "-webkit-backdrop-filter": "blur(12px)", display: "flex", "align-items": "center", "justify-content": "center", "z-index": 10000 }} onClick={props.onCancel}>
+        <div style={{ ...S.card, "max-width": "380px", width: "90%", padding: "24px", "box-shadow": "0 20px 40px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ "font-size": "14.5px", "font-weight": 500, "line-height": "1.5", "margin-bottom": "20px", color: "var(--text-primary, var(--text-color, #f8fafc))" }}>{props.message}</div>
+          <div style={{ display: "flex", gap: "10px", "justify-content": "flex-end" }}>
             <Button onClick={props.onCancel}>Cancel</Button>
             <Button variant={props.danger ? "danger" : "primary"} onClick={props.onConfirm}>Confirm</Button>
           </div>
@@ -272,19 +281,21 @@ export function CommitContextMenu(props: {
       <div
         style={{
           position: "fixed",
-          top: `${Math.min(props.y, window.innerHeight - 240)}px`,
-          left: `${Math.min(props.x, window.innerWidth - 240)}px`,
-          background: "var(--glass-bg, rgba(32, 32, 32, 0.85))",
-          border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.12))",
-          "border-radius": "8px",
+          top: `${Math.min(props.y, window.innerHeight - 260)}px`,
+          left: `${Math.min(props.x, window.innerWidth - 260)}px`,
+          background: "rgba(15, 23, 42, 0.92)",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          "border-radius": "10px",
           padding: "6px",
-          "box-shadow": "var(--glass-shadow, 0 8px 24px rgba(0,0,0,0.5))",
+          "box-shadow": "0 16px 36px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)",
+          "backdrop-filter": "blur(16px)",
+          "-webkit-backdrop-filter": "blur(16px)",
           display: "flex",
           "flex-direction": "column",
           gap: "2px",
-          "min-width": "220px",
+          "min-width": "230px",
           "z-index": 100001,
-          "font-size": "12px",
+          "font-size": "12.5px",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -309,7 +320,7 @@ export function CommitContextMenu(props: {
         >
           📝 Diff with Working Tree
         </button>
-        <div style={{ height: "1px", background: "var(--border-subtle, rgba(255,255,255,0.08))", margin: "4px 0" }} />
+        <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
         <button
           type="button"
           style={menuBtnStyle}
@@ -317,7 +328,7 @@ export function CommitContextMenu(props: {
         >
           ⚔️ {compareLabel()}
         </button>
-        <div style={{ height: "1px", background: "var(--border-subtle, rgba(255,255,255,0.08))", margin: "4px 0" }} />
+        <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
         <button
           type="button"
           style={menuBtnStyle}
@@ -341,16 +352,17 @@ const menuBtnStyle = {
   display: "flex",
   "align-items": "center",
   gap: "8px",
-  padding: "8px 10px",
+  padding: "8px 12px",
   border: "none",
   background: "transparent",
-  color: "var(--text-primary, var(--text-color, #e4e4e7))",
-  "font-size": "12px",
+  color: "var(--text-primary, #f8fafc)",
+  "font-size": "12.5px",
+  "font-weight": "500",
   cursor: "pointer",
-  "border-radius": "4px",
+  "border-radius": "6px",
   "text-align": "left" as const,
   width: "100%",
-  transition: "background 0.15s",
+  transition: "background 0.15s ease, color 0.15s ease",
 };
 
 export function BranchMultiSelect() {
@@ -373,14 +385,15 @@ export function BranchMultiSelect() {
           "align-items": "center",
           gap: "6px",
           padding: "5px 12px",
-          background: "var(--control-bg, rgba(255, 255, 255, 0.08))",
-          border: "var(--control-border, 1px solid rgba(255, 255, 255, 0.12))",
-          "border-radius": "16px",
+          background: "rgba(255, 255, 255, 0.06)",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          "border-radius": "999px",
           "font-size": "12px",
           "font-weight": 600,
-          color: "var(--text-primary, var(--text-color))",
+          color: "var(--text-primary, #f8fafc)",
           cursor: "pointer",
-          transition: "all 0.15s ease",
+          transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
+          "backdrop-filter": "blur(8px)",
         }}
         onClick={() => setOpen(!open())}
         title="Filter graph & history by specific branches"
@@ -405,14 +418,16 @@ export function BranchMultiSelect() {
             position: "absolute",
             top: "calc(100% + 6px)",
             right: 0,
-            background: "var(--glass-bg, rgba(32, 32, 32, 0.92))",
-            border: "var(--glass-border, 1px solid rgba(255, 255, 255, 0.14))",
-            "border-radius": "8px",
+            background: "rgba(15, 23, 42, 0.94)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "10px",
             padding: "8px",
-            "box-shadow": "var(--glass-shadow, 0 12px 32px rgba(0,0,0,0.5))",
-            "min-width": "220px",
-            "max-width": "300px",
-            "max-height": "320px",
+            "box-shadow": "0 16px 36px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)",
+            "backdrop-filter": "blur(16px)",
+            "-webkit-backdrop-filter": "blur(16px)",
+            "min-width": "230px",
+            "max-width": "320px",
+            "max-height": "340px",
             "overflow-y": "auto",
             "z-index": 99991,
             display: "flex",
@@ -421,7 +436,7 @@ export function BranchMultiSelect() {
             "font-size": "12px",
           }}
         >
-          <div style={{ "font-size": "11px", "font-weight": 700, color: "var(--text-secondary, #888)", "text-transform": "uppercase", padding: "4px 8px", "letter-spacing": "0.5px" }}>
+          <div style={{ "font-size": "10.5px", "font-weight": 700, color: "rgba(255, 255, 255, 0.5)", "text-transform": "uppercase", padding: "4px 8px", "letter-spacing": "0.6px", "font-family": "Space Mono, monospace" }}>
             Filter History by Branch
           </div>
 

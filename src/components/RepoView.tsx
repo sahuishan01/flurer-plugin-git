@@ -51,40 +51,44 @@ export function RepoView(props: RepoViewProps) {
 
   return (
     <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box" }}>
-      <div style={{ ...S.section, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0 }}>
+      <div style={{ ...S.section, "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-shrink": 0, background: "rgba(10, 14, 23, 0.65)", "backdrop-filter": "blur(16px)" }}>
         <div style={S.toolbar}>
-          <Button onClick={props.onClose} size="sm" title="Close tab">
+          <Button onClick={props.onClose} size="sm" title="Close repository tab">
             <CloseIcon size={14} />
           </Button>
-          <GitIcon size={22} />
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <h2 style={{ margin: 0, "font-size": "16px", "font-weight": 600, "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>{repoName()}</h2>
-            <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>{ctx.repoPath()}</div>
+          <div style={{ width: "32px", height: "32px", "border-radius": "8px", background: "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.1))", border: "1px solid rgba(56, 189, 248, 0.3)", display: "flex", "align-items": "center", "justify-content": "center", color: "#38bdf8", "flex-shrink": 0 }}>
+            <GitIcon size={18} />
+          </div>
+          <div style={{ flex: 1, overflow: "hidden", "min-width": "160px" }}>
+            <h2 style={{ margin: 0, "font-size": "15px", "font-weight": 700, "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis", color: "var(--text-primary, #f8fafc)", "letter-spacing": "0.2px" }}>{repoName()}</h2>
+            <div style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>{ctx.repoPath()}</div>
           </div>
           <Show when={ctx.status()}>
             {(s) => (
-              <>
+              <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
                 <span style={S.branchBadge}>
-                  <BranchIcon size={14} />
-                  {s().branch}
+                  <BranchIcon size={13} />
+                  <span>{s().branch}</span>
                   <Show when={s().hasRemote}>
-                    <span style={{ opacity: 0.7, "font-weight": 400 }}>↑{s().ahead} ↓{s().behind}</span>
+                    <span style={{ "font-size": "10.5px", "margin-left": "4px", padding: "1px 5px", "border-radius": "4px", background: "rgba(0, 0, 0, 0.25)", color: "#ffffff" }}>
+                      ↑{s().ahead} ↓{s().behind}
+                    </span>
                   </Show>
                 </span>
                 <BranchMultiSelect />
-                <Button variant="secondary" size="sm" onClick={ctx.pull} disabled={ctx.loading()}>
-                  <PullIcon size={14} /> Pull
+                <Button variant="secondary" size="sm" onClick={ctx.pull} disabled={ctx.loading()} title="Pull remote changes">
+                  <PullIcon size={13} /> Pull
                 </Button>
-                <Button variant="primary" size="sm" onClick={ctx.push} disabled={ctx.loading()}>
-                  <PushIcon size={14} /> Push
+                <Button variant="primary" size="sm" onClick={ctx.push} disabled={ctx.loading()} title="Push commits to remote">
+                  <PushIcon size={13} /> Push
                 </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()}>
-                  <FetchIcon size={14} /> Fetch
+                <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()} title="Fetch remote branches">
+                  <FetchIcon size={13} /> Fetch
                 </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.refresh} disabled={ctx.loading()}>
-                  <RefreshIcon size={14} />
+                <Button variant="secondary" size="sm" onClick={ctx.refresh} disabled={ctx.loading()} title="Refresh git status">
+                  <RefreshIcon size={13} />
                 </Button>
-              </>
+              </div>
             )}
           </Show>
         </div>
@@ -92,7 +96,7 @@ export function RepoView(props: RepoViewProps) {
 
       <Show when={ctx.error()}>
         {(e) => (
-          <div style={{ ...S.statusMsg, background: "rgba(239,68,68,0.15)", color: "#f87171", "margin": "8px 24px 0", "font-size": "12px", display: "flex", "align-items": "center", "justify-content": "space-between", gap: "12px", "flex-wrap": "wrap" }}>
+          <div style={{ ...S.statusMsg, background: "rgba(239, 68, 68, 0.15)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.3)", "margin": "8px 24px 0", "font-size": "12px", display: "flex", "align-items": "center", "justify-content": "space-between", gap: "12px", "flex-wrap": "wrap" }}>
             <div style={{ flex: 1, "min-width": "240px", "line-height": "1.4" }}>{e()}</div>
             <Show when={ctx.isDubiousOwnership()}>
               <Button variant="primary" size="sm" onClick={ctx.trustRepository} disabled={ctx.loading()}>
@@ -107,7 +111,7 @@ export function RepoView(props: RepoViewProps) {
 
       <Show when={ctx.loading() && !ctx.status()}>
         <div style={{ ...S.emptyState, "padding-top": "60px" }}>
-          <div style={{ "font-size": "14px", opacity: 0.6 }}>Loading repository…</div>
+          <div style={{ "font-size": "14px", opacity: 0.6 }}>Loading repository status…</div>
         </div>
       </Show>
 

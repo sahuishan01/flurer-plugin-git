@@ -82,42 +82,67 @@ export function HistoryView() {
       <Show when={filteredCommits().length > 0}>
         <Card style={{ padding: 0, width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden" }}>
           <For each={filteredCommits()}>
-            {(c) => (
-              <div
-                style={{
-                  ...S.fileRow,
-                  padding: "10px 14px",
-                  cursor: "pointer",
-                  display: "flex",
-                  "align-items": "center",
-                  gap: "10px",
-                  width: "100%",
-                  "max-width": "100%",
-                  "box-sizing": "border-box",
-                  "min-width": 0,
-                  overflow: "hidden",
-                }}
-                onClick={() => ctx.showCommitDetail(c.hash)}
-                onContextMenu={(e) => handleContextMenu(e, c.hash)}
-              >
-                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "font-size": "12px", "flex-shrink": 0 }}>
-                  {c.hash.slice(0, 7)}
-                </code>
-                <span style={{ "font-size": "13px", color: "var(--text-color)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: 1, "min-width": 0 }}>
-                  {c.message}
-                </span>
-                <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "flex-shrink": 1, "min-width": 0, "text-align": "right", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "200px" }}>
-                  {c.author} · {formatTimestamp(c.timestamp)}
-                </span>
-              </div>
-            )}
+            {(c) => {
+              const initials = c.author ? c.author.slice(0, 2).toUpperCase() : "??";
+              return (
+                <div
+                  style={{
+                    ...S.fileRow,
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "12px",
+                    width: "100%",
+                    "max-width": "100%",
+                    "box-sizing": "border-box",
+                    "min-width": 0,
+                    overflow: "hidden",
+                    border: "none",
+                    "border-bottom": "1px solid rgba(255, 255, 255, 0.05)",
+                  }}
+                  onClick={() => ctx.showCommitDetail(c.hash)}
+                  onContextMenu={(e) => handleContextMenu(e, c.hash)}
+                >
+                  <div
+                    style={{
+                      width: "26px",
+                      height: "26px",
+                      "border-radius": "50%",
+                      background: "linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(129, 140, 248, 0.25))",
+                      border: "1px solid rgba(56, 189, 248, 0.35)",
+                      color: "#38bdf8",
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "center",
+                      "font-size": "10px",
+                      "font-weight": 700,
+                      "font-family": "Space Mono, monospace",
+                      "flex-shrink": 0,
+                    }}
+                    title={c.author}
+                  >
+                    {initials}
+                  </div>
+                  <code style={{ color: "var(--accent-default, #38bdf8)", "font-family": "Space Mono, monospace", "font-size": "11.5px", "font-weight": 600, "flex-shrink": 0, padding: "2px 6px", background: "rgba(56, 189, 248, 0.1)", "border-radius": "4px" }}>
+                    {c.hash.slice(0, 7)}
+                  </code>
+                  <span style={{ "font-size": "13px", "font-weight": 500, color: "var(--text-primary, #f8fafc)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: 1, "min-width": 0 }}>
+                    {c.message}
+                  </span>
+                  <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", "flex-shrink": 0, "text-align": "right" }}>
+                    {formatTimestamp(c.timestamp)}
+                  </span>
+                </div>
+              );
+            }}
           </For>
         </Card>
 
         <Show when={ctx.historyHasMore()}>
-          <div style={{ "text-align": "center", "margin-top": "12px", "padding-bottom": "16px", width: "100%" }}>
+          <div style={{ "text-align": "center", "margin-top": "14px", "padding-bottom": "16px", width: "100%" }}>
             <Button onClick={handleLoadMore} disabled={loadingMore()}>
-              {loadingMore() ? "Loading..." : "Load More"}
+              {loadingMore() ? "Loading..." : "Load More Commits"}
             </Button>
           </div>
         </Show>
@@ -125,26 +150,24 @@ export function HistoryView() {
 
       <Show when={ctx.commitDetail()}>
         <div style={{ "margin-top": "16px", width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden" }}>
-          <Card style={{ width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden" }}>
+          <Card style={{ width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden", border: "1px solid rgba(56, 189, 248, 0.3)" }}>
             <div style={S.cardHeader}>
-              <span>Commit Detail</span>
-              <Button size="sm" onClick={() => {
+              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                <span style={{ "font-weight": 700 }}>Commit Details</span>
+                <code style={{ color: "var(--accent-default, #38bdf8)", "font-family": "Space Mono, monospace", "font-size": "11.5px", padding: "2px 6px", background: "rgba(56, 189, 248, 0.12)", "border-radius": "4px" }}>{ctx.commitDetail()!.hash.slice(0, 8)}</code>
+              </div>
+              <Button size="sm" variant="primary" onClick={() => {
                 const d = ctx.commitDetail();
                 if (d) {
                   ctx.openDiffPrompt(d.hash);
                 }
               }}>View Diff</Button>
             </div>
-            <div style={{ "font-size": "13px", "line-height": "1.5", "word-break": "break-word", overflow: "hidden" }}>
-              <div style={{ "margin-bottom": "4px" }}>
-                <code style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "word-break": "break-all" }}>{ctx.commitDetail()!.hash}</code>
-              </div>
-              <div style={{ "font-weight": 600, "margin-bottom": "8px", "white-space": "pre-wrap", "word-break": "break-word" }}>{ctx.commitDetail()!.message}</div>
-              <div style={{ color: "var(--text-muted, #888)", "font-size": "11px", "word-break": "break-word" }}>
-                {ctx.commitDetail()!.author} &lt;{ctx.commitDetail()!.email}&gt;
-              </div>
-              <div style={{ color: "var(--text-muted, #888)", "font-size": "11px" }}>
-                {formatTimestamp(ctx.commitDetail()!.timestamp)}
+            <div style={{ "font-size": "13px", "line-height": "1.6", "word-break": "break-word", overflow: "hidden" }}>
+              <div style={{ "font-weight": 600, "font-size": "14px", "margin-bottom": "10px", "white-space": "pre-wrap", "word-break": "break-word", color: "var(--text-primary, #f8fafc)" }}>{ctx.commitDetail()!.message}</div>
+              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", "font-size": "11.5px", color: "rgba(255, 255, 255, 0.6)", "font-family": "Space Mono, monospace" }}>
+                <div>Author: <span style={{ color: "var(--text-primary, #f8fafc)" }}>{ctx.commitDetail()!.author}</span> &lt;{ctx.commitDetail()!.email}&gt;</div>
+                <div>Date: <span style={{ color: "var(--text-primary, #f8fafc)" }}>{formatTimestamp(ctx.commitDetail()!.timestamp)}</span></div>
               </div>
             </div>
           </Card>

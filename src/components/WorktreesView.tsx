@@ -31,76 +31,83 @@ export function WorktreesView() {
   }
 
   return (
-    <div style={{ padding: "16px 24px" }}>
+    <div style={{ padding: "20px 24px", display: "flex", "flex-direction": "column", gap: "16px", "max-width": "900px", margin: "0 auto", width: "100%", "box-sizing": "border-box" }}>
       <Card>
         <div style={S.cardHeader}>
-          <span>Worktrees ({ctx.worktrees().length})</span>
+          <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+            <span style={{ "font-weight": 700 }}>Active Worktrees</span>
+            <span style={{ ...S.badge, background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8" }}>{ctx.worktrees().length}</span>
+          </div>
           <Button variant="primary" size="sm" onClick={() => setShowAdd(!showAdd())}>
-            {showAdd() ? "Cancel" : "Add Worktree"}
+            {showAdd() ? "Cancel" : "+ Add Worktree"}
           </Button>
         </div>
 
         <Show when={showAdd()}>
-          <div style={{ display: "flex", "flex-direction": "column", gap: "8px", "margin-bottom": "12px" }}>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "10px", "margin-bottom": "14px", "padding-bottom": "14px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)" }}>
             <input
               type="text"
-              placeholder="Worktree path (e.g. ../my-feature)"
+              placeholder="Worktree directory path (e.g. ../my-feature-worktree)"
               value={addPath()}
               onInput={(e) => setAddPath(e.currentTarget.value)}
               style={S.input}
             />
-            <input
-              type="text"
-              placeholder="Branch name (optional, creates new if needed)"
-              value={addBranch()}
-              onInput={(e) => setAddBranch(e.currentTarget.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              style={S.input}
-            />
-            <Button variant="primary" onClick={handleAdd}>Add</Button>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder="Branch name (optional, will create branch if needed)"
+                value={addBranch()}
+                onInput={(e) => setAddBranch(e.currentTarget.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                style={{ ...S.input, flex: 1 }}
+              />
+              <Button variant="primary" onClick={handleAdd}>Create Worktree</Button>
+            </div>
           </div>
         </Show>
 
         <Show when={ctx.worktrees().length === 0}>
-          <EmptyState message="No worktrees." />
+          <EmptyState message="No worktrees found." />
         </Show>
 
-        <For each={ctx.worktrees()}>
-          {(wt) => {
-            const isMain = wt.path === ctx.repoPath();
-            return (
-              <div style={{ ...S.fileRow, padding: "10px 0", "flex-direction": "column", "align-items": "stretch", gap: "4px" }}>
-                <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-                  <div style={{ flex: 1, overflow: "hidden" }}>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                      <span style={{ "font-weight": 600, "font-size": "13px" }}>{basename(wt.path)}</span>
-                      <Show when={isMain}>
-                        <span style={{ "font-size": "10px", padding: "1px 6px", "border-radius": "4px", background: "var(--accent-color, #f59e0b)", color: "#000", "font-weight": 600 }}>Main</span>
+        <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+          <For each={ctx.worktrees()}>
+            {(wt) => {
+              const isMain = wt.path === ctx.repoPath();
+              return (
+                <div style={{ ...S.fileRow, padding: "12px", background: "rgba(255, 255, 255, 0.02)", "border-radius": "8px", "flex-direction": "column", "align-items": "stretch", gap: "6px" }}>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                    <div style={{ flex: 1, overflow: "hidden" }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                        <span style={{ "font-weight": 700, "font-size": "13.5px", color: "var(--text-primary, #f8fafc)" }}>{basename(wt.path)}</span>
+                        <Show when={isMain}>
+                          <span style={{ "font-size": "10.5px", padding: "1px 6px", "border-radius": "4px", background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8", "font-weight": 700, "font-family": "Space Mono, monospace" }}>MAIN REPO</span>
+                        </Show>
+                        <Show when={wt.locked}>
+                          <span style={{ "font-size": "10.5px", padding: "1px 6px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.2)", color: "#f87171", "font-weight": 600 }}>LOCKED</span>
+                        </Show>
+                      </div>
+                      <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "margin-top": "2px" }}>
+                        {wt.path}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", "flex-shrink": 0, "align-items": "center" }}>
+                      <Show when={wt.branch}>
+                        <span style={{ "font-size": "11.5px", color: "#38bdf8", background: "rgba(56, 189, 248, 0.12)", padding: "2px 8px", "border-radius": "4px", "font-family": "Space Mono, monospace", "font-weight": 600 }}>{wt.branch}</span>
                       </Show>
-                      <Show when={wt.locked}>
-                        <span style={{ "font-size": "10px", padding: "1px 6px", "border-radius": "4px", background: "rgba(239,68,68,0.2)", color: "#f87171" }}>Locked</span>
+                      <Show when={!isMain}>
+                        <Button variant="danger" size="sm" onClick={() => setRemoveTarget(wt.path)}>Remove</Button>
                       </Show>
                     </div>
-                    <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                      {wt.path}
-                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: "6px", "flex-shrink": 0 }}>
-                    <Show when={wt.branch}>
-                      <span style={{ "font-size": "11px", color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace" }}>{wt.branch}</span>
-                    </Show>
-                    <Show when={!isMain}>
-                      <Button variant="danger" size="sm" onClick={() => setRemoveTarget(wt.path)}>Remove</Button>
-                    </Show>
+                  <div style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.35)", "font-family": "Space Mono, monospace" }}>
+                    HEAD: {wt.head?.slice(0, 7) ?? "N/A"}
                   </div>
                 </div>
-                <div style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-family": "Space Mono, monospace" }}>
-                  HEAD: {wt.head?.slice(0, 7) ?? "N/A"}
-                </div>
-              </div>
-            );
-          }}
-        </For>
+              );
+            }}
+          </For>
+        </div>
       </Card>
 
       <ConfirmDialog

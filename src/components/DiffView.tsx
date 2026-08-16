@@ -59,34 +59,34 @@ export function DiffView() {
   });
 
   return (
-    <div style={{ padding: "16px 24px" }}>
-      <div style={{ "margin-bottom": "14px", display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "10px" }}>
-        <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
+    <div style={{ padding: "20px 24px", "max-width": "1200px", margin: "0 auto", width: "100%", "box-sizing": "border-box" }}>
+      <div style={{ "margin-bottom": "16px", display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "12px" }}>
+        <div style={{ display: "flex", "align-items": "center", gap: "10px", "flex-wrap": "wrap" }}>
           <Show when={ctx.selectedDiffFile()}>
-            <Button size="sm" onClick={() => ctx.selectDiffFile(null)}>Back to file list</Button>
+            <Button size="sm" onClick={() => ctx.selectDiffFile(null)}>← Back to File List</Button>
           </Show>
-          <span style={{ "font-size": "13px", "font-family": "Space Mono, monospace", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>
+          <span style={{ "font-size": "13.5px", "font-family": "Space Mono, monospace", "font-weight": 600, color: "var(--text-primary, #f8fafc)" }}>
             {ctx.selectedDiffFile() ?? (commitHash() ? `Commit: ${commitHash()?.slice(0, 7)}` : "All Changes")}
           </span>
-          <span style={{ "font-size": "11px", padding: "2px 8px", "border-radius": "4px", background: ctx.diffMode() === "staged" ? "rgba(34,197,94,0.2)" : ctx.diffMode() === "unstaged" ? "rgba(59,130,246,0.2)" : "rgba(168,85,247,0.2)", color: ctx.diffMode() === "staged" ? "#4ade80" : ctx.diffMode() === "unstaged" ? "#60a5fa" : "#c084fc", "font-weight": 600 }}>
+          <span style={{ "font-size": "11px", padding: "3px 10px", "border-radius": "6px", background: ctx.diffMode() === "staged" ? "rgba(52, 211, 153, 0.18)" : ctx.diffMode() === "unstaged" ? "rgba(96, 165, 250, 0.18)" : "rgba(168, 85, 247, 0.18)", color: ctx.diffMode() === "staged" ? "#34d399" : ctx.diffMode() === "unstaged" ? "#60a5fa" : "#c084fc", border: "1px solid rgba(255,255,255,0.08)", "font-weight": 600, "font-family": "Space Mono, monospace" }}>
             {ctx.diffMode() === "commit" ? "vs Previous Commit" : ctx.diffMode()} {compareTo() ? `(${compareFrom()} ↔ ${compareTo()})` : ""}
           </span>
         </div>
 
         {/* Quick Target Switcher Toolbar for Commit Diffs */}
         <Show when={commitHash()}>
-          <div style={{ display: "inline-flex", background: "var(--control-bg, rgba(255, 255, 255, 0.08))", border: "var(--control-border, 1px solid rgba(255, 255, 255, 0.12))", "border-radius": "8px", padding: "2px", gap: "2px" }}>
+          <div style={{ display: "inline-flex", background: "rgba(10, 14, 23, 0.6)", border: "1px solid rgba(255, 255, 255, 0.12)", "border-radius": "8px", padding: "2px", gap: "2px" }}>
             <button
               type="button"
               style={{
-                padding: "4px 10px",
-                "font-size": "11px",
+                padding: "5px 12px",
+                "font-size": "11.5px",
                 "font-weight": 600,
                 border: "none",
                 "border-radius": "6px",
                 cursor: "pointer",
-                background: ctx.diffMode() === "commit" ? "var(--accent-default, #f59e0b)" : "transparent",
-                color: ctx.diffMode() === "commit" ? "#000" : "var(--text-primary, var(--text-color))",
+                background: ctx.diffMode() === "commit" ? "var(--accent-default, #38bdf8)" : "transparent",
+                color: ctx.diffMode() === "commit" ? "#000" : "var(--text-primary, #f8fafc)",
                 transition: "all 0.15s ease",
               }}
               onClick={() => ctx.loadDiff(".", "commit", commitHash()!)}
@@ -97,14 +97,14 @@ export function DiffView() {
             <button
               type="button"
               style={{
-                padding: "4px 10px",
-                "font-size": "11px",
+                padding: "5px 12px",
+                "font-size": "11.5px",
                 "font-weight": 600,
                 border: "none",
                 "border-radius": "6px",
                 cursor: "pointer",
-                background: compareTo() === "HEAD" ? "var(--accent-default, #f59e0b)" : "transparent",
-                color: compareTo() === "HEAD" ? "#000" : "var(--text-primary, var(--text-color))",
+                background: compareTo() === "HEAD" ? "var(--accent-default, #38bdf8)" : "transparent",
+                color: compareTo() === "HEAD" ? "#000" : "var(--text-primary, #f8fafc)",
                 transition: "all 0.15s ease",
               }}
               onClick={() => ctx.loadDiffWithCurrent(commitHash()!)}
@@ -115,14 +115,14 @@ export function DiffView() {
             <button
               type="button"
               style={{
-                padding: "4px 10px",
-                "font-size": "11px",
+                padding: "5px 12px",
+                "font-size": "11.5px",
                 "font-weight": 600,
                 border: "none",
                 "border-radius": "6px",
                 cursor: "pointer",
-                background: compareTo() === "Working Tree" ? "var(--accent-default, #f59e0b)" : "transparent",
-                color: compareTo() === "Working Tree" ? "#000" : "var(--text-primary, var(--text-color))",
+                background: compareTo() === "Working Tree" ? "var(--accent-default, #38bdf8)" : "transparent",
+                color: compareTo() === "Working Tree" ? "#000" : "var(--text-primary, #f8fafc)",
                 transition: "all 0.15s ease",
               }}
               onClick={() => ctx.loadDiffWithWorkingTree(commitHash()!)}
@@ -138,35 +138,40 @@ export function DiffView() {
       <Show when={!normSelectedFile() && diff()?.files && diff()!.files!.length > 1}>
         <Card style={{ "margin-bottom": "16px" }}>
           <div style={S.cardHeader}>
-            <span>Changed Files ({diff()!.files!.length})</span>
+            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <span style={{ "font-weight": 700 }}>Changed Files</span>
+              <span style={{ ...S.badge, background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8" }}>{diff()!.files!.length}</span>
+            </div>
           </div>
-          <For each={diff()!.files!}>
-            {(f) => (
-              <div
-                style={{ ...S.fileRow, cursor: "pointer", padding: "8px 12px" }}
-                onClick={() => ctx.selectDiffFile(f.newPath || f.oldPath)}
-              >
-                <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                  <span style={{ color: "var(--accent-color, #f59e0b)", "font-family": "Space Mono, monospace", "margin-right": "8px", "font-size": "12px" }}>
-                    {f.hunks.length} {f.hunks.length === 1 ? "hunk" : "hunks"}
+          <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
+            <For each={diff()!.files!}>
+              {(f) => (
+                <div
+                  style={{ ...S.fileRow, cursor: "pointer", padding: "8px 12px", background: "rgba(255, 255, 255, 0.02)" }}
+                  onClick={() => ctx.selectDiffFile(f.newPath || f.oldPath)}
+                >
+                  <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    <span style={{ color: "var(--accent-default, #38bdf8)", "font-family": "Space Mono, monospace", "margin-right": "10px", "font-size": "11.5px", background: "rgba(56, 189, 248, 0.1)", padding: "1px 6px", "border-radius": "4px" }}>
+                      {f.hunks.length} {f.hunks.length === 1 ? "hunk" : "hunks"}
+                    </span>
+                    <span style={{ "font-size": "13px", "font-weight": 500 }}>{f.newPath || f.oldPath}</span>
                   </span>
-                  {f.newPath || f.oldPath}
-                </span>
-                <Button size="sm">Inspect File</Button>
-              </div>
-            )}
-          </For>
+                  <Button size="sm">Inspect File</Button>
+                </div>
+              )}
+            </For>
+          </div>
         </Card>
       </Show>
 
       {/* Render Diff Hunks */}
       <Show when={diff()}>
         <Show when={hasContent()} fallback={
-          <Card style={{ padding: "28px 20px", "text-align": "center" }}>
-            <div style={{ "font-size": "14px", "font-weight": 600, color: "var(--text-primary, var(--text-color))", "margin-bottom": "6px", "text-shadow": "var(--text-shadow)" }}>
+          <Card style={{ padding: "36px 20px", "text-align": "center" }}>
+            <div style={{ "font-size": "15px", "font-weight": 600, color: "var(--text-primary, #f8fafc)", "margin-bottom": "8px" }}>
               No differences found
             </div>
-            <div style={{ "font-size": "12px", color: "var(--text-muted, #888)", "margin-bottom": "16px" }}>
+            <div style={{ "font-size": "12.5px", color: "rgba(255, 255, 255, 0.5)", "margin-bottom": "18px" }}>
               {commitHash()
                 ? `There are no code changes between commit ${commitHash()?.slice(0, 7)} and ${compareTo() || "target"}.`
                 : "No diff changes found for this selection."}
@@ -182,15 +187,15 @@ export function DiffView() {
         }>
           <For each={filesToDisplay()}>
             {(fileItem) => (
-              <Card style={{ padding: 0, overflow: "hidden", "margin-bottom": "16px" }}>
+              <Card style={{ padding: 0, overflow: "hidden", "margin-bottom": "16px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
                 <Show when={fileItem.newPath || fileItem.oldPath}>
-                  <div style={{ padding: "8px 12px", background: surfaceBg(0.08), "font-weight": 600, "font-size": "13px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid var(--border-strong)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-                    <span>📄 {fileItem.newPath || fileItem.oldPath}</span>
-                    <span style={{ "font-size": "11px", color: "var(--text-muted, #888)", "font-weight": 400 }}>{fileItem.binary ? "binary" : `${fileItem.hunks.length} hunks`}</span>
+                  <div style={{ padding: "10px 14px", background: "rgba(10, 14, 23, 0.7)", "font-weight": 600, "font-size": "13px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                    <span style={{ color: "#38bdf8" }}>📄 {fileItem.newPath || fileItem.oldPath}</span>
+                    <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-weight": 400 }}>{fileItem.binary ? "binary" : `${fileItem.hunks.length} hunks`}</span>
                   </div>
                 </Show>
                 <Show when={fileItem.binary}>
-                  <div style={{ padding: "18px 14px", "font-size": "12px", color: "var(--text-muted, #888)", "text-align": "center", "font-family": "Space Mono, monospace" }}>
+                  <div style={{ padding: "24px 16px", "font-size": "12.5px", color: "rgba(255, 255, 255, 0.5)", "text-align": "center", "font-family": "Space Mono, monospace" }}>
                     Binary file — content cannot be previewed. (It differs across the selected targets.)
                   </div>
                 </Show>
@@ -200,8 +205,8 @@ export function DiffView() {
                     let oldLine = hunk.old_start;
                     let newLine = hunk.new_start;
                     return (
-                      <div>
-                        <div style={{ ...S.diffHunkHeader, background: surfaceBg(0.05) }}>
+                      <div style={{ padding: "0 0 4px" }}>
+                        <div style={S.diffHunkHeader}>
                           @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
                         </div>
                         <For each={hunk.lines}>
