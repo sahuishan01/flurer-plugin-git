@@ -92,8 +92,13 @@ export function RepoView(props: RepoViewProps) {
 
       <Show when={ctx.error()}>
         {(e) => (
-          <div style={{ ...S.statusMsg, background: "rgba(239,68,68,0.15)", color: "#f87171", "margin": "8px 24px 0", "font-size": "12px" }}>
-            {e()}
+          <div style={{ ...S.statusMsg, background: "rgba(239,68,68,0.15)", color: "#f87171", "margin": "8px 24px 0", "font-size": "12px", display: "flex", "align-items": "center", "justify-content": "space-between", gap: "12px", "flex-wrap": "wrap" }}>
+            <div style={{ flex: 1, "min-width": "240px", "line-height": "1.4" }}>{e()}</div>
+            <Show when={ctx.isDubiousOwnership()}>
+              <Button variant="primary" size="sm" onClick={ctx.trustRepository} disabled={ctx.loading()}>
+                🛡️ Trust Repository (safe.directory)
+              </Button>
+            </Show>
           </div>
         )}
       </Show>

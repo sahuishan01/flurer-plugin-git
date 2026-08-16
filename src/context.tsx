@@ -80,6 +80,8 @@ interface GitContextValue {
   isAllBranchesSelected: Accessor<boolean>;
   toggleBranchSelection: (branchName: string) => void;
   selectAllBranches: () => void;
+  isDubiousOwnership: Accessor<boolean>;
+  trustRepository: () => Promise<void>;
 }
 
 const GitContext = createContext<GitContextValue>();
@@ -129,6 +131,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
 
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [isDubiousOwnership, setIsDubiousOwnership] = createSignal(false);
   const [toast, setToast] = createSignal<{ message: string; type: "success" | "error" } | null>(null);
   const [shellAvail, setShellAvail] = createSignal(false);
 
@@ -147,6 +150,28 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     toastTimer = setTimeout(() => setToast(null), 3000);
   }
 
+  async function trustRepository() {
+    const p = repoPath();
+    if (!p) return;
+    setLoading(true);
+    try {
+      const ok = await git.addSafeDirectory(p);
+      if (ok) {
+        showToast("Added directory to git safe.directory", "success");
+        setIsDubiousOwnership(false);
+        setError(null);
+        await refresh();
+        await loadGraph();
+      } else {
+        showToast("Failed to add safe.directory", "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function refresh() {
     const path = repoPath();
     if (!path) return;
@@ -155,6 +180,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     try {
       const s = await git.gitRepoStatus(path);
       setStatus(s);
+      setIsDubiousOwnership(false);
       saveRecentRepo(path, s.branch);
       try {
         const c = await git.gitLog(path, 100);
@@ -165,7 +191,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
         const b = await git.gitBranches(path);
         setBranches(b);
       } catch {}
-    } catch (err) {
+    } catch (err: any) {
+      const errMessage = String(err);
+      const isDubious = errMessage.toLowerCase().includes("dubious ownership") || errMessage.toLowerCase().includes("safe.directory");
+      setIsDubiousOwnership(isDubious);
       setError(`Not a git repository: ${err}`);
       setStatus(null);
       setCommits([]);
@@ -177,6 +206,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
 
   function openRepo(path: string) {
     setRepoPath(path);
+    setIsDubiousOwnership(false);
     const saved = getSavedBranchSelection(path);
     setSelectedBranches(saved ?? ["all"]);
     const savedView = getSavedActiveView(path) as GitView | null;
@@ -196,6 +226,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   function backToDashboard() {
     setRepoPath(null);
     setStatus(null);
+    setIsDubiousOwnership(false);
     setBranches([]);
     setCommits([]);
     setGraph([]);
@@ -666,6 +697,7 @@ function toggleBranchSelection(branchName: string) {
     diffPromptHash, openDiffPrompt, closeDiffPrompt,
     loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
     showCommitDetail, closeCommitDetail,
+    isDubiousOwnership, trustRepository,
   };
 
   return <GitContext.Provider value={ctx}>{props.children}</GitContext.Provider>;

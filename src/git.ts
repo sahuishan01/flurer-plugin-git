@@ -17,13 +17,52 @@ function stripAnsi(output: string): string {
   return output.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
 }
 
+export async function addSafeDirectory(repoPath: string): Promise<boolean> {
+  const Command = getShell();
+  if (!Command) return false;
+  try {
+    const normalized = repoPath.replace(/\\/g, "/");
+    await Command.create("git", ["config", "--global", "--add", "safe.directory", normalized]).execute({ windowsHide: true });
+    if (normalized !== repoPath) {
+      await Command.create("git", ["config", "--global", "--add", "safe.directory", repoPath]).execute({ windowsHide: true });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function execGit(repoPath: string, ...args: string[]): Promise<string> {
   const Command = getShell();
   if (Command) {
-    // -c color.ui=never guarantees machine-readable output regardless of the
-    // user's global git config (color.ui=always would otherwise inject ANSI
-    // escape codes that break every diff parser).
-    const result = await Command.create("git", ["-C", repoPath, "-c", "color.ui=never", ...args]).execute({ windowsHide: true });
+    const normalized = repoPath.replace(/\\/g, "/");
+    const run = async () => {
+      // -c color.ui=never guarantees machine-readable output regardless of the
+      // user's global git config.
+      // -c safe.directory=* and -c safe.directory=<normalized> prevents "detected dubious ownership"
+      // when repositories are owned by another user SID or previous Windows installation.
+      return await Command.create("git", [
+        "-C", repoPath,
+        "-c", "color.ui=never",
+        "-c", "safe.directory=*",
+        "-c", `safe.directory=${normalized}`,
+        ...args,
+      ]).execute({ windowsHide: true });
+    };
+
+    let result = await run();
+
+    // Check if dubious ownership was detected and auto-resolve
+    if (result.code !== 0 && result.code !== 1) {
+      const errStr = (result.stderr || "").toLowerCase();
+      if (errStr.includes("dubious ownership") || errStr.includes("safe.directory")) {
+        const added = await addSafeDirectory(repoPath);
+        if (added) {
+          result = await run();
+        }
+      }
+    }
+
     // Exit code 0: success / no diffs
     // Exit code 1: differences found (standard git diff exit code)
     if (result.code !== 0 && result.code !== 1) {
