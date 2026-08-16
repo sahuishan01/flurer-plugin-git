@@ -356,6 +356,7 @@ export function GraphView() {
   let graphContainerRef!: HTMLDivElement;
   let treeContainerRef: HTMLDivElement | undefined;
   let forceInstance: any = null;
+  let mousePos: { x: number; y: number; inContainer: boolean } = { x: 0, y: 0, inContainer: false };
 
   function focusOnNode(node: ForceNode) {
     if (!node || !forceInstance) return;
@@ -502,6 +503,128 @@ export function GraphView() {
     }
   }
 
+  function focusAtCursor() {
+    const node = hoveredNode();
+    if (node) {
+      focusOnNode(node);
+      return;
+    }
+
+    const mode = displayMode();
+    const container = graphContainerRef;
+
+    if (mode === "3d" && forceInstance && forceInstance.camera && container && mousePos.inContainer) {
+      const camera = forceInstance.camera();
+      const controls = forceInstance.controls ? forceInstance.controls() : null;
+      if (camera) {
+        const rect = container.getBoundingClientRect();
+        const ndcX = (mousePos.x / rect.width) * 2 - 1;
+        const ndcY = -(mousePos.y / rect.height) * 2 + 1;
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+
+        const graphData = forceInstance.graphData();
+        const nodes: ForceNode[] = graphData?.nodes || [];
+
+        // 1. Raycast against node objects in scene
+        const scene = forceInstance.scene();
+        if (scene) {
+          const intersects = raycaster.intersectObjects(scene.children, true);
+          for (const hit of intersects) {
+            let obj: any = hit.object;
+            while (obj && obj !== scene) {
+              if (obj.__data && obj.__data.hash) {
+                focusOnNode(obj.__data);
+                return;
+              }
+              obj = obj.parent;
+            }
+          }
+        }
+
+        // 2. Projected 2D screen distance to graph nodes (snap if within 70px)
+        let closestNode: ForceNode | null = null;
+        let minScreenDist = 70;
+
+        for (const n of nodes) {
+          if (typeof n.x === "number" && typeof n.y === "number") {
+            const v = new THREE.Vector3(n.x, n.y, n.z || 0).project(camera);
+            if (v.z < 1) {
+              const screenX = ((v.x + 1) / 2) * rect.width;
+              const screenY = ((-v.y + 1) / 2) * rect.height;
+              const dist = Math.hypot(screenX - mousePos.x, screenY - mousePos.y);
+              if (dist < minScreenDist) {
+                minScreenDist = dist;
+                closestNode = n;
+              }
+            }
+          }
+        }
+
+        if (closestNode) {
+          focusOnNode(closestNode);
+          return;
+        }
+
+        // 3. Raycast onto the graph XY plane at cursor
+        const planeZ = nodes.length > 0 ? (nodes[0].z || 0) : 0;
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -planeZ);
+        const hitPoint = new THREE.Vector3();
+        const hit = raycaster.ray.intersectPlane(plane, hitPoint);
+
+        if (hit && controls && controls.target) {
+          const curCamPos = camera.position.clone();
+          const curTarget = controls.target.clone();
+          const curOffset = curCamPos.clone().sub(curTarget);
+
+          let offset = curOffset;
+          if (offset.z < 25) {
+            offset = new THREE.Vector3(0, 0, Math.max(80, curOffset.length() || 100));
+          }
+
+          const targetCamPos = hitPoint.clone().add(offset);
+          forceInstance.cameraPosition(
+            { x: targetCamPos.x, y: targetCamPos.y, z: targetCamPos.z },
+            { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
+            700
+          );
+          return;
+        }
+      }
+    } else if (mode === "2d" && forceInstance && typeof forceInstance.screen2GraphCoords === "function" && container && mousePos.inContainer) {
+      const graphCoords = forceInstance.screen2GraphCoords(mousePos.x, mousePos.y);
+      if (graphCoords) {
+        const graphData = forceInstance.graphData();
+        const nodes: ForceNode[] = graphData?.nodes || [];
+
+        let closestNode: ForceNode | null = null;
+        let minDist = 40;
+
+        for (const n of nodes) {
+          if (typeof n.x === "number" && typeof n.y === "number") {
+            const d = Math.hypot(n.x - graphCoords.x, n.y - graphCoords.y);
+            if (d < minDist) {
+              minDist = d;
+              closestNode = n;
+            }
+          }
+        }
+
+        if (closestNode) {
+          focusOnNode(closestNode);
+          return;
+        }
+
+        forceInstance.centerAt(graphCoords.x, graphCoords.y, 700);
+        forceInstance.zoom(2.8, 700);
+        return;
+      }
+    }
+
+    focusVisibleCenter();
+  }
+
   onMount(() => {
     if (ctx.graph().length === 0) ctx.loadGraph();
     if (!document.getElementById(GRAPH_CSS_ID)) {
@@ -511,24 +634,40 @@ export function GraphView() {
       document.head.appendChild(st);
     }
 
+    const handlePointerMove = (e: PointerEvent) => {
+      if (graphContainerRef) {
+        const rect = graphContainerRef.getBoundingClientRect();
+        if (
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom
+        ) {
+          mousePos = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+            inContainer: true,
+          };
+        } else {
+          mousePos.inContainer = false;
+        }
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "f" || e.key === "F") {
         const tag = (document.activeElement?.tagName || "").toUpperCase();
         if (tag === "INPUT" || tag === "TEXTAREA") return;
 
-        const node = hoveredNode();
-        if (node) {
-          e.preventDefault();
-          focusOnNode(node);
-        } else {
-          e.preventDefault();
-          focusVisibleCenter();
-        }
+        e.preventDefault();
+        focusAtCursor();
       }
     };
 
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => {
+      window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("keydown", handleKeyDown);
     });
   });
