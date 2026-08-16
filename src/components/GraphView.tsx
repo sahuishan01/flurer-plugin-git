@@ -169,6 +169,8 @@ interface ForceNode {
   val: number;
   matchesSearch: boolean;
   isMerge: boolean;
+  isBranchTip?: boolean;
+  isBranchRoot?: boolean;
   x?: number;
   y?: number;
   z?: number;
@@ -190,10 +192,19 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
 
   const query = searchQuery.trim().toLowerCase();
 
+  // Identify child/parent references to locate branch ending tips
+  const isParentOfAny = new Set<string>();
+  gData.rows.forEach((r) => {
+    r.parents.forEach((p) => isParentOfAny.add(p));
+  });
+
   gData.rows.forEach((r, i) => {
     const isMerge = r.parents.length > 1;
     const hasRef = r.refs.length > 0;
-    const baseSize = hasRef ? 8 : (isMerge ? 6 : 4);
+    const isLeaf = !isParentOfAny.has(r.hash);
+    const isBranchTip = hasRef || isLeaf;
+    const isBranchRoot = r.parents.length === 0;
+    const baseSize = isBranchTip ? 9 : (hasRef ? 8 : (isMerge ? 6 : 4));
     
     // Vibrant & High-Contrast Branch Lane Colors
     const branchColor = COLORS[r.lane % COLORS.length];
@@ -228,6 +239,8 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
       val: query && matchesSearch ? baseSize * 1.5 : baseSize,
       matchesSearch,
       isMerge,
+      isBranchTip,
+      isBranchRoot,
       x: columnX,
       z: depthZ,
     };
@@ -259,7 +272,9 @@ function buildForceGraphData(entries: GitGraphEntry[], searchQuery: string) {
 // Shared, zero-allocation 3D Geometry and Material cache to prevent memory & GC lag
 const sharedSphereGeo = new THREE.SphereGeometry(1, 10, 10);
 const sharedOctaGeo = new THREE.OctahedronGeometry(1, 0);
+const sharedBeaconGeo = new THREE.RingGeometry(1.6, 2.2, 24);
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+const beaconMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
 const spriteMaterialCache = new Map<string, THREE.SpriteMaterial>();
 
 function getSharedMaterial(color: string): THREE.MeshStandardMaterial {
@@ -273,6 +288,18 @@ function getSharedMaterial(color: string): THREE.MeshStandardMaterial {
     }));
   }
   return materialCache.get(color)!;
+}
+
+function getSharedBeaconMaterial(color: string): THREE.MeshBasicMaterial {
+  if (!beaconMaterialCache.has(color)) {
+    beaconMaterialCache.set(color, new THREE.MeshBasicMaterial({
+      color: color,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.55,
+    }));
+  }
+  return beaconMaterialCache.get(color)!;
 }
 
 function getBadgeSpriteMaterial(text: string, color: string): THREE.SpriteMaterial | null {
@@ -322,7 +349,19 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
   mesh.scale.set(radius, radius, radius);
   group.add(mesh);
 
-  // Floating 3D Branch / Tag Badge Sprite (only when refs exist)
+  const isBranchEnd = node.isBranchTip || (node.refs && node.refs.length > 0);
+
+  // Outer Glowing Beacon Ring for Branch Ending Nodes
+  if (isBranchEnd) {
+    const beaconMesh = new THREE.Mesh(
+      sharedBeaconGeo,
+      getSharedBeaconMaterial(node.color || "#38bdf8")
+    );
+    beaconMesh.scale.set(radius, radius, 1);
+    group.add(beaconMesh);
+  }
+
+  // Floating 3D Branch / Tag Badge Sprite
   if (node.refs && node.refs.length > 0) {
     const labels = node.refs.map(r => r.replace("HEAD -> ", "").replace("HEAD, ", ""));
     const text = labels.join(" • ");
@@ -330,7 +369,17 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
     if (spriteMaterial) {
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.set(0, radius + 15, 0);
-      sprite.scale.set(54, 13.5, 1);
+      sprite.scale.set(58, 14.5, 1);
+      group.add(sprite);
+    }
+  } else if (node.isBranchTip) {
+    // Un-tagged branch tip commit
+    const text = `Tip: ${node.shortHash}`;
+    const spriteMaterial = getBadgeSpriteMaterial(text, node.color || "#38bdf8");
+    if (spriteMaterial) {
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.position.set(0, radius + 13, 0);
+      sprite.scale.set(44, 11, 1);
       group.add(sprite);
     }
   }
@@ -732,9 +781,9 @@ export function GraphView() {
 
       if (dagMode !== "none") {
         if (dagMode === "radial") {
-          inst.dagMode("radialout").dagLevelDistance(55);
+          inst.dagMode("radialout").dagLevelDistance(22);
         } else {
-          inst.dagMode(dagMode).dagLevelDistance(45);
+          inst.dagMode(dagMode).dagLevelDistance(38);
         }
       }
 
@@ -796,9 +845,9 @@ export function GraphView() {
 
       if (dagMode !== "none") {
         if (dagMode === "radial") {
-          inst.dagMode("radialout").dagLevelDistance(55);
+          inst.dagMode("radialout").dagLevelDistance(22);
         } else {
-          inst.dagMode(dagMode).dagLevelDistance(45);
+          inst.dagMode(dagMode).dagLevelDistance(38);
         }
       }
 
@@ -808,24 +857,45 @@ export function GraphView() {
         .nodeCanvasObject((node: any, canvasCtx: CanvasRenderingContext2D, globalScale: number) => {
           const x = node.x;
           const y = node.y;
+          const isBranchEnd = node.isBranchTip || (node.refs && node.refs.length > 0);
 
-          // GUARANTEED MINIMUM SCREEN SIZE: Nodes never disappear when zoomed out
-          const minScreenRadius = 4 / globalScale;
+          // GUARANTEED MINIMUM SCREEN SIZE: Branch ends stay prominent, intermediate nodes stay compact
+          const minScreenRadius = (isBranchEnd ? 5.2 : 3.0) / globalScale;
           const baseR = Math.sqrt(Math.max(0, node.val || 4)) * 1.6;
           const r = Math.max(baseR, minScreenRadius);
           const laneCol = COLORS[node.lane % COLORS.length];
 
-          // Node Circle with Saturated Fill
+          // 1. Radiant Glowing Beacon Halo for Branch Ending Nodes
+          if (isBranchEnd) {
+            const beaconRadius = Math.max(r * 2.2, 11 / globalScale);
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, beaconRadius, 0, 2 * Math.PI, false);
+            canvasCtx.fillStyle = node.color ? `${node.color}33` : "rgba(56, 189, 248, 0.25)";
+            canvasCtx.fill();
+            canvasCtx.lineWidth = Math.max(1.8 / globalScale, 0.9 / globalScale);
+            canvasCtx.strokeStyle = node.color || "#38bdf8";
+            canvasCtx.stroke();
+          }
+
+          // 2. Node Circle with Saturated Fill
           canvasCtx.beginPath();
           canvasCtx.arc(x, y, r, 0, 2 * Math.PI, false);
           canvasCtx.fillStyle = node.color || laneCol;
           canvasCtx.fill();
-          canvasCtx.lineWidth = Math.max(2 / globalScale, 0.8 / globalScale);
-          canvasCtx.strokeStyle = node.isMerge ? "#38bdf8" : laneCol;
+          canvasCtx.lineWidth = Math.max(isBranchEnd ? 2.5 / globalScale : 1.6 / globalScale, 0.8 / globalScale);
+          canvasCtx.strokeStyle = isBranchEnd ? "#ffffff" : (node.isMerge ? "#38bdf8" : laneCol);
           canvasCtx.stroke();
 
-          // DYNAMIC TEXT SIZING: Screen-constant font size so names are ALWAYS readable even when zoomed out
-          const badgeScreenFontSize = globalScale < 0.4 ? 13 : 11.5;
+          // 3. High-Contrast Center Dot on Branch Ends for Instant Visibility
+          if (isBranchEnd) {
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, r * 0.45, 0, 2 * Math.PI, false);
+            canvasCtx.fillStyle = "#ffffff";
+            canvasCtx.fill();
+          }
+
+          // 4. DYNAMIC TEXT SIZING & BADGES: Always readable regardless of zoom
+          const badgeScreenFontSize = globalScale < 0.35 ? 13 : 11.5;
           const badgeGraphFontSize = badgeScreenFontSize / globalScale;
 
           if (node.refs && node.refs.length > 0) {
@@ -859,8 +929,33 @@ export function GraphView() {
 
               badgeX += badgeW + 4 / globalScale;
             }
+          } else if (node.isBranchTip) {
+            // Unnamed branch tip node
+            canvasCtx.font = `700 ${badgeGraphFontSize}px Space Mono, monospace`;
+            const tipLabel = `Tip: ${node.shortHash}`;
+            const textWidth = canvasCtx.measureText(tipLabel).width;
+            const paddingX = 6 / globalScale;
+            const badgeH = badgeGraphFontSize + 6 / globalScale;
+            const badgeW = textWidth + paddingX * 2;
+            const badgeX = x + r + 6 / globalScale;
+            const badgeY = y - badgeH / 2;
+
+            canvasCtx.fillStyle = "rgba(15, 23, 42, 0.9)";
+            canvasCtx.beginPath();
+            if (typeof canvasCtx.roundRect === "function") {
+              canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 5 / globalScale);
+            } else {
+              canvasCtx.rect(badgeX, badgeY, badgeW, badgeH);
+            }
+            canvasCtx.fill();
+            canvasCtx.strokeStyle = node.color || "#38bdf8";
+            canvasCtx.lineWidth = 1.5 / globalScale;
+            canvasCtx.stroke();
+
+            canvasCtx.fillStyle = "#38bdf8";
+            canvasCtx.fillText(tipLabel, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
           } else if (globalScale >= 0.22) {
-            // Show commit hash & message snippet with subtle backdrop when zoomed out/in
+            // Show commit hash & message snippet with subtle backdrop when zoomed in
             const msgScreenFontSize = 10.5;
             const msgGraphFontSize = msgScreenFontSize / globalScale;
             canvasCtx.font = `500 ${msgGraphFontSize}px Space Mono, monospace`;
