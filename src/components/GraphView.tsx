@@ -3,7 +3,12 @@ import ForceGraph2D from "force-graph";
 import ForceGraph3D from "3d-force-graph";
 import * as THREE from "three";
 import { useGit } from "../context";
-import { formatTimestamp, getGraphPanSpeed, getGraphZoomSpeed, getGraphRotateSpeed, getGraphFocusZoomStep, getGraphFocusTransitionTime } from "../utils";
+import {
+  formatTimestamp, getGraphPanSpeed, getGraphZoomSpeed, getGraphRotateSpeed,
+  getGraphFocusZoomStep, getGraphFocusTransitionTime,
+  getSavedGraphDisplayMode, saveGraphDisplayMode,
+  getSavedDagLayout, saveDagLayout,
+} from "../utils";
 import type { GitGraphEntry } from "../types";
 import { EmptyState, Card, Button, CloseIcon, CommitContextMenu } from "./shared";
 import { S } from "../styles";
@@ -394,8 +399,19 @@ function lighten(hex: string, alpha: number): string {
 
 export function GraphView() {
   const ctx = useGit();
-  const [displayMode, setDisplayMode] = createSignal<GraphDisplayMode>("3d");
-  const [dagLayout, setDagLayout] = createSignal<DagLayoutMode>("td");
+  const [displayMode, _setDisplayMode] = createSignal<GraphDisplayMode>(getSavedGraphDisplayMode());
+  const [dagLayout, _setDagLayout] = createSignal<DagLayoutMode>(getSavedDagLayout());
+
+  function setDisplayMode(mode: GraphDisplayMode) {
+    _setDisplayMode(mode);
+    saveGraphDisplayMode(mode);
+  }
+
+  function setDagLayout(layout: DagLayoutMode) {
+    _setDagLayout(layout);
+    saveDagLayout(layout);
+  }
+
   const [searchQuery, setSearchQuery] = createSignal("");
   const [selectedHash, setSelectedHash] = createSignal<string | null>(null);
   const [hoveredNode, setHoveredNode] = createSignal<ForceNode | null>(null);

@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, createEffect, onMount } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, createRoot } from "solid-js";
 import { GitProvider } from "./context";
 import {
   getRecentRepos, basename, setSurfaceOpacity, setButtonTintOpacity,
@@ -18,26 +18,35 @@ interface OpenTab {
 
 let tabCounter = 0;
 
-function GitPanel(props: any) {
-  const [tabs, setTabs] = createSignal<OpenTab[]>([]);
-  const [activeTabId, setActiveTabId] = createSignal<string | null>(null);
-  const [showDashManual, setShowDashManual] = createSignal(false);
+function initRestoredTabs(): { tabs: OpenTab[]; activeId: string | null } {
+  const savedPaths = getSavedOpenTabs();
+  const savedActivePath = getSavedActiveTab();
+  if (savedPaths.length > 0) {
+    const restored: OpenTab[] = savedPaths.map((p) => ({
+      id: `tab-${++tabCounter}`,
+      path: p,
+      name: basename(p),
+    }));
+    const activeMatch = restored.find((t) => t.path === savedActivePath);
+    return {
+      tabs: restored,
+      activeId: activeMatch ? activeMatch.id : restored[0].id,
+    };
+  }
+  return { tabs: [], activeId: null };
+}
 
-  // Restore open tabs from localStorage on mount
-  onMount(() => {
-    const savedPaths = getSavedOpenTabs();
-    const savedActivePath = getSavedActiveTab();
-    if (savedPaths.length > 0) {
-      const restored: OpenTab[] = savedPaths.map((p) => ({
-        id: `tab-${++tabCounter}`,
-        path: p,
-        name: basename(p),
-      }));
-      setTabs(restored);
-      const activeMatch = restored.find((t) => t.path === savedActivePath);
-      setActiveTabId(activeMatch ? activeMatch.id : restored[0].id);
-    }
-  });
+const initialTabState = initRestoredTabs();
+
+// Persistent module-level reactive state that survives unmount/remount (e.g. switching to Settings & back)
+const [globalTabs, setGlobalTabs] = createRoot(() => createSignal<OpenTab[]>(initialTabState.tabs));
+const [globalActiveTabId, setGlobalActiveTabId] = createRoot(() => createSignal<string | null>(initialTabState.activeId));
+const [globalShowDashManual, setGlobalShowDashManual] = createRoot(() => createSignal(false));
+
+function GitPanel(props: any) {
+  const tabs = globalTabs;
+  const activeTabId = globalActiveTabId;
+  const showDashManual = globalShowDashManual;
 
   // Persist open tabs and active tab whenever they change
   createEffect(() => {
@@ -47,13 +56,14 @@ function GitPanel(props: any) {
     saveActiveTab(active ? active.path : null);
   });
 
-  // If the user navigated to a path that is a known recent repo, pre-open it
+  // If the user navigated to a path that is a known recent repo and no tabs are open, pre-open it
   const initialPath = createMemo(() => {
     const p = props.currentPath;
     if (!p) return null;
     const recent = getRecentRepos().some((r) => r.path === p);
     if (!recent) return null;
     if (tabs().some((t) => t.path === p)) return null;
+    if (tabs().length > 0) return null; // Preserve existing open tabs
     return p;
   });
 
@@ -77,16 +87,18 @@ function GitPanel(props: any) {
   const showDashboard = () => tabs().length === 0 || showDashManual();
 
   function openRepo(path: string) {
-    setShowDashManual(false);
+    setGlobalShowDashManual(false);
     const existing = tabs().find((t) => t.path === path);
     if (existing) {
-      setActiveTabId(existing.id);
+      setGlobalActiveTabId(existing.id);
+      saveActiveTab(path);
       return;
     }
     const id = `tab-${++tabCounter}`;
     const name = basename(path);
-    setTabs((prev) => [...prev, { id, path, name }]);
-    setActiveTabId(id);
+    setGlobalTabs((prev) => [...prev, { id, path, name }]);
+    setGlobalActiveTabId(id);
+    saveActiveTab(path);
   }
 
   function closeTab(id: string, e: MouseEvent) {
@@ -94,18 +106,23 @@ function GitPanel(props: any) {
     const tab = tabs().find((t) => t.id === id);
     if (!tab) return;
     const remaining = tabs().filter((t) => t.id !== id);
-    setTabs(remaining);
+    setGlobalTabs(remaining);
     if (remaining.length === 0) {
-      setActiveTabId(null);
+      setGlobalActiveTabId(null);
+      saveActiveTab(null);
     } else if (activeTabId() === id) {
       const idx = tabs().findIndex((t) => t.id === id);
       const nextIdx = Math.min(idx, remaining.length - 1);
-      setActiveTabId(remaining[nextIdx].id);
+      const nextTab = remaining[nextIdx];
+      setGlobalActiveTabId(nextTab.id);
+      saveActiveTab(nextTab.path);
     }
   }
 
   function switchTab(id: string) {
-    setActiveTabId(id);
+    setGlobalActiveTabId(id);
+    const target = tabs().find((t) => t.id === id);
+    if (target) saveActiveTab(target.path);
   }
 
   return (
@@ -179,7 +196,7 @@ function GitPanel(props: any) {
                 cursor: "pointer",
                 "border-radius": "4px",
               }}
-              onClick={() => setShowDashManual(true)}
+              onClick={() => setGlobalShowDashManual(true)}
               title="Open Repository"
             >
               <PlusIcon size={16} />

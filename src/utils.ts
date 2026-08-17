@@ -316,6 +316,41 @@ export function saveBranchSelection(path: string, branches: string[]): void {
   } catch {}
 }
 
+const GRAPH_DISPLAY_MODE_KEY = "flurer-git-graph-display-mode";
+const DAG_LAYOUT_KEY = "flurer-git-dag-layout";
+
+export function getSavedGraphDisplayMode(): "3d" | "2d" | "tree" {
+  try {
+    const val = localStorage.getItem(GRAPH_DISPLAY_MODE_KEY);
+    if (val === "3d" || val === "2d" || val === "tree") return val;
+    return "3d";
+  } catch {
+    return "3d";
+  }
+}
+
+export function saveGraphDisplayMode(mode: "3d" | "2d" | "tree"): void {
+  try {
+    localStorage.setItem(GRAPH_DISPLAY_MODE_KEY, mode);
+  } catch {}
+}
+
+export function getSavedDagLayout(): "td" | "lr" | "radial" | "none" {
+  try {
+    const val = localStorage.getItem(DAG_LAYOUT_KEY);
+    if (val === "td" || val === "lr" || val === "radial" || val === "none") return val;
+    return "td";
+  } catch {
+    return "td";
+  }
+}
+
+export function saveDagLayout(layout: "td" | "lr" | "radial" | "none"): void {
+  try {
+    localStorage.setItem(DAG_LAYOUT_KEY, layout);
+  } catch {}
+}
+
 export function basename(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;

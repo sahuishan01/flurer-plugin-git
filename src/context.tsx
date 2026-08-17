@@ -93,7 +93,8 @@ export function useGit(): GitContextValue {
 }
 
 export function GitProvider(props: ParentProps & { initialPath?: string | null }) {
-  const [activeView, setActiveView] = createSignal<GitView>(props.initialPath ? "graph" : "dashboard");
+  const initialView = props.initialPath ? ((getSavedActiveView(props.initialPath) as GitView) || "graph") : "dashboard";
+  const [activeView, setActiveView] = createSignal<GitView>(initialView);
   const [repoPath, setRepoPath] = createSignal<string | null>(props.initialPath ?? null);
   const [status, setStatus] = createSignal<GitStatus | null>(null);
   const [branches, setBranches] = createSignal<GitBranch[]>([]);
