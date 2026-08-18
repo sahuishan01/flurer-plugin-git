@@ -495,29 +495,67 @@ export function GraphView() {
   let forceInstance: any = null;
   let mousePos: { x: number; y: number; inContainer: boolean } = { x: 0, y: 0, inContainer: false };
 
-  function focusOnNode(node: ForceNode, zoomRatio?: number, customDuration?: number) {
-    if (!node || !forceInstance) return;
+  function resolveLiveNode(nodeOrHash: ForceNode | string | null | undefined): ForceNode | null {
+    if (!nodeOrHash) return null;
+    const targetHash = typeof nodeOrHash === "string" ? nodeOrHash : (nodeOrHash.hash || nodeOrHash.id);
+    if (forceInstance && typeof forceInstance.graphData === "function") {
+      const graphData = forceInstance.graphData();
+      const nodes: ForceNode[] = graphData?.nodes || [];
+      const match = nodes.find((n) => n.hash === targetHash || n.id === targetHash);
+      if (match && typeof match.x === "number") return match;
+      if (match) return match;
+    }
+    if (typeof nodeOrHash === "object" && typeof (nodeOrHash as any).x === "number") {
+      return nodeOrHash as ForceNode;
+    }
+    return null;
+  }
+
+  function focusOnNode(nodeOrHash: ForceNode | string | null | undefined, zoomRatio?: number, customDuration?: number) {
+    if (!nodeOrHash) return;
+    const targetHash = typeof nodeOrHash === "string" ? nodeOrHash : (nodeOrHash.hash || nodeOrHash.id);
     const mode = displayMode();
     const duration = customDuration ?? getGraphFocusTransitionTime();
     const zoomStep = zoomRatio ?? getGraphFocusZoomStep();
 
+    if (mode === "tree") {
+      if (targetHash && treeContainerRef) {
+        const idx = data().rows.findIndex((r: any) => r.hash === targetHash);
+        if (idx !== -1) {
+          const targetY = rowY(idx) - viewportH() / 2;
+          treeContainerRef.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+        }
+      }
+      if (targetHash) {
+        setSelectedHash(targetHash);
+        ctx.showCommitDetail(targetHash);
+      }
+      return;
+    }
+
+    if (!forceInstance) return;
+    const liveNode = resolveLiveNode(nodeOrHash);
+    if (!liveNode) return;
+
+    const nx = liveNode.x || 0;
+    const ny = liveNode.y || 0;
+    const nz = liveNode.z || 0;
+
     if (mode === "3d" && forceInstance.camera) {
       const camera = forceInstance.camera();
       const controls = forceInstance.controls ? forceInstance.controls() : null;
-      const nx = node.x || 0;
-      const ny = node.y || 0;
-      const nz = node.z || 0;
 
       // Calculate camera offset relative to the node, zooming in by configured zoomStep
-      let offset = new THREE.Vector3(0, 0, 100);
+      let offset = new THREE.Vector3(0, 0, 95);
       if (camera && controls && controls.target) {
         const curOffset = camera.position.clone().sub(controls.target);
-        if (curOffset.z > 15) {
+        if (curOffset.length() > 5) {
           const curDist = curOffset.length();
-          const targetDist = Math.max(55, curDist * (1.0 - zoomStep));
+          const targetDist = Math.max(50, Math.min(220, curDist * (1.0 - zoomStep)));
           offset = curOffset.normalize().multiplyScalar(targetDist);
-        } else {
-          offset.set(0, 0, Math.max(65, (curOffset.length() || 100) * (1.0 - zoomStep)));
+        }
+        if (offset.z < 25) {
+          offset.set(offset.x, offset.y, Math.max(65, offset.z || 65));
         }
       }
 
@@ -533,12 +571,14 @@ export function GraphView() {
     } else if (mode === "2d") {
       const curZoom = typeof forceInstance.zoom === "function" ? forceInstance.zoom() : 1;
       const targetZoom = Math.min(10, Math.max(0.2, curZoom * (1.0 + zoomStep * 1.5)));
-      forceInstance.centerAt(node.x, node.y, duration);
+      forceInstance.centerAt(nx, ny, duration);
       forceInstance.zoom(targetZoom, duration);
     }
 
-    setSelectedHash(node.hash);
-    ctx.showCommitDetail(node.hash);
+    if (liveNode.hash) {
+      setSelectedHash(liveNode.hash);
+      ctx.showCommitDetail(liveNode.hash);
+    }
   }
 
   function handleNodeClick(node: ForceNode) {
@@ -772,21 +812,37 @@ export function GraphView() {
     }
   }
 
-  function focusAtCursor() {
-    const node = hoveredNode();
-    if (node) {
-      focusOnNode(node);
+  function triggerFocus() {
+    const sHash = selectedHash();
+    if (sHash) {
+      focusOnNode(sHash);
+      return;
+    }
+
+    const hNode = hoveredNode();
+    if (hNode) {
+      focusOnNode(hNode);
       return;
     }
 
     const mode = displayMode();
+    if (mode === "tree") {
+      if (treeContainerRef) {
+        treeContainerRef.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+        if (data().rows.length > 0) {
+          setSelectedHash(data().rows[0].hash);
+          ctx.showCommitDetail(data().rows[0].hash);
+        }
+      }
+      return;
+    }
+
     const container = graphContainerRef;
     const duration = getGraphFocusTransitionTime();
     const zoomStep = getGraphFocusZoomStep();
 
     if (mode === "3d" && forceInstance && forceInstance.camera && container && mousePos.inContainer) {
       const camera = forceInstance.camera();
-      const controls = forceInstance.controls ? forceInstance.controls() : null;
       if (camera) {
         const rect = container.getBoundingClientRect();
         const ndcX = (mousePos.x / rect.width) * 2 - 1;
@@ -795,17 +851,13 @@ export function GraphView() {
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
 
-        const graphData = forceInstance.graphData();
-        const nodes: ForceNode[] = graphData?.nodes || [];
-
-        // 1. Raycast against node objects in scene
-        const scene = forceInstance.scene();
+        const scene = forceInstance.scene ? forceInstance.scene() : null;
         if (scene) {
           const intersects = raycaster.intersectObjects(scene.children, true);
           for (const hit of intersects) {
             let obj: any = hit.object;
             while (obj && obj !== scene) {
-              if (obj.__data && obj.__data.hash) {
+              if (obj.__data && (obj.__data.hash || obj.__data.id)) {
                 focusOnNode(obj.__data);
                 return;
               }
@@ -814,9 +866,11 @@ export function GraphView() {
           }
         }
 
-        // 2. Projected 2D screen distance to graph nodes (snap if within 70px)
+        // Projected 2D screen distance to graph nodes (snap if within 80px)
+        const graphData = forceInstance.graphData();
+        const nodes: ForceNode[] = graphData?.nodes || [];
         let closestNode: ForceNode | null = null;
-        let minScreenDist = 70;
+        let minScreenDist = 80;
 
         for (const n of nodes) {
           if (typeof n.x === "number" && typeof n.y === "number") {
@@ -837,42 +891,14 @@ export function GraphView() {
           focusOnNode(closestNode);
           return;
         }
-
-        // 3. Raycast onto the graph XY plane at cursor
-        const planeZ = nodes.length > 0 ? (nodes[0].z || 0) : 0;
-        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -planeZ);
-        const hitPoint = new THREE.Vector3();
-        const hit = raycaster.ray.intersectPlane(plane, hitPoint);
-
-        if (hit && controls && controls.target) {
-          const curCamPos = camera.position.clone();
-          const curTarget = controls.target.clone();
-          const curOffset = curCamPos.clone().sub(curTarget);
-          const curDist = curOffset.length();
-          const targetDist = Math.max(60, curDist * (1.0 - zoomStep));
-
-          let offset = curOffset.normalize().multiplyScalar(targetDist);
-          if (offset.z < 25) {
-            offset = new THREE.Vector3(0, 0, Math.max(65, targetDist));
-          }
-
-          const targetCamPos = hitPoint.clone().add(offset);
-          forceInstance.cameraPosition(
-            { x: targetCamPos.x, y: targetCamPos.y, z: targetCamPos.z },
-            { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
-            duration
-          );
-          return;
-        }
       }
     } else if (mode === "2d" && forceInstance && typeof forceInstance.screen2GraphCoords === "function" && container && mousePos.inContainer) {
       const graphCoords = forceInstance.screen2GraphCoords(mousePos.x, mousePos.y);
       if (graphCoords) {
         const graphData = forceInstance.graphData();
         const nodes: ForceNode[] = graphData?.nodes || [];
-
         let closestNode: ForceNode | null = null;
-        let minDist = 45;
+        let minDist = 50;
 
         for (const n of nodes) {
           if (typeof n.x === "number" && typeof n.y === "number") {
@@ -888,11 +914,15 @@ export function GraphView() {
           focusOnNode(closestNode);
           return;
         }
+      }
+    }
 
-        const curZoom = typeof forceInstance.zoom === "function" ? forceInstance.zoom() : 1;
-        const targetZoom = Math.min(10, Math.max(0.2, curZoom * (1.0 + zoomStep * 1.5)));
-        forceInstance.centerAt(graphCoords.x, graphCoords.y, duration);
-        forceInstance.zoom(targetZoom, duration);
+    // Default fallback: Focus onto the newest / HEAD commit (node 0)
+    if (forceInstance && typeof forceInstance.graphData === "function") {
+      const graphData = forceInstance.graphData();
+      const nodes: ForceNode[] = graphData?.nodes || [];
+      if (nodes.length > 0) {
+        focusOnNode(nodes[0]);
         return;
       }
     }
@@ -985,7 +1015,7 @@ export function GraphView() {
             focusBranch(0);
           }
         } else {
-          focusAtCursor();
+          triggerFocus();
         }
       } else if (e.key === " " || e.code === "Space") {
         e.preventDefault();
@@ -1726,8 +1756,8 @@ forceInstance = null;
           />
           <Show when={displayMode() !== "tree"}>
             <button
-              onClick={focusAtCursor}
-              title="Focus Target Node / Cursor Point (Key: 'F')"
+              onClick={triggerFocus}
+              title="Focus Selected / Hovered / HEAD Commit (Key: 'F')"
               class="flurer-git-modebtn flurer-git-modebtn-inactive"
               style={{ padding: "5px 9px", "font-size": "11px", display: "inline-flex", "align-items": "center", gap: "4px", "white-space": "nowrap" }}
             >
