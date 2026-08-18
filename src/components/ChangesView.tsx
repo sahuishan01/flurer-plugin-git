@@ -30,8 +30,15 @@ export function ChangesView() {
     return allChanges().filter((c) => c.path.toLowerCase().includes(q));
   });
 
+  const conflictedFiles = createMemo(() =>
+    filteredChanges().filter((c) => ["UU", "AA", "DD", "AU", "UA", "DU", "UD"].includes(c.status))
+  );
   const stagedFiles = createMemo(() => filteredChanges().filter((c) => c.staged));
-  const unstagedFiles = createMemo(() => filteredChanges().filter((c) => !c.staged && c.status !== "??"));
+  const unstagedFiles = createMemo(() =>
+    filteredChanges().filter(
+      (c) => !c.staged && c.status !== "??" && !["UU", "AA", "DD", "AU", "UA", "DU", "UD"].includes(c.status)
+    )
+  );
   const untrackedFiles = createMemo(() => filteredChanges().filter((c) => c.status === "??"));
 
   async function handleCommit() {
@@ -149,6 +156,60 @@ export function ChangesView() {
         </Show>
 
         <Show when={ctx.status()}>
+          {/* Merge Conflicts Card */}
+          <Show when={conflictedFiles().length > 0}>
+            <Card style={{ border: "1px solid rgba(239, 68, 68, 0.4)", background: "linear-gradient(180deg, rgba(30, 10, 15, 0.85), rgba(15, 23, 42, 0.9))" }}>
+              <div style={S.cardHeader}>
+                <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                  <span style={{ "font-weight": 700, color: "#f87171", "letter-spacing": "0.3px" }}>⚠️ Merge Conflicts</span>
+                  <span style={{ ...S.badge, background: "rgba(239, 68, 68, 0.2)", color: "#f87171" }}>{conflictedFiles().length}</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+                <For each={conflictedFiles()}>
+                  {(f) => {
+                    const isInspecting = () => inspectingFile()?.path === f.path;
+                    return (
+                      <div style={{ ...S.fileRow, background: isInspecting() ? "rgba(239, 68, 68, 0.15)" : "rgba(255, 255, 255, 0.02)", border: isInspecting() ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid transparent", "border-radius": "8px", padding: "8px 12px" }}>
+                        <span
+                          style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
+                          onClick={() => handleFileSelect(f.path, false)}
+                          title="Click to inspect conflict diff"
+                        >
+                          <span style={{ "font-size": "10px", "font-weight": 700, padding: "2px 6px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.25)", color: "#fca5a5", "font-family": "Space Mono, monospace", "margin-right": "8px" }}>
+                            CONFLICT
+                          </span>
+                          <span style={{ "font-size": "12.5px", "font-weight": 700, color: "#fca5a5" }}>{f.path}</span>
+                        </span>
+                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                          <button
+                            type="button"
+                            onClick={() => ctx.resolveConflict(f.path, "ours")}
+                            style={{ padding: "4px 8px", "font-size": "11px", "border-radius": "4px", background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "#38bdf8", cursor: "pointer", "font-weight": 600 }}
+                            title="Keep Current (Ours / HEAD)"
+                          >
+                            Accept Ours
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => ctx.resolveConflict(f.path, "theirs")}
+                            style={{ padding: "4px 8px", "font-size": "11px", "border-radius": "4px", background: "rgba(192, 132, 252, 0.15)", border: "1px solid rgba(192, 132, 252, 0.3)", color: "#c084fc", cursor: "pointer", "font-weight": 600 }}
+                            title="Keep Incoming (Theirs / Remote)"
+                          >
+                            Accept Theirs
+                          </button>
+                          <Button size="sm" onClick={() => ctx.resolveConflict(f.path, "mark")}>
+                            ✓ Resolved
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </Card>
+          </Show>
+
           {/* Staged Changes Card */}
           <Show when={stagedFiles().length > 0}>
             <Card>
