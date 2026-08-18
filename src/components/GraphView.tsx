@@ -1788,6 +1788,76 @@ export function GraphView() {
             <span style={{ opacity: 0.35 }}>•</span>
             <span>{displayMode() === "3d" ? "Right-Drag: Pan • Drag: Orbit" : "Drag: Pan • Scroll: Zoom"}</span>
           </div>
+
+          {/* Floating Canvas Quick Controls (Bottom Right) */}
+          <div style={{
+            position: "absolute",
+            bottom: "10px",
+            right: "14px",
+            display: "flex",
+            "align-items": "center",
+            gap: "6px",
+            background: "rgba(10, 14, 23, 0.85)",
+            "backdrop-filter": "blur(12px)",
+            padding: "4px 8px",
+            "border-radius": "8px",
+            border: "1px solid rgba(255,255,255,0.12)",
+            "box-shadow": "0 4px 14px rgba(0,0,0,0.4)",
+            "z-index": 10,
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (displayMode() === "3d" && forceInstance && forceInstance.camera) {
+                  const cam = forceInstance.camera();
+                  if (cam) {
+                    const pos = cam.position.clone().multiplyScalar(0.8);
+                    forceInstance.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, undefined, 300);
+                  }
+                } else if (displayMode() === "2d" && forceInstance && typeof forceInstance.zoom === "function") {
+                  forceInstance.zoom(forceInstance.zoom() * 1.3, 300);
+                }
+              }}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", cursor: "pointer", padding: "3px 8px", "border-radius": "4px", "font-weight": 700, "font-size": "13px" }}
+              title="Zoom In"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (displayMode() === "3d" && forceInstance && forceInstance.camera) {
+                  const cam = forceInstance.camera();
+                  if (cam) {
+                    const pos = cam.position.clone().multiplyScalar(1.25);
+                    forceInstance.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, undefined, 300);
+                  }
+                } else if (displayMode() === "2d" && forceInstance && typeof forceInstance.zoom === "function") {
+                  forceInstance.zoom(forceInstance.zoom() * 0.75, 300);
+                }
+              }}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", cursor: "pointer", padding: "3px 8px", "border-radius": "4px", "font-weight": 700, "font-size": "13px" }}
+              title="Zoom Out"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={resetToFit}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#38bdf8", cursor: "pointer", padding: "3px 8px", "border-radius": "4px", "font-size": "11px", "font-family": "Space Mono, monospace", "font-weight": 600 }}
+              title="Fit Entire Graph"
+            >
+              🔍 Fit
+            </button>
+            <button
+              type="button"
+              onClick={ctx.toggleShortcuts}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", cursor: "pointer", padding: "3px 8px", "border-radius": "4px", "font-size": "11px", "font-family": "Space Mono, monospace" }}
+              title="View Keyboard Shortcuts"
+            >
+              ⌨️ [?]
+            </button>
+          </div>
         </div>
       </Show>
 

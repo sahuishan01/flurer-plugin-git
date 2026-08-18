@@ -25,6 +25,14 @@ export interface GitBranch {
   name: string;
   is_current: boolean;
   upstream: string | null;
+  ahead?: number;
+  behind?: number;
+  lastCommit?: {
+    hash: string;
+    message: string;
+    author: string;
+    timestamp: number;
+  };
 }
 
 export interface GitGraphEntry {

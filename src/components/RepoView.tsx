@@ -1,10 +1,10 @@
-import { Show, Switch, Match, createMemo } from "solid-js";
+import { Show, Switch, Match, createMemo, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
 import { basename } from "../utils";
 import {
   GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon,
   BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal,
-  Toast, ComparisonBar, GlobalLoadingOverlay,
+  Toast, ComparisonBar, GlobalLoadingOverlay, StatusBar, ShortcutsModal,
 } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -52,6 +52,47 @@ export function RepoView(props: RepoViewProps) {
       count: t.id === "changes" ? changeCount() : undefined,
     }))
   );
+
+  onMount(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if (e.key === "Escape") {
+        if (ctx.shortcutsOpen()) {
+          ctx.closeShortcuts();
+          return;
+        }
+        if (ctx.commitDetail()) {
+          ctx.closeCommitDetail();
+          return;
+        }
+        if (ctx.diffPromptHash()) {
+          ctx.closeDiffPrompt();
+          return;
+        }
+        if (ctx.compareSourceHash()) {
+          ctx.setCompareSourceHash(null);
+          return;
+        }
+      }
+
+      if (isInput) return;
+
+      if (e.key === "?") {
+        ctx.toggleShortcuts();
+        return;
+      }
+
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= TABS.length) {
+        ctx.switchView(TABS[num - 1].id as any);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleGlobalKeyDown));
+  });
 
   return (
     <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", position: "relative" }}>
@@ -133,7 +174,9 @@ export function RepoView(props: RepoViewProps) {
         </Switch>
       </div>
 
+      <StatusBar />
       <DiffCompareModal />
+      <ShortcutsModal />
       <GlobalLoadingOverlay />
       <Toast />
     </div>

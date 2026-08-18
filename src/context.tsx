@@ -49,6 +49,7 @@ interface GitContextValue {
   unstage: (path: string) => Promise<void>;
   stageAll: () => Promise<void>;
   unstageAll: () => Promise<void>;
+  discardFile: (path: string, isUntracked?: boolean) => Promise<void>;
   commit: (message: string) => Promise<void>;
   push: () => Promise<void>;
   pull: () => Promise<void>;
@@ -61,6 +62,7 @@ interface GitContextValue {
   stash: (message?: string) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
+  loadStashDiff: (index: number) => Promise<GitDiff | null>;
   addWorktree: (path: string, branch?: string) => Promise<void>;
   removeWorktree: (path: string) => Promise<void>;
   loadDiff: (filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string) => Promise<void>;
@@ -85,6 +87,10 @@ interface GitContextValue {
   selectAllBranches: () => void;
   isDubiousOwnership: Accessor<boolean>;
   trustRepository: () => Promise<void>;
+  shortcutsOpen: Accessor<boolean>;
+  openShortcuts: () => void;
+  closeShortcuts: () => void;
+  toggleShortcuts: () => void;
 }
 
 const GitContext = createContext<GitContextValue>();
@@ -139,6 +145,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [isDubiousOwnership, setIsDubiousOwnership] = createSignal(false);
   const [toast, setToast] = createSignal<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [shellAvail, setShellAvail] = createSignal(false);
+  const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
+  const openShortcuts = () => setShortcutsOpen(true);
+  const closeShortcuts = () => setShortcutsOpen(false);
+  const toggleShortcuts = () => setShortcutsOpen((prev) => !prev);
 
   async function withBusyTask<T>(title: string, detail: string | undefined, task: () => Promise<T>): Promise<T> {
     setBusyTask({ title, detail });
@@ -308,6 +318,20 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     });
   }
 
+  async function discardFile(filePath: string, isUntracked: boolean = false) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Discarding File Changes", filePath, async () => {
+      try {
+        await git.gitDiscardFile(p, filePath, isUntracked);
+        showToast(`Discarded changes to "${filePath}"`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to discard changes: ${err}`, "error");
+      }
+    });
+  }
+
   async function commit(message: string) {
     const p = repoPath();
     if (!p) return;
@@ -474,6 +498,19 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
         await loadStashes();
       } catch (err) {
         showToast(`Stash drop failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadStashDiff(index: number): Promise<GitDiff | null> {
+    const p = repoPath();
+    if (!p) return null;
+    return withBusyTask("Inspecting Stash", `stash@{${index}}`, async () => {
+      try {
+        return await git.gitStashDiff(p, index);
+      } catch (err) {
+        showToast(`Failed to inspect stash: ${err}`, "error");
+        return null;
       }
     });
   }
@@ -773,16 +810,17 @@ function toggleBranchSelection(branchName: string) {
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
     diffResult, diffMode, diffCommitHash, compareSourceHash, setCompareSourceHash: handleSetCompareSourceHash, diffCompareCommits, setDiffMode,
     loading, busyTask, setBusyTask, error, toast, showToast, shellAvailable: shellAvail,
-    refresh, stage, unstage, stageAll, unstageAll, commit,
+    refresh, stage, unstage, stageAll, unstageAll, discardFile, commit,
     push, pull, fetchRemote,
     createBranch, deleteBranch, checkout, merge, cherryPick,
-    stash, stashPop, stashDrop,
+    stash, stashPop, stashDrop, loadStashDiff,
     addWorktree, removeWorktree,
     loadDiff, loadDiffCompare, loadDiffWithCurrent, loadDiffWithWorkingTree,
     diffPromptHash, openDiffPrompt, closeDiffPrompt,
     loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
     showCommitDetail, closeCommitDetail,
     isDubiousOwnership, trustRepository,
+    shortcutsOpen, openShortcuts, closeShortcuts, toggleShortcuts,
   };
 
   return <GitContext.Provider value={ctx}>{props.children}</GitContext.Provider>;

@@ -208,14 +208,52 @@ export async function gitFetch(repoPath: string): Promise<void> {
 export async function gitBranches(repoPath: string): Promise<GitBranch[]> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "branch", "-vv", "--format=%(refname:short)\x1f%(HEAD)\x1f%(upstream:short)");
+    const out = await execGit(
+      repoPath,
+      "branch",
+      "-a",
+      "--format=%(refname:short)\x1f%(HEAD)\x1f%(upstream:short)\x1f%(upstream:track)\x1f%(objectname:short)\x1f%(subject)\x1f%(authorname)\x1f%(committerdate:unix)"
+    );
     return out.trim().split("\n").filter(Boolean).map((line) => {
-      const [name, isCurrent, upstream] = line.split("\x1f");
-      return { name, is_current: isCurrent === "*", upstream: upstream || null };
+      const [name, isCurrent, upstream, track, lastHash, lastSubject, lastAuthor, lastTimestamp] = line.split("\x1f");
+      let ahead = 0;
+      let behind = 0;
+      if (track) {
+        const aheadMatch = track.match(/ahead (\d+)/);
+        const behindMatch = track.match(/behind (\d+)/);
+        if (aheadMatch) ahead = parseInt(aheadMatch[1], 10);
+        if (behindMatch) behind = parseInt(behindMatch[1], 10);
+      }
+      return {
+        name,
+        is_current: isCurrent === "*",
+        upstream: upstream || null,
+        ahead,
+        behind,
+        lastCommit: lastHash ? {
+          hash: lastHash,
+          message: lastSubject || "",
+          author: lastAuthor || "",
+          timestamp: parseInt(lastTimestamp, 10) || 0,
+        } : undefined,
+      };
     });
   }
 
   return invoke<GitBranch[]>("git_branches", { repoPath });
+}
+
+export async function gitDiscardFile(repoPath: string, filePath: string, isUntracked: boolean): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    if (isUntracked) {
+      await execGit(repoPath, "clean", "-f", "--", filePath);
+    } else {
+      await execGit(repoPath, "checkout", "HEAD", "--", filePath);
+    }
+    return;
+  }
+  await invoke("git_discard_file", { repoPath, filePath, isUntracked });
 }
 
 export async function gitBranchCreate(repoPath: string, name: string, startPoint?: string): Promise<void> {
@@ -539,6 +577,15 @@ export async function gitStashDrop(repoPath: string, index: number): Promise<voi
     return;
   }
   await invoke("git_stash_drop", { repoPath, index });
+}
+
+export async function gitStashDiff(repoPath: string, index: number): Promise<GitDiff> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(repoPath, "stash", "show", "-p", `stash@{${index}}`);
+    return parseDiff(out);
+  }
+  return invoke<GitDiff>("git_stash_diff", { repoPath, index });
 }
 
 // ---- Worktrees ----

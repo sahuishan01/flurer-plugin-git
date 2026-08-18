@@ -835,3 +835,182 @@ export function DiffCompareModal() {
   );
 }
 
+export function ShortcutsModal() {
+  const ctx = useGit();
+
+  const shortcuts = [
+    { section: "Navigation & Tabs", items: [
+      { key: "1", desc: "Graph View" },
+      { key: "2", desc: "Changes View" },
+      { key: "3", desc: "Branches View" },
+      { key: "4", desc: "History View" },
+      { key: "5", desc: "Diff View" },
+      { key: "6", desc: "Stash View" },
+      { key: "7", desc: "Worktrees View" },
+    ]},
+    { section: "Graph View (2D & 3D)", items: [
+      { key: "F", desc: "Focus Node at Center" },
+      { key: "⇧ + F", desc: "Frame Active Branch" },
+      { key: "Space", desc: "Fit Full Graph" },
+      { key: "Right-Click", desc: "Commit Actions & Comparison" },
+    ]},
+    { section: "Changes & Staging", items: [
+      { key: "Ctrl + Enter", desc: "Commit Staged Changes" },
+      { key: "Click File", desc: "Open Split Diff Preview" },
+      { key: "Right-Click", desc: "Stage, Unstage, or Discard" },
+    ]},
+    { section: "General", items: [
+      { key: "?", desc: "Toggle Shortcuts Cheatsheet" },
+      { key: "Esc", desc: "Close Modals / Details / Cancel Comparison" },
+    ]},
+  ];
+
+  return (
+    <Show when={ctx.shortcutsOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(16px)",
+          "-webkit-backdrop-filter": "blur(16px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100100,
+          animation: "fadeIn 0.15s ease",
+        }}
+        onClick={ctx.closeShortcuts}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.95)",
+            border: "1px solid rgba(56, 189, 248, 0.35)",
+            "border-radius": "16px",
+            padding: "24px 28px",
+            "max-width": "620px",
+            width: "90%",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.7), 0 0 35px rgba(56, 189, 248, 0.15)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "18px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "padding-bottom": "12px" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <span style={{ "font-size": "18px" }}>⌨️</span>
+              <span style={{ "font-weight": 700, "font-size": "16px", color: "var(--text-primary, #f8fafc)", "font-family": "Space Mono, monospace" }}>
+                Keyboard Shortcuts
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeShortcuts}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-secondary, #94a3b8)",
+                cursor: "pointer",
+                "font-size": "16px",
+                padding: "4px",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", "max-height": "60vh", overflow: "auto" }}>
+            <For each={shortcuts}>
+              {(sec) => (
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.06)", "border-radius": "10px", padding: "12px 14px" }}>
+                  <div style={{ "font-size": "11px", "font-weight": 700, "font-family": "Space Mono, monospace", color: "var(--accent-default, #38bdf8)", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "10px" }}>
+                    {sec.section}
+                  </div>
+                  <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                    <For each={sec.items}>
+                      {(item) => (
+                        <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "10px", "font-size": "12px" }}>
+                          <span style={{ color: "var(--text-secondary, #94a3b8)" }}>{item.desc}</span>
+                          <kbd style={{ background: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(255, 255, 255, 0.18)", "border-radius": "5px", padding: "2px 7px", "font-family": "Space Mono, monospace", "font-size": "11px", "font-weight": 700, color: "#f8fafc", "box-shadow": "0 2px 4px rgba(0,0,0,0.3)" }}>
+                            {item.key}
+                          </kbd>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function StatusBar() {
+  const ctx = useGit();
+  const branchName = () => ctx.status()?.branch || "detached";
+  const changesCount = () => ctx.status()?.changes.length || 0;
+  const stagedCount = () => ctx.status()?.changes.filter((c) => c.staged).length || 0;
+  const unstagedCount = () => changesCount() - stagedCount();
+
+  return (
+    <div style={S.statusBar}>
+      <div style={{ display: "flex", "align-items": "center", gap: "14px", overflow: "hidden" }}>
+        {/* Branch tracking badge */}
+        <div style={{ display: "flex", "align-items": "center", gap: "6px", "white-space": "nowrap" }}>
+          <span style={{ color: "#38bdf8", "font-weight": 700 }}>🌿 {branchName()}</span>
+          <Show when={ctx.status()?.hasRemote}>
+            <span style={{ color: "#4ade80", "font-size": "10.5px" }}>
+              ↑{ctx.status()!.ahead} ↓{ctx.status()!.behind}
+            </span>
+          </Show>
+        </div>
+
+        <span style={{ opacity: 0.3 }}>|</span>
+
+        {/* Changes summary */}
+        <div style={{ display: "flex", "align-items": "center", gap: "8px", "white-space": "nowrap" }}>
+          <Show when={changesCount() > 0} fallback={<span style={{ color: "#4ade80" }}>✓ Working tree clean</span>}>
+            <span style={{ color: stagedCount() > 0 ? "#4ade80" : "inherit" }}>
+              ● {stagedCount()} staged
+            </span>
+            <span style={{ color: unstagedCount() > 0 ? "#f59e0b" : "inherit" }}>
+              ● {unstagedCount()} unstaged
+            </span>
+          </Show>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", "align-items": "center", gap: "12px", "white-space": "nowrap" }}>
+        {/* Active view indicator */}
+        <span style={{ "text-transform": "uppercase", "font-size": "10px", "font-weight": 700, padding: "1px 6px", "border-radius": "4px", background: "rgba(255, 255, 255, 0.08)", color: "var(--text-primary, #fff)" }}>
+          {ctx.activeView()}
+        </span>
+
+        {/* Shortcuts trigger button */}
+        <button
+          type="button"
+          onClick={ctx.toggleShortcuts}
+          title="Press '?' for keyboard shortcuts"
+          style={{
+            background: "rgba(255, 255, 255, 0.06)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            color: "var(--text-primary, #f8fafc)",
+            padding: "2px 8px",
+            "border-radius": "4px",
+            "font-size": "10.5px",
+            "font-family": "Space Mono, monospace",
+            cursor: "pointer",
+            display: "inline-flex",
+            "align-items": "center",
+            gap: "4px",
+          }}
+        >
+          <span>⌨️</span>
+          <span>Shortcuts [?]</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+

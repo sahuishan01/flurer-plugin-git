@@ -7,6 +7,7 @@ import { S } from "../styles";
 export function HistoryView() {
   const ctx = useGit();
   const [search, setSearch] = createSignal("");
+  const [density, setDensity] = createSignal<"detailed" | "compact">("detailed");
   const [loadingMore, setLoadingMore] = createSignal(false);
   const [menuPos, setMenuPos] = createSignal<{ x: number; y: number; hash: string } | null>(null);
   let containerRef: HTMLDivElement | undefined;
@@ -61,14 +62,56 @@ export function HistoryView() {
         overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", gap: "10px", "margin-bottom": "14px", "align-items": "center" }}>
+      {/* Toolbar */}
+      <div style={{ display: "flex", gap: "10px", "margin-bottom": "14px", "align-items": "center", "flex-wrap": "wrap" }}>
         <input
           type="text"
-          placeholder="Search commits by message, author, or hash..."
+          placeholder="🔍 Search commits by message, author, or hash..."
           value={search()}
           onInput={(e) => setSearch(e.currentTarget.value)}
-          style={{ ...S.input, flex: 1 }}
+          style={{ ...S.input, flex: 1, "min-width": "200px" }}
         />
+
+        {/* Density Toggle */}
+        <div style={{ display: "inline-flex", background: "rgba(10, 14, 23, 0.6)", border: "1px solid rgba(255, 255, 255, 0.12)", "border-radius": "8px", padding: "2px", gap: "2px" }}>
+          <button
+            type="button"
+            style={{
+              padding: "4px 10px",
+              "font-size": "11px",
+              "font-weight": 600,
+              border: "none",
+              "border-radius": "6px",
+              cursor: "pointer",
+              background: density() === "detailed" ? "var(--accent-default, #38bdf8)" : "transparent",
+              color: density() === "detailed" ? "#000" : "var(--text-primary, #f8fafc)",
+              transition: "all 0.15s ease",
+            }}
+            onClick={() => setDensity("detailed")}
+            title="Detailed commit rows"
+          >
+            📋 Detailed
+          </button>
+          <button
+            type="button"
+            style={{
+              padding: "4px 10px",
+              "font-size": "11px",
+              "font-weight": 600,
+              border: "none",
+              "border-radius": "6px",
+              cursor: "pointer",
+              background: density() === "compact" ? "var(--accent-default, #38bdf8)" : "transparent",
+              color: density() === "compact" ? "#000" : "var(--text-primary, #f8fafc)",
+              transition: "all 0.15s ease",
+            }}
+            onClick={() => setDensity("compact")}
+            title="Compact 1-line rows"
+          >
+            ⚡ Compact
+          </button>
+        </div>
+
         <BranchMultiSelect />
       </div>
 
@@ -98,7 +141,7 @@ export function HistoryView() {
                     display: "flex",
                     "align-items": "center",
                     gap: "10px",
-                    padding: "8px 12px",
+                    padding: density() === "compact" ? "5px 10px" : "8px 12px",
                     cursor: "pointer",
                     "border-radius": "6px",
                     transition: "background 0.15s ease",
@@ -120,27 +163,30 @@ export function HistoryView() {
                   }}
                   onContextMenu={(e) => handleContextMenu(e, c.hash)}
                 >
-                  <div
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      "border-radius": "50%",
-                      background: "linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(129, 140, 248, 0.25))",
-                      border: "1px solid rgba(56, 189, 248, 0.35)",
-                      color: "#38bdf8",
-                      display: "flex",
-                      "align-items": "center",
-                      "justify-content": "center",
-                      "font-size": "10px",
-                      "font-weight": 700,
-                      "font-family": "Space Mono, monospace",
-                      "flex-shrink": 0,
-                    }}
-                    title={c.author}
-                  >
-                    {initials}
-                  </div>
-                  <code style={{ color: "var(--accent-default, #38bdf8)", "font-family": "Space Mono, monospace", "font-size": "11.5px", "font-weight": 600, "flex-shrink": 0, padding: "2px 6px", background: "rgba(56, 189, 248, 0.1)", "border-radius": "4px" }}>
+                  <Show when={density() === "detailed"}>
+                    <div
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        "border-radius": "50%",
+                        background: "linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(129, 140, 248, 0.25))",
+                        border: "1px solid rgba(56, 189, 248, 0.35)",
+                        color: "#38bdf8",
+                        display: "flex",
+                        "align-items": "center",
+                        "justify-content": "center",
+                        "font-size": "10px",
+                        "font-weight": 700,
+                        "font-family": "Space Mono, monospace",
+                        "flex-shrink": 0,
+                      }}
+                      title={c.author}
+                    >
+                      {initials}
+                    </div>
+                  </Show>
+
+                  <code style={{ color: "var(--accent-default, #38bdf8)", "font-family": "Space Mono, monospace", "font-size": density() === "compact" ? "10.5px" : "11.5px", "font-weight": 600, "flex-shrink": 0, padding: "2px 6px", background: "rgba(56, 189, 248, 0.1)", "border-radius": "4px" }}>
                     {c.hash.slice(0, 7)}
                   </code>
 
@@ -158,38 +204,57 @@ export function HistoryView() {
                           "font-weight": 700,
                           "font-family": "Space Mono, monospace",
                           background: ref.isTag ? "rgba(168, 85, 247, 0.24)" : (ref.isHead ? "rgba(245, 158, 11, 0.24)" : "rgba(56, 189, 248, 0.18)"),
-                          border: ref.isTag ? "1px solid rgba(168, 85, 247, 0.45)" : (ref.isHead ? "1px solid rgba(245, 158, 11, 0.45)" : "1px solid rgba(56, 189, 248, 0.4)"),
+                          border: ref.isTag ? "1px solid rgba(168, 85, 247, 0.45)" : (ref.isHead ? "1px solid rgba(245, 158, 11, 0.45)" : "1px solid rgba(56, 189, 248, 0.35)"),
                           color: ref.isTag ? "#e9d5ff" : (ref.isHead ? "#fef3c7" : "#38bdf8"),
-                          "white-space": "nowrap",
                           "flex-shrink": 0,
                         }}
                       >
-                        {ref.isTag ? `🏷️ ${ref.label}` : (ref.isHead ? `🌿 ${ref.label}` : ref.label)}
+                        <span>{ref.isTag ? "🏷️" : "🌿"}</span>
+                        <span>{ref.label}</span>
                       </span>
                     )}
                   </For>
 
-                  <span style={{ "font-size": "13px", "font-weight": 500, color: "var(--text-primary, #f8fafc)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: 1, "min-width": 0 }} title={c.message}>
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: "hidden",
+                      "text-overflow": "ellipsis",
+                      "white-space": "nowrap",
+                      "font-size": density() === "compact" ? "12px" : "13px",
+                      color: "var(--text-primary, #f8fafc)",
+                      "font-weight": 500,
+                      "min-width": 0,
+                    }}
+                    title={c.message}
+                  >
                     {c.message}
                   </span>
-                  <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", "flex-shrink": 0, "text-align": "right" }}>
-                    {formatTimestamp(c.timestamp)}
+
+                  <span
+                    style={{
+                      "font-size": "11px",
+                      color: "rgba(255, 255, 255, 0.45)",
+                      "font-family": "Space Mono, monospace",
+                      "flex-shrink": 0,
+                      "margin-left": "auto",
+                      display: "flex",
+                      "align-items": "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>{c.author}</span>
+                    <span>•</span>
+                    <span>{formatTimestamp(c.timestamp)}</span>
                   </span>
                 </div>
               );
             }}
           </For>
         </Card>
-
-        <Show when={ctx.historyHasMore()}>
-          <div style={{ "text-align": "center", "margin-top": "14px", "padding-bottom": "16px", width: "100%" }}>
-            <Button onClick={handleLoadMore} disabled={loadingMore()}>
-              {loadingMore() ? "Loading..." : "Load More Commits"}
-            </Button>
-          </div>
-        </Show>
       </Show>
 
+      {/* Commit Detail Drawer */}
       <Show when={ctx.commitDetail()}>
         {(() => {
           const detail = ctx.commitDetail()!;
