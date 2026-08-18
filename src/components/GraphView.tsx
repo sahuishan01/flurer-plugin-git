@@ -307,32 +307,99 @@ function getSharedBeaconMaterial(color: string): THREE.MeshBasicMaterial {
   return beaconMaterialCache.get(color)!;
 }
 
-function getBadgeSpriteMaterial(text: string, color: string): THREE.SpriteMaterial | null {
-  const key = `${text}|${color}`;
+export interface ParsedRef {
+  raw: string;
+  label: string;
+  isTag: boolean;
+  isHead: boolean;
+  isRemote: boolean;
+}
+
+export function parseRef(ref: string): ParsedRef {
+  const clean = ref.trim();
+  if (clean.startsWith("tag: ")) {
+    return { raw: clean, label: clean.substring(5).trim(), isTag: true, isHead: false, isRemote: false };
+  }
+  if (clean.startsWith("HEAD -> ")) {
+    return { raw: clean, label: `${clean.substring(8).trim()} (HEAD)`, isTag: false, isHead: true, isRemote: false };
+  }
+  if (clean === "HEAD") {
+    return { raw: clean, label: "HEAD", isTag: false, isHead: true, isRemote: false };
+  }
+  const isRemote = clean.startsWith("origin/") || clean.startsWith("upstream/");
+  return { raw: clean, label: clean, isTag: false, isHead: false, isRemote };
+}
+
+export interface TreeBadge {
+  raw: string;
+  label: string;
+  isTag: boolean;
+  isHead: boolean;
+  x: number;
+  width: number;
+  bg: string;
+  stroke: string;
+  textCol: string;
+}
+
+export function getRowBadges(refs: string[], startX: number, laneCol: string): { badges: TreeBadge[]; nextX: number } {
+  let curX = startX;
+  const badges: TreeBadge[] = [];
+  for (const ref of refs) {
+    const p = parseRef(ref);
+    const displayLabel = p.isTag ? `🏷️ ${p.label}` : (p.isHead ? `🌿 ${p.label}` : p.label);
+    const tw = displayLabel.length * 7.2 + 18;
+    const bg = p.isTag ? "rgba(168, 85, 247, 0.24)" : (p.isHead ? "rgba(245, 158, 11, 0.24)" : lighten(laneCol, 0.22));
+    const stroke = p.isTag ? "#c084fc" : (p.isHead ? "#f59e0b" : laneCol);
+    const textCol = p.isTag ? "#e9d5ff" : (p.isHead ? "#fef3c7" : laneCol);
+    badges.push({
+      raw: p.raw,
+      label: displayLabel,
+      isTag: p.isTag,
+      isHead: p.isHead,
+      x: curX,
+      width: tw,
+      bg,
+      stroke,
+      textCol,
+    });
+    curX += tw + 6;
+  }
+  return { badges, nextX: curX };
+}
+
+function getBadgeSpriteMaterial(text: string, color: string, isTag?: boolean, isHead?: boolean): THREE.SpriteMaterial | null {
+  const key = `${text}|${color}|${isTag ? '1' : '0'}|${isHead ? '1' : '0'}`;
   if (!spriteMaterialCache.has(key)) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    canvas.width = 512;
-    canvas.height = 112;
 
-    ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
-    ctx.strokeStyle = color || "#38bdf8";
+    // Set font to measure dynamic width
+    ctx.font = "bold 32px Space Mono, monospace";
+    const textWidth = ctx.measureText(text).width;
+    canvas.width = Math.max(512, Math.min(2048, Math.round(textWidth + 90)));
+    canvas.height = 100;
+
+    const bgCol = isTag ? "rgba(147, 51, 234, 0.95)" : (isHead ? "rgba(217, 119, 6, 0.95)" : "rgba(15, 23, 42, 0.95)");
+    const borderCol = isTag ? "#c084fc" : (isHead ? "#f59e0b" : (color || "#38bdf8"));
+
+    ctx.fillStyle = bgCol;
+    ctx.strokeStyle = borderCol;
     ctx.lineWidth = 5;
     if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(6, 8, canvas.width - 12, canvas.height - 16, 22);
+      ctx.roundRect(6, 6, canvas.width - 12, canvas.height - 12, 20);
     } else {
-      ctx.rect(6, 8, canvas.width - 12, canvas.height - 16);
+      ctx.rect(6, 6, canvas.width - 12, canvas.height - 12);
     }
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = "bold 34px Space Mono, monospace";
+    ctx.font = "bold 32px Space Mono, monospace";
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const displayText = text.length > 25 ? text.slice(0, 25) + "…" : text;
-    ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.generateMipmaps = false;
@@ -368,13 +435,16 @@ function createNode3DSprite(node: ForceNode): THREE.Object3D {
 
   // Floating 3D Branch / Tag Badge Sprite
   if (node.refs && node.refs.length > 0) {
-    const labels = node.refs.map(r => r.replace("HEAD -> ", "").replace("HEAD, ", ""));
-    const text = labels.join(" • ");
-    const spriteMaterial = getBadgeSpriteMaterial(text, node.color || "#38bdf8");
+    const parsed = node.refs.map(parseRef);
+    const text = parsed.map(p => (p.isTag ? `🏷️ ${p.label}` : p.label)).join(" • ");
+    const hasTag = parsed.some(p => p.isTag);
+    const hasHead = parsed.some(p => p.isHead);
+    const spriteMaterial = getBadgeSpriteMaterial(text, node.color || "#38bdf8", hasTag, hasHead);
     if (spriteMaterial) {
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.set(0, radius + 15, 0);
-      sprite.scale.set(58, 14.5, 1);
+      const spriteW = Math.max(54, Math.min(240, text.length * 5.2 + 22));
+      sprite.scale.set(spriteW, 14, 1);
       group.add(sprite);
     }
   } else if (node.isBranchTip) {
@@ -938,13 +1008,31 @@ export function GraphView() {
 
       inst
         .nodeThreeObject((node: any) => createNode3DSprite(node))
-        .nodeLabel((node: any) => `
-          <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.18); padding: 8px 12px; border-radius: 8px; font-family: monospace; font-size: 11px; color: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-            <div style="color: ${COLORS[node.lane % COLORS.length]}; font-weight: bold;">${node.shortHash} (Lane ${node.lane}) ${node.isMerge ? '🔀 MERGE' : ''} ${node.refs && node.refs.length ? '<span style="color:#38bdf8;">[' + node.refs.join(', ') + ']</span>' : ''}</div>
-            <div style="margin: 4px 0; color: #f8fafc; font-weight: 500;">${node.message}</div>
-            <div style="color: #94a3b8; font-size: 10px;">${node.author} • ${formatTimestamp(node.timestamp)}</div>
+        .nodeLabel((node: any) => {
+          const refsHtml = (node.refs || []).map((r: string) => {
+            const p = parseRef(r);
+            if (p.isTag) {
+              return `<span style="background: rgba(168, 85, 247, 0.25); border: 1px solid rgba(168, 85, 247, 0.45); color: #e9d5ff; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 4px; display: inline-block;">🏷️ ${p.label}</span>`;
+            }
+            if (p.isHead) {
+              return `<span style="background: rgba(245, 158, 11, 0.25); border: 1px solid rgba(245, 158, 11, 0.45); color: #fef3c7; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 4px; display: inline-block;">🌿 ${p.label}</span>`;
+            }
+            return `<span style="background: rgba(56, 189, 248, 0.22); border: 1px solid rgba(56, 189, 248, 0.45); color: #38bdf8; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 4px; display: inline-block;">🌿 ${p.label}</span>`;
+          }).join("");
+
+          return `
+          <div style="background: rgba(15, 23, 42, 0.96); border: 1px solid rgba(255,255,255,0.18); padding: 10px 14px; border-radius: 8px; font-family: Space Mono, monospace; font-size: 11.5px; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.6); max-width: 420px;">
+            ${refsHtml ? `<div style="margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 4px;">${refsHtml}</div>` : ''}
+            <div style="color: ${COLORS[node.lane % COLORS.length]}; font-weight: bold; margin-bottom: 4px;">
+              ${node.shortHash} (Lane ${node.lane}) ${node.isMerge ? '🔀 MERGE' : ''}
+            </div>
+            <div style="margin: 4px 0; color: #f8fafc; font-weight: 500; word-break: break-word; line-height: 1.4;">${node.message}</div>
+            <div style="color: #94a3b8; font-size: 10px; margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
+              ${node.author} • ${formatTimestamp(node.timestamp)}
+            </div>
           </div>
-        `)
+        `;
+        })
         .linkCurvature((link: any) => link.isMerge ? 0.35 : 0.08)
         .linkWidth((link: any) => {
           const srcId = typeof link.source === "object" ? link.source.id : link.source;
@@ -1138,19 +1226,17 @@ export function GraphView() {
             canvasCtx.font = `700 ${badgeGraphFontSize}px Space Mono, monospace`;
             let badgeX = x + r + 6 / globalScale;
 
-            for (let i = 0; i < Math.min(node.refs.length, 3); i++) {
-              const ref = node.refs[i];
-              const isTag = ref.startsWith("tag:") || ref.includes("v0.") || ref.startsWith("v");
-              const isHead = ref.includes("HEAD");
-              const label = ref.replace("HEAD -> ", "").replace("HEAD, ", "");
-              const textWidth = canvasCtx.measureText(label).width;
+            for (const rawRef of node.refs) {
+              const p = parseRef(rawRef);
+              const displayLabel = p.isTag ? `🏷️ ${p.label}` : (p.isHead ? `🌿 ${p.label}` : p.label);
+              const textWidth = canvasCtx.measureText(displayLabel).width;
               const paddingX = 6 / globalScale;
               const badgeH = badgeGraphFontSize + 6 / globalScale;
               const badgeW = textWidth + paddingX * 2;
               const badgeY = y - badgeH / 2;
 
               // Badge Pill Background
-              canvasCtx.fillStyle = isTag ? "rgba(168, 85, 247, 0.95)" : (isHead ? "rgba(245, 158, 11, 0.95)" : laneCol);
+              canvasCtx.fillStyle = p.isTag ? "rgba(168, 85, 247, 0.95)" : (p.isHead ? "rgba(245, 158, 11, 0.95)" : (node.color || laneCol));
               canvasCtx.beginPath();
               if (typeof canvasCtx.roundRect === "function") {
                 canvasCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 5 / globalScale);
@@ -1161,9 +1247,37 @@ export function GraphView() {
 
               // Badge Text
               canvasCtx.fillStyle = "#ffffff";
-              canvasCtx.fillText(label, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
+              canvasCtx.fillText(displayLabel, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
 
               badgeX += badgeW + 4 / globalScale;
+            }
+
+            // Always render commit message snippet after badges when zoomed in, truncating the message snippet as needed
+            if (globalScale >= 0.20) {
+              const msgScreenFontSize = 10.5;
+              const msgGraphFontSize = msgScreenFontSize / globalScale;
+              canvasCtx.font = `500 ${msgGraphFontSize}px Space Mono, monospace`;
+
+              const snippet = node.message?.length > 28 ? `${node.message.slice(0, 28)}…` : (node.message || "");
+              const shortText = `${node.shortHash} ${snippet}`;
+              const textWidth = canvasCtx.measureText(shortText).width;
+              const padX = 5 / globalScale;
+              const labelH = msgGraphFontSize + 5 / globalScale;
+              const labelW = textWidth + padX * 2;
+              const labelX = badgeX + 4 / globalScale;
+              const labelY = y - labelH / 2;
+
+              canvasCtx.fillStyle = "rgba(15, 23, 42, 0.78)";
+              canvasCtx.beginPath();
+              if (typeof canvasCtx.roundRect === "function") {
+                canvasCtx.roundRect(labelX, labelY, labelW, labelH, 4 / globalScale);
+              } else {
+                canvasCtx.rect(labelX, labelY, labelW, labelH);
+              }
+              canvasCtx.fill();
+
+              canvasCtx.fillStyle = "rgba(255, 255, 255, 0.88)";
+              canvasCtx.fillText(shortText, labelX + padX, labelY + labelH - 2.8 / globalScale);
             }
           } else if (node.isBranchTip || isHigh) {
             // Branch tip or highlighted node
@@ -1196,7 +1310,8 @@ export function GraphView() {
             const msgGraphFontSize = msgScreenFontSize / globalScale;
             canvasCtx.font = `500 ${msgGraphFontSize}px Space Mono, monospace`;
 
-            const shortText = `${node.shortHash} ${node.message?.slice(0, 26) || ""}`;
+            const snippet = node.message?.length > 28 ? `${node.message.slice(0, 28)}…` : (node.message || "");
+            const shortText = `${node.shortHash} ${snippet}`;
             const textWidth = canvasCtx.measureText(shortText).width;
             const padX = 5 / globalScale;
             const labelH = msgGraphFontSize + 5 / globalScale;
@@ -1219,7 +1334,31 @@ export function GraphView() {
 
           canvasCtx.globalAlpha = 1.0;
         })
-        .nodeLabel((node: any) => `${node.shortHash} (Lane ${node.lane})${node.isMerge ? ' 🔀 MERGE' : ''}: ${node.message} (${node.author})`)
+        .nodeLabel((node: any) => {
+          const refsHtml = (node.refs || []).map((r: string) => {
+            const p = parseRef(r);
+            if (p.isTag) {
+              return `<span style="background: rgba(168, 85, 247, 0.25); border: 1px solid rgba(168, 85, 247, 0.45); color: #e9d5ff; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 4px; display: inline-block;">🏷️ ${p.label}</span>`;
+            }
+            if (p.isHead) {
+              return `<span style="background: rgba(245, 158, 11, 0.25); border: 1px solid rgba(245, 158, 11, 0.45); color: #fef3c7; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 4px; display: inline-block;">🌿 ${p.label}</span>`;
+            }
+            return `<span style="background: rgba(56, 189, 248, 0.22); border: 1px solid rgba(56, 189, 248, 0.45); color: #38bdf8; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 4px; display: inline-block;">🌿 ${p.label}</span>`;
+          }).join("");
+
+          return `
+          <div style="background: rgba(15, 23, 42, 0.96); border: 1px solid rgba(255,255,255,0.18); padding: 10px 14px; border-radius: 8px; font-family: Space Mono, monospace; font-size: 11.5px; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.6); max-width: 420px;">
+            ${refsHtml ? `<div style="margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 4px;">${refsHtml}</div>` : ''}
+            <div style="color: ${COLORS[node.lane % COLORS.length]}; font-weight: bold; margin-bottom: 4px;">
+              ${node.shortHash} (Lane ${node.lane}) ${node.isMerge ? '🔀 MERGE' : ''}
+            </div>
+            <div style="margin: 4px 0; color: #f8fafc; font-weight: 500; word-break: break-word; line-height: 1.4;">${node.message}</div>
+            <div style="color: #94a3b8; font-size: 10px; margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
+              ${node.author} • ${formatTimestamp(node.timestamp)}
+            </div>
+          </div>
+        `;
+        })
         .linkDirectionalArrowLength(4.5)
         .linkDirectionalArrowRelPos(0.85)
         .linkColor((link: any) => link.color)
@@ -1671,10 +1810,11 @@ export function GraphView() {
                   const maxLane = () => rowMaxLanes()[i] ?? row().lane;
                   const railsW = () => (maxLane() + 1) * LANE_W;
                   const refStart = () => railsW() + 8;
-                  const textX = () => refStart() + (row().refs.length > 0 ? Math.min(row().refs.length, 3) * 130 : 0) + 6;
+                  const badgeData = () => getRowBadges(row().refs || [], refStart(), color);
+                  const textX = () => (row().refs && row().refs.length > 0) ? badgeData().nextX + 4 : refStart();
                   const isSelected = () => selectedHash() === row().hash;
                   const isMergeCommit = () => row().parents.length > 1;
-                  const msgLeft = () => textX() + (isMergeCommit() ? 202 : 78);
+                  const msgLeft = () => textX() + (isMergeCommit() ? 202 : 68);
 
                   return (
                     <g style={{ cursor: "pointer" }} onClick={() => handleRowClick(row().hash)} onContextMenu={(e) => handleContextMenu(e, row().hash)}>
@@ -1689,19 +1829,15 @@ export function GraphView() {
                         <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
                       </Show>
 
-                      <Index each={row().refs}>
-                        {(ref, ri) => {
-                          const rx = refStart() + ri * 130;
-                          const tw = Math.min(ref().length * 7.2 + 16, 120);
-                          return (
-                            <g>
-                              <rect x={rx} y={y - 9} width={tw} height={18} rx={4} fill={lighten(color, 0.22)} stroke={color} stroke-width="1" />
-                              <text class="flurer-git-refs" x={rx + 8} y={y + 4} fill={color} font-size="10" font-weight="700" font-family="Space Mono,monospace">
-                                {ref().length > 14 ? ref().slice(0, 14) + "…" : ref()}
-                              </text>
-                            </g>
-                          );
-                        }}
+                      <Index each={badgeData().badges}>
+                        {(badge) => (
+                          <g>
+                            <rect x={badge().x} y={y - 9} width={badge().width} height={18} rx={4} fill={badge().bg} stroke={badge().stroke} stroke-width="1" />
+                            <text class="flurer-git-refs" x={badge().x + 7} y={y + 4} fill={badge().textCol} font-size="10" font-weight="700" font-family="Space Mono,monospace">
+                              {badge().label}
+                            </text>
+                          </g>
+                        )}
                       </Index>
 
                       <text class="flurer-git-hash" x={textX()} y={y + 4} fill="var(--accent-default, var(--accent-color,#f59e0b))" font-size="11" font-family="Space Mono,monospace" style={{ "text-shadow": "var(--text-shadow)" }}>
@@ -1749,58 +1885,109 @@ export function GraphView() {
 
       {/* Selected Commit Detail Drawer */}
       <Show when={ctx.commitDetail()}>
-        <div style={{ "margin-top": "12px", "flex-shrink": 0 }}>
-          <Card>
-            <div style={S.cardHeader}>
-              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                <span style={{ "font-weight": 600, color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>Commit Details</span>
-                <code style={{ color: "var(--accent-default, var(--accent-color, #f59e0b))", "font-family": "Space Mono, monospace", "font-size": "12px" }}>
-                  {ctx.commitDetail()!.hash.slice(0, 7)}
-                </code>
-              </div>
-              <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <Button size="sm" variant="primary" onClick={() => {
-                  const d = ctx.commitDetail();
-                  if (d) ctx.openDiffPrompt(d.hash);
-                }}>View Diff</Button>
-                <Button size="sm" onClick={() => {
-                  ctx.closeCommitDetail();
-                  setSelectedHash(null);
-                }}>✕</Button>
-              </div>
-            </div>
+        {(() => {
+          const detail = ctx.commitDetail()!;
+          const endingTags = createMemo(() => {
+            const tags: string[] = [...(detail.tags || [])];
+            const graphNode = data().rows.find((r: any) => r.hash === detail.hash);
+            if (graphNode && graphNode.refs) {
+              graphNode.refs.forEach((r: string) => {
+                const p = parseRef(r);
+                if (p.isTag && !tags.includes(p.label)) tags.push(p.label);
+              });
+            }
+            return tags;
+          });
 
-            <div style={{ "font-size": "13px", "line-height": "1.5" }}>
-              <div style={{ "white-space": "pre-wrap", "font-weight": 500, "margin-bottom": "8px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", "word-break": "break-word" }}>
-                {ctx.commitDetail()!.message}
-              </div>
+          const endingBranches = createMemo(() => {
+            const branches: string[] = [...(detail.branches || [])];
+            const graphNode = data().rows.find((r: any) => r.hash === detail.hash);
+            if (graphNode && graphNode.refs) {
+              graphNode.refs.forEach((r: string) => {
+                const p = parseRef(r);
+                if (!p.isTag && !branches.includes(p.label)) branches.push(p.label);
+              });
+            }
+            return branches;
+          });
 
-              <Show when={ctx.commitDetail()!.parent_hashes.length > 1}>
-                <div style={{ background: "linear-gradient(135deg, rgba(96,205,255,0.14), rgba(129,140,248,0.12))", border: "1px solid rgba(96,205,255,0.3)", padding: "10px 14px", "border-radius": "10px", margin: "10px 0", "box-shadow": "0 2px 10px rgba(0,0,0,0.12)" }}>
-                  <div style={{ display: "flex", "align-items": "center", gap: "6px", "font-weight": 600, "font-size": "12px", color: "var(--accent-default, #60cdff)", "text-shadow": "var(--text-shadow)" }}>
-                    🔀 Merge Commit Breakdown
+          return (
+            <div style={{ "margin-top": "12px", "flex-shrink": 0 }}>
+              <Card>
+                <div style={S.cardHeader}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <span style={{ "font-weight": 600, color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)" }}>Commit Details</span>
+                    <code style={{ color: "var(--accent-default, var(--accent-color, #f59e0b))", "font-family": "Space Mono, monospace", "font-size": "12px" }}>
+                      {detail.hash.slice(0, 7)}
+                    </code>
                   </div>
-                  <div style={{ "font-size": "12px", margin: "6px 0 2px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap" }}>
-                    <span>Merging <strong>Source Branch</strong></span>
-                    <code style={{ background: "rgba(74, 222, 128, 0.2)", color: "#4ade80", padding: "2px 6px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
-                      {ctx.commitDetail()!.parent_hashes[1].slice(0, 7)}
-                    </code>
-                    <span style={{ "font-weight": 700 }}>➔ Into Target/Base Branch</span>
-                    <code style={{ background: "rgba(96, 165, 250, 0.2)", color: "#60a5fa", padding: "2px 6px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
-                      {ctx.commitDetail()!.parent_hashes[0].slice(0, 7)}
-                    </code>
+                  <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                    <Button size="sm" variant="primary" onClick={() => {
+                      ctx.openDiffPrompt(detail.hash);
+                    }}>View Diff</Button>
+                    <Button size="sm" onClick={() => {
+                      ctx.closeCommitDetail();
+                      setSelectedHash(null);
+                    }}>✕</Button>
                   </div>
                 </div>
-              </Show>
 
-              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "16px", "font-size": "11px", color: "var(--text-secondary, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", "padding-top": "8px" }}>
-                <div><strong>Author:</strong> {ctx.commitDetail()!.author} &lt;{ctx.commitDetail()!.email}&gt;</div>
-                <div><strong>Date:</strong> {formatTimestamp(ctx.commitDetail()!.timestamp)}</div>
-                <div><strong>Full Hash:</strong> <code style={{ "font-family": "Space Mono, monospace" }}>{ctx.commitDetail()!.hash}</code></div>
-              </div>
+                <div style={{ "font-size": "13px", "line-height": "1.5" }}>
+                  {/* Ending Tags & Branches Badges */}
+                  <Show when={endingTags().length > 0 || endingBranches().length > 0}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap", margin: "4px 0 12px", padding: "8px 12px", background: "rgba(255, 255, 255, 0.04)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "8px" }}>
+                      <span style={{ "font-size": "11px", "font-weight": 700, "text-transform": "uppercase", color: "var(--text-secondary, #94a3b8)", "font-family": "Space Mono, monospace", "letter-spacing": "0.5px" }}>
+                        Ending at this commit:
+                      </span>
+                      <For each={endingTags()}>
+                        {(tag) => (
+                          <span style={{ display: "inline-flex", "align-items": "center", gap: "5px", padding: "3px 10px", "border-radius": "999px", background: "rgba(168, 85, 247, 0.22)", border: "1px solid rgba(168, 85, 247, 0.45)", color: "#e9d5ff", "font-size": "11.5px", "font-weight": 600, "font-family": "Space Mono, monospace" }}>
+                            🏷️ {tag}
+                          </span>
+                        )}
+                      </For>
+                      <For each={endingBranches()}>
+                        {(branch) => (
+                          <span style={{ display: "inline-flex", "align-items": "center", gap: "5px", padding: "3px 10px", "border-radius": "999px", background: branch.includes("(HEAD)") ? "rgba(245, 158, 11, 0.22)" : "rgba(56, 189, 248, 0.18)", border: branch.includes("(HEAD)") ? "1px solid rgba(245, 158, 11, 0.45)" : "1px solid rgba(56, 189, 248, 0.4)", color: branch.includes("(HEAD)") ? "#fef3c7" : "#38bdf8", "font-size": "11.5px", "font-weight": 600, "font-family": "Space Mono, monospace" }}>
+                            🌿 {branch}
+                          </span>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+
+                  <div style={{ "white-space": "pre-wrap", "font-weight": 500, "margin-bottom": "10px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", "word-break": "break-word", "font-size": "13.5px", "line-height": "1.6" }}>
+                    {detail.message}
+                  </div>
+
+                  <Show when={detail.parent_hashes.length > 1}>
+                    <div style={{ background: "linear-gradient(135deg, rgba(96,205,255,0.14), rgba(129,140,248,0.12))", border: "1px solid rgba(96,205,255,0.3)", padding: "10px 14px", "border-radius": "10px", margin: "10px 0", "box-shadow": "0 2px 10px rgba(0,0,0,0.12)" }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px", "font-weight": 600, "font-size": "12px", color: "var(--accent-default, #60cdff)", "text-shadow": "var(--text-shadow)" }}>
+                        🔀 Merge Commit Breakdown
+                      </div>
+                      <div style={{ "font-size": "12px", margin: "6px 0 2px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap" }}>
+                        <span>Merging <strong>Source Branch</strong></span>
+                        <code style={{ background: "rgba(74, 222, 128, 0.2)", color: "#4ade80", padding: "2px 6px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                          {detail.parent_hashes[1].slice(0, 7)}
+                        </code>
+                        <span style={{ "font-weight": 700 }}>➔ Into Target/Base Branch</span>
+                        <code style={{ background: "rgba(96, 165, 250, 0.2)", color: "#60a5fa", padding: "2px 6px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                          {detail.parent_hashes[0].slice(0, 7)}
+                        </code>
+                      </div>
+                    </div>
+                  </Show>
+
+                  <div style={{ display: "flex", "flex-wrap": "wrap", gap: "16px", "font-size": "11px", color: "var(--text-secondary, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", "padding-top": "8px" }}>
+                    <div><strong>Author:</strong> {detail.author} &lt;{detail.email}&gt;</div>
+                    <div><strong>Date:</strong> {formatTimestamp(detail.timestamp)}</div>
+                    <div><strong>Full Hash:</strong> <code style={{ "font-family": "Space Mono, monospace" }}>{detail.hash}</code></div>
+                  </div>
+                </div>
+              </Card>
             </div>
-          </Card>
-        </div>
+          );
+        })()}
       </Show>
 
       {/* Right-click Context Menu */}

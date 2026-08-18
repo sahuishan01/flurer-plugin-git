@@ -395,3 +395,26 @@ export function statusColor(status: string): string {
     default: return "var(--text-muted, #888)";
   }
 }
+
+export interface ParsedRef {
+  raw: string;
+  label: string;
+  isTag: boolean;
+  isHead: boolean;
+  isRemote: boolean;
+}
+
+export function parseRef(ref: string): ParsedRef {
+  const clean = ref.trim();
+  if (clean.startsWith("tag: ")) {
+    return { raw: clean, label: clean.substring(5).trim(), isTag: true, isHead: false, isRemote: false };
+  }
+  if (clean.startsWith("HEAD -> ")) {
+    return { raw: clean, label: `${clean.substring(8).trim()} (HEAD)`, isTag: false, isHead: true, isRemote: false };
+  }
+  if (clean === "HEAD") {
+    return { raw: clean, label: "HEAD", isTag: false, isHead: true, isRemote: false };
+  }
+  const isRemote = clean.startsWith("origin/") || clean.startsWith("upstream/");
+  return { raw: clean, label: clean, isTag: false, isHead: false, isRemote };
+}

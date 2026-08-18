@@ -486,7 +486,7 @@ export async function gitGraph(
     return out.trim().split("\n").filter(Boolean).map((line) => {
       const [hash, parentsStr, message, author, committer, timestamp, refsStr] = line.split("\x1f");
       const parents = parentsStr ? parentsStr.split(" ") : [];
-      const refs = refsStr ? refsStr.split(",").map((r) => r.trim().split(" ").pop()!).filter(Boolean) : [];
+      const refs = refsStr ? refsStr.split(",").map((r) => r.trim()).filter(Boolean) : [];
       return { hash, message, author, committer, timestamp: parseInt(timestamp, 10), parents, refs };
     });
   }
@@ -594,15 +594,35 @@ export async function gitWorktreeRemove(repoPath: string, worktreePath: string):
 export async function gitShow(repoPath: string, commitHash: string): Promise<GitCommitDetail> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "show", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%at%x1f%P", "--no-patch", commitHash);
-    const [hash, message, author, email, timestamp, parentHashes] = out.trim().split("\x1f");
+    const out = await execGit(repoPath, "show", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%D%x1f%B", "--no-patch", commitHash);
+    const [hash, subject, author, email, timestamp, parentHashes, refsStr, ...bodyParts] = out.trim().split("\x1f");
+    const fullBody = bodyParts.join("\x1f").trim() || subject || "";
+    const rawRefs = refsStr ? refsStr.split(",").map((r) => r.trim()).filter(Boolean) : [];
+    const tags: string[] = [];
+    const branches: string[] = [];
+
+    rawRefs.forEach((r) => {
+      if (r.startsWith("tag: ")) {
+        tags.push(r.substring(5).trim());
+      } else if (r.startsWith("HEAD -> ")) {
+        branches.push(r.substring(8).trim() + " (HEAD)");
+      } else if (r === "HEAD") {
+        branches.push("HEAD");
+      } else {
+        branches.push(r);
+      }
+    });
+
     return {
       hash,
-      message,
+      message: fullBody,
       author,
       email,
       timestamp: parseInt(timestamp, 10),
       parent_hashes: parentHashes ? parentHashes.split(" ") : [],
+      refs: rawRefs,
+      tags,
+      branches,
     };
   }
 

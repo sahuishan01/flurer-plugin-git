@@ -83,6 +83,9 @@ export interface GitCommitDetail {
   email: string;
   timestamp: number;
   parent_hashes: string[];
+  refs?: string[];
+  tags?: string[];
+  branches?: string[];
 }
 
 export interface RecentRepo {
