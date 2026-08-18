@@ -6,6 +6,7 @@ import {
   BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal,
   Toast, ComparisonBar, GlobalLoadingOverlay, StatusBar, ShortcutsModal,
   CommandConsoleModal, TagManagementModal, FileLogModal, BlameModal,
+  RemotesConfigModal,
 } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -64,6 +65,10 @@ export function RepoView(props: RepoViewProps) {
       if (e.key === "Escape") {
         if (ctx.consoleOpen()) {
           ctx.toggleConsole();
+          return;
+        }
+        if (ctx.remotesModalOpen()) {
+          ctx.closeRemotesModal();
           return;
         }
         if (ctx.tagModalCommit() !== null) {
@@ -149,6 +154,9 @@ export function RepoView(props: RepoViewProps) {
                 <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()} title="Fetch remote branches">
                   <FetchIcon size={13} /> Fetch
                 </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openRemotesModal} disabled={ctx.loading()} title="Manage Remotes & Author Profile">
+                  🌐 Remotes
+                </Button>
                 <Button variant="secondary" size="sm" onClick={ctx.refresh} disabled={ctx.loading()} title="Refresh git status">
                   <RefreshIcon size={13} />
                 </Button>
@@ -201,6 +209,7 @@ export function RepoView(props: RepoViewProps) {
       <TagManagementModal />
       <FileLogModal />
       <BlameModal />
+      <RemotesConfigModal />
       <GlobalLoadingOverlay />
       <Toast />
     </div>

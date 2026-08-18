@@ -1825,3 +1825,267 @@ export function BlameModal() {
   );
 }
 
+export function RemotesConfigModal() {
+  const ctx = useGit();
+  const [remoteName, setRemoteName] = createSignal("");
+  const [remoteUrl, setRemoteUrl] = createSignal("");
+  const [userName, setUserName] = createSignal("");
+  const [userEmail, setUserEmail] = createSignal("");
+  const [loadingConfig, setLoadingConfig] = createSignal(false);
+
+  onMount(() => {
+    ctx.loadRemotes();
+    const p = ctx.repoPath();
+    if (p) {
+      setLoadingConfig(true);
+      Promise.all([
+        git.gitConfigGet(p, "user.name"),
+        git.gitConfigGet(p, "user.email"),
+      ])
+        .then(([n, e]) => {
+          setUserName(n);
+          setUserEmail(e);
+        })
+        .finally(() => setLoadingConfig(false));
+    }
+  });
+
+  const handleAddRemote = async () => {
+    const name = remoteName().trim();
+    const url = remoteUrl().trim();
+    if (!name || !url) return;
+    await ctx.addRemote(name, url);
+    setRemoteName("");
+    setRemoteUrl("");
+  };
+
+  const handleSaveAuthor = async () => {
+    const p = ctx.repoPath();
+    if (!p) return;
+    try {
+      await git.gitConfigSet(p, "user.name", userName().trim());
+      await git.gitConfigSet(p, "user.email", userEmail().trim());
+      ctx.showToast("Saved author profile settings", "success");
+    } catch (err) {
+      ctx.showToast(`Failed to save author config: ${err}`, "error");
+    }
+  };
+
+  return (
+    <Show when={ctx.remotesModalOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeRemotesModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            "border-radius": "12px",
+            width: "680px",
+            "max-width": "92vw",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 48px rgba(0,0,0,0.7)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              background: "rgba(10, 14, 23, 0.8)",
+              "border-bottom": "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "18px" }}>🌐</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Remotes & Author Configuration
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Manage upstream remote URLs and local git identity
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeRemotesModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px", padding: "4px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "20px", display: "flex", "flex-direction": "column", gap: "20px" }}>
+            {/* Author Profile Section */}
+            <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "8px", padding: "14px 16px" }}>
+              <div style={{ "font-size": "13px", "font-weight": 700, color: "#38bdf8", "margin-bottom": "10px", display: "flex", "align-items": "center", gap: "6px" }}>
+                <span>👤</span> Author Identity (user.name / user.email)
+              </div>
+              <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "10px", "margin-bottom": "10px" }}>
+                <div>
+                  <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                    Author Name
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Doe"
+                    value={userName()}
+                    onInput={(e) => setUserName(e.currentTarget.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      "border-radius": "6px",
+                      color: "#fff",
+                      "font-size": "12px",
+                      "font-family": "Space Mono, monospace",
+                      "box-sizing": "border-box",
+                    }}
+                  />
+                </div>
+                <div>
+                  <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                    Author Email
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. user@example.com"
+                    value={userEmail()}
+                    onInput={(e) => setUserEmail(e.currentTarget.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      "border-radius": "6px",
+                      color: "#fff",
+                      "font-size": "12px",
+                      "font-family": "Space Mono, monospace",
+                      "box-sizing": "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", "justify-content": "flex-end" }}>
+                <Button size="sm" onClick={handleSaveAuthor} disabled={loadingConfig()}>
+                  Save Identity Profile
+                </Button>
+              </div>
+            </div>
+
+            {/* Remotes Section */}
+            <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "8px", padding: "14px 16px" }}>
+              <div style={{ "font-size": "13px", "font-weight": 700, color: "#38bdf8", "margin-bottom": "10px", display: "flex", "align-items": "center", gap: "6px" }}>
+                <span>🌐</span> Git Remotes ({ctx.remotes().length})
+              </div>
+
+              {/* Add Remote Form */}
+              <div style={{ display: "flex", gap: "8px", "margin-bottom": "12px" }}>
+                <input
+                  type="text"
+                  placeholder="Remote (e.g. upstream)"
+                  value={remoteName()}
+                  onInput={(e) => setRemoteName(e.currentTarget.value)}
+                  style={{
+                    width: "140px",
+                    padding: "6px 10px",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    "border-radius": "6px",
+                    color: "#fff",
+                    "font-size": "11.5px",
+                    "font-family": "Space Mono, monospace",
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="https://github.com/owner/repo.git"
+                  value={remoteUrl()}
+                  onInput={(e) => setRemoteUrl(e.currentTarget.value)}
+                  style={{
+                    flex: 1,
+                    padding: "6px 10px",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    "border-radius": "6px",
+                    color: "#fff",
+                    "font-size": "11.5px",
+                    "font-family": "Space Mono, monospace",
+                  }}
+                />
+                <Button variant="primary" size="sm" onClick={handleAddRemote} disabled={!remoteName().trim() || !remoteUrl().trim()}>
+                  + Add Remote
+                </Button>
+              </div>
+
+              {/* Existing Remotes List */}
+              <Show
+                when={ctx.remotes().length > 0}
+                fallback={
+                  <div style={{ padding: "16px 0", "text-align": "center", color: "rgba(255, 255, 255, 0.4)", "font-size": "11.5px" }}>
+                    No remotes configured for this repository.
+                  </div>
+                }
+              >
+                <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+                  <For each={ctx.remotes()}>
+                    {(r) => (
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          background: "rgba(0, 0, 0, 0.25)",
+                          border: "1px solid rgba(255, 255, 255, 0.06)",
+                          "border-radius": "6px",
+                          display: "flex",
+                          "align-items": "center",
+                          "justify-content": "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ overflow: "hidden" }}>
+                          <div style={{ "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "font-size": "12.5px" }}>
+                            {r.name}
+                          </div>
+                          <div style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                            {r.fetchUrl}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => ctx.removeRemote(r.name)}
+                          style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#f87171", padding: "3px 8px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                          title="Remove remote"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
