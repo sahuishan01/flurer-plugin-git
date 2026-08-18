@@ -4,6 +4,7 @@ import type {
   GitDiff, DiffHunk, DiffLine, DiffFile, GitStashEntry, GitWorktree, GitCommitDetail,
   GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
   GitSignature, GitBisectState, GitLargeBlob, GitLfsInfo, GitRemoteWebLinks,
+  GitReflogEntry, GitSubmodule, GitHook, GitRebaseTodoItem, MultiRepoStatus,
 } from "./types";
 
 let shellAvailable: boolean | null = null;
@@ -1399,6 +1400,257 @@ export function parseRemoteWebLinks(remoteUrl: string): GitRemoteWebLinks | null
       return `${baseUrl}/compare/${base}...${head}`;
     },
   };
+}
+
+// ---- Git Reflog Flow ----
+
+export async function gitReflog(repoPath: string, limit: number = 60): Promise<GitReflogEntry[]> {
+  const Command = getShell();
+  if (Command) {
+    try {
+      const out = await execGit(repoPath, "reflog", "show", `--format=%gd%x1f%H%x1f%gs%x1f%at`, `-n`, String(limit));
+      return out.trim().split("\n").filter(Boolean).map((line, idx) => {
+        const [selector, hash, gs, timestamp] = line.split("\x1f");
+        let action = "commit";
+        let message = gs || "";
+        const colonIdx = message.indexOf(": ");
+        if (colonIdx !== -1) {
+          action = message.substring(0, colonIdx).trim();
+          message = message.substring(colonIdx + 2).trim();
+        }
+        return {
+          index: idx,
+          selector: selector || `HEAD@{${idx}}`,
+          hash: hash || "",
+          action,
+          message,
+          timestamp: parseInt(timestamp, 10) || 0,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+// ---- Git Pickaxe & History Grep Search ----
+
+export async function gitPickaxeSearch(
+  repoPath: string,
+  query: string,
+  mode: "string" | "regex" | "author" | "message" = "string",
+  limit: number = 50
+): Promise<GitCommit[]> {
+  const Command = getShell();
+  if (!query || !query.trim()) return [];
+  if (Command) {
+    try {
+      const args = ["log", `--max-count=${limit}`, `--format=%H%x1f%s%x1f%an%x1f%at%x1f%P%x1f%D`];
+      if (mode === "string") {
+        args.push(`-S${query.trim()}`);
+      } else if (mode === "regex") {
+        args.push(`-G${query.trim()}`);
+      } else if (mode === "author") {
+        args.push(`--author=${query.trim()}`);
+      } else if (mode === "message") {
+        args.push(`--grep=${query.trim()}`);
+      }
+      const out = await execGit(repoPath, ...args);
+      return out.trim().split("\n").filter(Boolean).map((line) => {
+        const [hash, subject, author, timestamp, parentHashes, refsStr] = line.split("\x1f");
+        return {
+          hash,
+          message: subject || "",
+          author: author || "",
+          timestamp: parseInt(timestamp, 10) || 0,
+          parent_hashes: parentHashes ? parentHashes.split(" ") : [],
+          refs: refsStr ? refsStr.split(",").map((r) => r.trim()).filter(Boolean) : [],
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+// ---- Git Submodules Management ----
+
+export async function gitSubmoduleList(repoPath: string): Promise<GitSubmodule[]> {
+  const Command = getShell();
+  if (Command) {
+    try {
+      const configMap = new Map<string, { url: string; name: string }>();
+      try {
+        const configOut = await execGit(repoPath, "config", "--file", ".gitmodules", "--get-regexp", "submodule\\.");
+        for (const line of configOut.trim().split("\n").filter(Boolean)) {
+          const spaceIdx = line.indexOf(" ");
+          if (spaceIdx === -1) continue;
+          const key = line.substring(0, spaceIdx).trim();
+          const val = line.substring(spaceIdx + 1).trim();
+          const m = key.match(/^submodule\.(.+?)\.(url|path)$/);
+          if (m) {
+            const subName = m[1];
+            const prop = m[2];
+            const existing = configMap.get(subName) || { name: subName, url: "" };
+            if (prop === "url") existing.url = val;
+            configMap.set(subName, existing);
+          }
+        }
+      } catch {}
+
+      const statusOut = await execGit(repoPath, "submodule", "status", "--recursive");
+      const list: GitSubmodule[] = [];
+      for (const line of statusOut.trim().split("\n").filter(Boolean)) {
+        const trimmed = line.trim();
+        const prefix = line.charAt(0);
+        let status: GitSubmodule["status"] = "clean";
+        if (prefix === "-") status = "uninitialized";
+        else if (prefix === "+") status = "modified";
+
+        const parts = trimmed.substring(prefix === " " ? 0 : 1).trim().split(/\s+/);
+        if (parts.length >= 2) {
+          const commit = parts[0];
+          const path = parts[1];
+          const name = path.includes("/") ? path.substring(path.lastIndexOf("/") + 1) : path;
+          const conf = configMap.get(name) || { url: "" };
+          list.push({
+            name,
+            path,
+            url: conf.url,
+            commit,
+            status,
+          });
+        }
+      }
+      return list;
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function gitSubmoduleUpdate(repoPath: string, init: boolean = true, recursive: boolean = true): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    const args = ["submodule", "update"];
+    if (init) args.push("--init");
+    if (recursive) args.push("--recursive");
+    await execGit(repoPath, ...args);
+  }
+}
+
+export async function gitSubmoduleAdd(repoPath: string, url: string, path: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "submodule", "add", url, path);
+  }
+}
+
+export async function gitSubmoduleSync(repoPath: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "submodule", "sync", "--recursive");
+  }
+}
+
+// ---- Git Client Hooks Configuration ----
+
+const KNOWN_HOOKS = [
+  "pre-commit",
+  "commit-msg",
+  "pre-push",
+  "prepare-commit-msg",
+  "post-commit",
+  "post-merge",
+  "post-checkout",
+  "pre-rebase",
+];
+
+export async function gitHooksList(repoPath: string): Promise<GitHook[]> {
+  const Command = getShell();
+  if (Command) {
+    const hooks: GitHook[] = [];
+    for (const name of KNOWN_HOOKS) {
+      let active = false;
+      let content = "";
+      try {
+        const out = await execGit(repoPath, "rev-parse", "--git-path", `hooks/${name}`);
+        const hookPath = out.trim();
+        if (hookPath) {
+          try {
+            const shCmd = new Command("sh", ["-c", `cat "${hookPath}" 2>/dev/null || true`]);
+            const res = await shCmd.execute();
+            if (res.code === 0 && res.stdout && res.stdout.trim()) {
+              content = res.stdout;
+              active = true;
+            }
+          } catch {}
+        }
+      } catch {}
+
+      hooks.push({
+        name,
+        active,
+        sampleExists: true,
+        content: content || `#!/bin/sh\n# ${name} hook\n# Exit with non-zero status to cancel the action\n\necho "Executing ${name}..."\n`,
+      });
+    }
+    return hooks;
+  }
+  return [];
+}
+
+export async function gitHookSave(repoPath: string, hookName: string, content: string, active: boolean): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(repoPath, "rev-parse", "--git-path", `hooks/${hookName}`);
+    const hookPath = out.trim();
+    if (hookPath) {
+      if (active) {
+        const b64 = btoa(unescape(encodeURIComponent(content)));
+        const shCmd = new Command("sh", ["-c", `echo "${b64}" | base64 -d > "${hookPath}" && chmod +x "${hookPath}"`]);
+        await shCmd.execute();
+      } else {
+        const shCmd = new Command("sh", ["-c", `rm -f "${hookPath}"`]);
+        await shCmd.execute();
+      }
+    }
+  }
+}
+
+// ---- Interactive Rebase Execution ----
+
+export async function gitExecuteInteractiveRebasePlan(
+  repoPath: string,
+  baseHash: string,
+  plan: GitRebaseTodoItem[]
+): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    let todoContent = "";
+    for (const item of plan) {
+      todoContent += `${item.action} ${item.hash} ${item.message.split("\n")[0]}\n`;
+    }
+
+    const b64 = btoa(unescape(encodeURIComponent(todoContent)));
+    const script = `
+      set -e
+      TODO_FILE="${repoPath}/.git/flurer_rebase_todo"
+      echo "${b64}" | base64 -d > "$TODO_FILE"
+      export GIT_SEQUENCE_EDITOR="cp '$TODO_FILE'"
+      git -C "${repoPath}" rebase -i "${baseHash}"
+      rm -f "$TODO_FILE"
+    `;
+
+    const shCmd = new Command("sh", ["-c", script]);
+    const res = await shCmd.execute();
+    if (res.code !== 0) {
+      throw new Error(res.stderr || `Rebase process failed with code ${res.code}`);
+    }
+  }
 }
 
 // ---- Utility: detect shell availability ----

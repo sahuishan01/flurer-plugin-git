@@ -7,6 +7,8 @@ import {
   Toast, ComparisonBar, GlobalLoadingOverlay, StatusBar, ShortcutsModal,
   CommandConsoleModal, TagManagementModal, FileLogModal, BlameModal,
   RemotesConfigModal, ResetModal, BisectModal, StorageInspectorModal, PatchArchiveModal,
+  ReflogModal, PickaxeSearchModal, SubmodulesModal, HooksManagerModal,
+  InteractiveRebaseModal, WorkspaceOverviewModal,
 } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -86,6 +88,30 @@ export function RepoView(props: RepoViewProps) {
         }
         if (ctx.patchModalCommit() !== null) {
           ctx.closePatchModal();
+          return;
+        }
+        if (ctx.reflogModalOpen()) {
+          ctx.closeReflogModal();
+          return;
+        }
+        if (ctx.pickaxeModalOpen()) {
+          ctx.closePickaxeModal();
+          return;
+        }
+        if (ctx.submodulesModalOpen()) {
+          ctx.closeSubmodulesModal();
+          return;
+        }
+        if (ctx.hooksModalOpen()) {
+          ctx.closeHooksModal();
+          return;
+        }
+        if (ctx.rebasePlanModalBase() !== null) {
+          ctx.closeInteractiveRebaseModal();
+          return;
+        }
+        if (ctx.workspaceOverviewOpen()) {
+          ctx.closeWorkspaceOverview();
           return;
         }
         if (ctx.remotesModalOpen()) {
@@ -175,6 +201,18 @@ export function RepoView(props: RepoViewProps) {
                 <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()} title="Fetch remote branches">
                   <FetchIcon size={13} /> Fetch
                 </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openReflogModal} disabled={ctx.loading()} title="Git Reflog Time Machine">
+                  🕒 Reflog
+                </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openPickaxeModal} disabled={ctx.loading()} title="Pickaxe Deep History Search">
+                  🔎 Pickaxe
+                </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openSubmodulesModal} disabled={ctx.loading()} title="Git Submodules Manager">
+                  🧩 Submodules
+                </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openHooksModal} disabled={ctx.loading()} title="Client Pre-commit Hooks">
+                  🪝 Hooks
+                </Button>
                 <Button variant="secondary" size="sm" onClick={ctx.openStorageModal} disabled={ctx.loading()} title="Inspect Large Files & Git LFS">
                   🗄️ Storage
                 </Button>
@@ -183,6 +221,9 @@ export function RepoView(props: RepoViewProps) {
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => ctx.openPatchModal()} disabled={ctx.loading()} title="Export Patch or Snapshot Archive">
                   📦 Export
+                </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openWorkspaceOverview} disabled={ctx.loading()} title="Multi-Repository Workspace Aggregator">
+                  🌐 Workspace
                 </Button>
                 <Button variant="secondary" size="sm" onClick={ctx.openRemotesModal} disabled={ctx.loading()} title="Manage Remotes & Author Profile">
                   🌐 Remotes
@@ -244,6 +285,12 @@ export function RepoView(props: RepoViewProps) {
       <BisectModal />
       <StorageInspectorModal />
       <PatchArchiveModal />
+      <ReflogModal />
+      <PickaxeSearchModal />
+      <SubmodulesModal />
+      <HooksManagerModal />
+      <InteractiveRebaseModal />
+      <WorkspaceOverviewModal />
       <GlobalLoadingOverlay />
       <Toast />
     </div>

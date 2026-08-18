@@ -202,3 +202,45 @@ export interface GitRemoteWebLinks {
   blameUrl: (path: string, ref?: string) => string;
   compareUrl: (base: string, head: string) => string;
 }
+
+export interface GitReflogEntry {
+  index: number;
+  selector: string;
+  hash: string;
+  action: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface GitSubmodule {
+  name: string;
+  path: string;
+  url: string;
+  commit: string;
+  status: "clean" | "modified" | "uninitialized";
+}
+
+export interface GitHook {
+  name: string;
+  active: boolean;
+  sampleExists: boolean;
+  content: string;
+}
+
+export interface GitRebaseTodoItem {
+  id: string;
+  action: "pick" | "reword" | "edit" | "squash" | "fixup" | "drop";
+  hash: string;
+  message: string;
+  author: string;
+}
+
+export interface MultiRepoStatus {
+  path: string;
+  name: string;
+  branch: string;
+  ahead: number;
+  behind: number;
+  changesCount: number;
+  clean: boolean;
+}

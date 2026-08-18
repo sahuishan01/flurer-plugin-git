@@ -1,5 +1,8 @@
 import { createContext, useContext, createSignal, createMemo, onMount, onCleanup, type Accessor, type JSX, type ParentProps } from "solid-js";
-import { saveRecentRepo, getSavedBranchSelection, saveBranchSelection, getSavedActiveView, saveActiveView } from "./utils";
+import {
+  saveRecentRepo, getSavedBranchSelection, saveBranchSelection,
+  getSavedActiveView, saveActiveView, basename, getSavedOpenTabs,
+} from "./utils";
 import { loadGraphCache, saveGraphCache } from "./cache";
 import * as git from "./git";
 import type {
@@ -7,6 +10,7 @@ import type {
   GitDiff, DiffHunk, GitStashEntry, GitWorktree, GitCommitDetail, BusyTask,
   GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
   GitBisectState, GitLargeBlob, GitLfsInfo, GitRemoteWebLinks,
+  GitReflogEntry, GitSubmodule, GitHook, GitRebaseTodoItem, MultiRepoStatus,
 } from "./types";
 
 interface GitContextValue {
@@ -101,6 +105,46 @@ interface GitContextValue {
   openPatchModal: (commitHash?: string, range?: string) => void;
   closePatchModal: () => void;
   remoteWebLinks: Accessor<GitRemoteWebLinks | null>;
+
+  reflogEntries: Accessor<GitReflogEntry[]>;
+  loadReflog: () => Promise<void>;
+  reflogModalOpen: Accessor<boolean>;
+  openReflogModal: () => void;
+  closeReflogModal: () => void;
+  checkoutReflog: (entry: GitReflogEntry) => Promise<void>;
+
+  pickaxeModalOpen: Accessor<boolean>;
+  openPickaxeModal: () => void;
+  closePickaxeModal: () => void;
+  pickaxeResults: Accessor<GitCommit[]>;
+  searchPickaxe: (query: string, mode: "string" | "regex" | "author" | "message") => Promise<void>;
+
+  submodules: Accessor<GitSubmodule[]>;
+  loadSubmodules: () => Promise<void>;
+  updateSubmodules: () => Promise<void>;
+  addSubmodule: (url: string, path: string) => Promise<void>;
+  submodulesModalOpen: Accessor<boolean>;
+  openSubmodulesModal: () => void;
+  closeSubmodulesModal: () => void;
+
+  hooks: Accessor<GitHook[]>;
+  loadHooks: () => Promise<void>;
+  saveHook: (name: string, content: string, active: boolean) => Promise<void>;
+  hooksModalOpen: Accessor<boolean>;
+  openHooksModal: () => void;
+  closeHooksModal: () => void;
+
+  rebasePlanModalBase: Accessor<string | null>;
+  openInteractiveRebaseModal: (baseHash: string) => void;
+  closeInteractiveRebaseModal: () => void;
+  executeInteractiveRebase: (baseHash: string, plan: GitRebaseTodoItem[]) => Promise<void>;
+
+  workspaceOverviewOpen: Accessor<boolean>;
+  openWorkspaceOverview: () => void;
+  closeWorkspaceOverview: () => void;
+  multiRepoStatuses: Accessor<MultiRepoStatus[]>;
+  loadMultiRepoStatuses: (repoPaths: string[]) => Promise<void>;
+  batchFetchAllRepos: (repoPaths: string[]) => Promise<void>;
   stash: (message?: string) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
@@ -242,6 +286,48 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [lfsInfo, setLfsInfo] = createSignal<GitLfsInfo | null>(null);
   const [storageModalOpen, setStorageModalOpen] = createSignal(false);
   const [patchModalCommit, setPatchModalCommit] = createSignal<{ commitHash?: string; range?: string } | null>(null);
+
+  const [reflogEntries, setReflogEntries] = createSignal<GitReflogEntry[]>([]);
+  const [reflogModalOpen, setReflogModalOpen] = createSignal(false);
+  const openReflogModal = () => {
+    setReflogModalOpen(true);
+    loadReflog();
+  };
+  const closeReflogModal = () => setReflogModalOpen(false);
+
+  const [pickaxeModalOpen, setPickaxeModalOpen] = createSignal(false);
+  const [pickaxeResults, setPickaxeResults] = createSignal<GitCommit[]>([]);
+  const openPickaxeModal = () => setPickaxeModalOpen(true);
+  const closePickaxeModal = () => setPickaxeModalOpen(false);
+
+  const [submodules, setSubmodules] = createSignal<GitSubmodule[]>([]);
+  const [submodulesModalOpen, setSubmodulesModalOpen] = createSignal(false);
+  const openSubmodulesModal = () => {
+    setSubmodulesModalOpen(true);
+    loadSubmodules();
+  };
+  const closeSubmodulesModal = () => setSubmodulesModalOpen(false);
+
+  const [hooks, setHooks] = createSignal<GitHook[]>([]);
+  const [hooksModalOpen, setHooksModalOpen] = createSignal(false);
+  const openHooksModal = () => {
+    setHooksModalOpen(true);
+    loadHooks();
+  };
+  const closeHooksModal = () => setHooksModalOpen(false);
+
+  const [rebasePlanModalBase, setRebasePlanModalBase] = createSignal<string | null>(null);
+  const openInteractiveRebaseModal = (baseHash: string) => setRebasePlanModalBase(baseHash);
+  const closeInteractiveRebaseModal = () => setRebasePlanModalBase(null);
+
+  const [workspaceOverviewOpen, setWorkspaceOverviewOpen] = createSignal(false);
+  const [multiRepoStatuses, setMultiRepoStatuses] = createSignal<MultiRepoStatus[]>([]);
+  const openWorkspaceOverview = () => {
+    setWorkspaceOverviewOpen(true);
+    const paths = getSavedOpenTabs();
+    if (paths.length > 0) loadMultiRepoStatuses(paths);
+  };
+  const closeWorkspaceOverview = () => setWorkspaceOverviewOpen(false);
 
   const openTagModal = (commitHash: string) => setTagModalCommit(commitHash);
   const closeTagModal = () => setTagModalCommit(null);
@@ -1335,6 +1421,172 @@ function toggleBranchSelection(branchName: string) {
     });
   }
 
+  async function loadReflog() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Reading Reflog", "Loading HEAD recovery reflog...", async () => {
+      try {
+        const entries = await git.gitReflog(p, 80);
+        setReflogEntries(entries);
+      } catch (err) {
+        showToast(`Failed to load reflog: ${err}`, "error");
+      }
+    });
+  }
+
+  async function checkoutReflog(entry: GitReflogEntry) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Checking Out Reflog Entry", `Restoring ${entry.selector} (${entry.hash.slice(0, 7)})...`, async () => {
+      try {
+        await git.gitCheckout(p, entry.hash);
+        showToast(`Restored to ${entry.selector}`, "success");
+        closeReflogModal();
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Failed to restore: ${err}`, "error");
+      }
+    });
+  }
+
+  async function searchPickaxe(query: string, mode: "string" | "regex" | "author" | "message") {
+    const p = repoPath();
+    if (!p || !query.trim()) return;
+    return withBusyTask("Pickaxe Code Search", `Searching git history for "${query}"...`, async () => {
+      try {
+        const results = await git.gitPickaxeSearch(p, query, mode, 60);
+        setPickaxeResults(results);
+        if (results.length === 0) {
+          showToast(`No commits found matching "${query}"`, "info");
+        }
+      } catch (err) {
+        showToast(`Pickaxe search failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadSubmodules() {
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const list = await git.gitSubmoduleList(p);
+      setSubmodules(list);
+    } catch {}
+  }
+
+  async function updateSubmodules() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Updating Submodules", "git submodule update --init --recursive", async () => {
+      try {
+        await git.gitSubmoduleUpdate(p, true, true);
+        showToast("Submodules updated successfully", "success");
+        await loadSubmodules();
+        await refresh();
+      } catch (err) {
+        showToast(`Submodule update failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function addSubmodule(url: string, path: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Adding Submodule", `Cloning ${url} into ${path}...`, async () => {
+      try {
+        await git.gitSubmoduleAdd(p, url, path);
+        showToast(`Submodule "${path}" added`, "success");
+        await loadSubmodules();
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to add submodule: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadHooks() {
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const hList = await git.gitHooksList(p);
+      setHooks(hList);
+    } catch {}
+  }
+
+  async function saveHook(name: string, content: string, active: boolean) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Saving Git Hook", name, async () => {
+      try {
+        await git.gitHookSave(p, name, content, active);
+        showToast(`Hook "${name}" ${active ? "activated" : "deactivated"}`, "success");
+        await loadHooks();
+      } catch (err) {
+        showToast(`Failed to save hook: ${err}`, "error");
+      }
+    });
+  }
+
+  async function executeInteractiveRebase(baseHash: string, plan: GitRebaseTodoItem[]) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Interactive Rebase", `Executing ${plan.length} commit operations...`, async () => {
+      try {
+        await git.gitExecuteInteractiveRebasePlan(p, baseHash, plan);
+        showToast("Interactive rebase completed successfully", "success");
+        closeInteractiveRebaseModal();
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Rebase failed: ${err}`, "error");
+        await refresh();
+      }
+    });
+  }
+
+  async function loadMultiRepoStatuses(repoPaths: string[]) {
+    const statuses: MultiRepoStatus[] = [];
+    for (const rp of repoPaths) {
+      try {
+        const s = await git.gitRepoStatus(rp);
+        const name = basename(rp);
+        statuses.push({
+          path: rp,
+          name,
+          branch: s.branch,
+          ahead: s.ahead,
+          behind: s.behind,
+          changesCount: s.changes.length,
+          clean: s.changes.length === 0,
+        });
+      } catch {
+        statuses.push({
+          path: rp,
+          name: basename(rp),
+          branch: "unknown",
+          ahead: 0,
+          behind: 0,
+          changesCount: 0,
+          clean: true,
+        });
+      }
+    }
+    setMultiRepoStatuses(statuses);
+  }
+
+  async function batchFetchAllRepos(repoPaths: string[]) {
+    return withBusyTask("Batch Fetching All Repos", `Fetching remotes across ${repoPaths.length} repositories...`, async () => {
+      for (const rp of repoPaths) {
+        try {
+          await git.gitFetch(rp);
+        } catch {}
+      }
+      await loadMultiRepoStatuses(repoPaths);
+      showToast("Fetched all repositories", "success");
+    });
+  }
+
   const ctx: GitContextValue = {
     activeView, switchView,
     repoPath, openRepo, backToDashboard,
@@ -1355,6 +1607,12 @@ function toggleBranchSelection(branchName: string) {
     largeBlobs, lfsInfo, loadLargeBlobs, loadLfsInfo, trackLfsPattern, untrackLfsPattern, storageModalOpen, openStorageModal, closeStorageModal,
     createPatch, exportArchive, patchModalCommit, openPatchModal, closePatchModal,
     remoteWebLinks,
+    reflogEntries, loadReflog, reflogModalOpen, openReflogModal, closeReflogModal, checkoutReflog,
+    pickaxeModalOpen, openPickaxeModal, closePickaxeModal, pickaxeResults, searchPickaxe,
+    submodules, loadSubmodules, updateSubmodules, addSubmodule, submodulesModalOpen, openSubmodulesModal, closeSubmodulesModal,
+    hooks, loadHooks, saveHook, hooksModalOpen, openHooksModal, closeHooksModal,
+    rebasePlanModalBase, openInteractiveRebaseModal, closeInteractiveRebaseModal, executeInteractiveRebase,
+    workspaceOverviewOpen, openWorkspaceOverview, closeWorkspaceOverview, multiRepoStatuses, loadMultiRepoStatuses, batchFetchAllRepos,
     stash, stashPop, stashDrop, loadStashDiff,
     addWorktree, removeWorktree,
     loadDiff, loadDiffCompare, loadDiffWithCurrent, loadDiffWithWorkingTree,

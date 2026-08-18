@@ -1,7 +1,8 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup, type JSX } from "solid-js";
 import { useGit } from "../../context";
 import { S } from "../../styles";
-import { buttonBg, formatTimestamp, formatRelativeDate } from "../../utils";
+import { buttonBg, formatTimestamp, formatRelativeDate, getSavedOpenTabs } from "../../utils";
+import type { GitRebaseTodoItem } from "../../types";
 import * as git from "../../git";
 
 export function GitIcon(props: { size?: number }) {
@@ -630,6 +631,16 @@ export function CommitContextMenu(props: {
           }}
         >
           🔍 Start Bisect from Here
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.openInteractiveRebaseModal(props.hash);
+            props.onClose();
+          }}
+        >
+          🔀 Interactive Rebase from Here...
         </button>
         <Show when={ctx.remoteWebLinks()}>
           <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
@@ -3011,6 +3022,1113 @@ export function PatchArchiveModal() {
                 </div>
               </div>
             </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+// ---- Reflog "Time Machine" Modal ----
+
+export function ReflogModal() {
+  const ctx = useGit();
+  const [filterQuery, setFilterQuery] = createSignal("");
+
+  const filteredEntries = createMemo(() => {
+    const q = filterQuery().toLowerCase().trim();
+    if (!q) return ctx.reflogEntries();
+    return ctx.reflogEntries().filter(
+      (e) =>
+        e.selector.toLowerCase().includes(q) ||
+        e.hash.toLowerCase().includes(q) ||
+        e.action.toLowerCase().includes(q) ||
+        e.message.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <Show when={ctx.reflogModalOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeReflogModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "800px",
+            "max-width": "92vw",
+            height: "620px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🕒</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Git Reflog — History Time Machine
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Browse every HEAD movement and recover deleted branches or lost commits
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeReflogModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ padding: "12px 20px", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)", display: "flex", gap: "10px", "align-items": "center" }}>
+            <input
+              type="text"
+              placeholder="Search reflog actions, messages, or hashes..."
+              value={filterQuery()}
+              onInput={(e) => setFilterQuery(e.currentTarget.value)}
+              style={{
+                flex: 1,
+                padding: "6px 12px",
+                background: "rgba(0, 0, 0, 0.3)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                "border-radius": "6px",
+                color: "#fff",
+                "font-size": "12px",
+                "font-family": "Space Mono, monospace",
+              }}
+            />
+            <Button size="sm" onClick={ctx.loadReflog}>
+              🔄 Refresh
+            </Button>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "8px" }}>
+            <Show
+              when={filteredEntries().length > 0}
+              fallback={
+                <div style={{ "text-align": "center", padding: "40px 0", color: "rgba(255, 255, 255, 0.4)", "font-size": "12px" }}>
+                  No reflog records found.
+                </div>
+              }
+            >
+              <For each={filteredEntries()}>
+                {(entry) => (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      background: "rgba(0, 0, 0, 0.25)",
+                      border: "1px solid rgba(255, 255, 255, 0.06)",
+                      "border-radius": "8px",
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "space-between",
+                      gap: "12px",
+                    }}
+                  >
+                    <div style={{ display: "flex", "flex-direction": "column", gap: "4px", overflow: "hidden", flex: 1 }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
+                        <code style={{ color: "#38bdf8", "font-weight": 700, "font-family": "Space Mono, monospace", "font-size": "12px" }}>
+                          {entry.selector}
+                        </code>
+                        <span style={{ padding: "1px 6px", "border-radius": "4px", background: "rgba(168, 85, 247, 0.2)", border: "1px solid rgba(168, 85, 247, 0.4)", color: "#e9d5ff", "font-size": "10.5px", "font-family": "Space Mono, monospace", "text-transform": "uppercase" }}>
+                          {entry.action}
+                        </span>
+                        <code style={{ color: "rgba(255, 255, 255, 0.6)", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                          {entry.hash.slice(0, 7)}
+                        </code>
+                        <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                          {formatTimestamp(entry.timestamp)}
+                        </span>
+                      </div>
+                      <div style={{ "font-size": "12px", color: "var(--text-primary, #f8fafc)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {entry.message}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px", "flex-shrink": 0 }}>
+                      <Button size="sm" variant="primary" onClick={() => ctx.checkoutReflog(entry)} title="Checkout this reflog state">
+                        🌿 Checkout
+                      </Button>
+                      <button
+                        type="button"
+                        style={{ background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.35)", color: "#38bdf8", padding: "4px 8px", "border-radius": "4px", "font-size": "11px", cursor: "pointer" }}
+                        onClick={() => {
+                          const branchName = prompt(`Create branch at ${entry.selector} (${entry.hash.slice(0, 7)}):`, `recover-${entry.hash.slice(0, 7)}`);
+                          if (branchName && branchName.trim()) {
+                            ctx.createBranch(branchName.trim(), entry.hash);
+                          }
+                        }}
+                        title="Branch here"
+                      >
+                        + Branch
+                      </button>
+                      <button
+                        type="button"
+                        style={{ background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#fff", padding: "4px 8px", "border-radius": "4px", "font-size": "11px", cursor: "pointer" }}
+                        onClick={() => {
+                          navigator.clipboard?.writeText(entry.hash);
+                          ctx.showToast("Copied commit hash", "success");
+                        }}
+                        title="Copy Hash"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+// ---- Pickaxe & Code History Grep Search Modal ----
+
+export function PickaxeSearchModal() {
+  const ctx = useGit();
+  const [query, setQuery] = createSignal("");
+  const [mode, setMode] = createSignal<"string" | "regex" | "author" | "message">("string");
+
+  const handleSearch = () => {
+    ctx.searchPickaxe(query(), mode());
+  };
+
+  return (
+    <Show when={ctx.pickaxeModalOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closePickaxeModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "820px",
+            "max-width": "92vw",
+            height: "640px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🔎</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Pickaxe & Deep Code History Search
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Search entire commit history by code diff additions, deletions, authors, or regex
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closePickaxeModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ padding: "14px 20px", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)", display: "flex", "flex-direction": "column", gap: "10px" }}>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 10px",
+                  "border-radius": "6px",
+                  border: mode() === "string" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                  background: mode() === "string" ? "rgba(56, 189, 248, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: mode() === "string" ? "#38bdf8" : "rgba(255,255,255,0.7)",
+                  "font-size": "11px",
+                  "font-family": "Space Mono, monospace",
+                  cursor: "pointer",
+                }}
+                onClick={() => setMode("string")}
+              >
+                🔍 Pickaxe String (-S)
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 10px",
+                  "border-radius": "6px",
+                  border: mode() === "regex" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                  background: mode() === "regex" ? "rgba(56, 189, 248, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: mode() === "regex" ? "#38bdf8" : "rgba(255,255,255,0.7)",
+                  "font-size": "11px",
+                  "font-family": "Space Mono, monospace",
+                  cursor: "pointer",
+                }}
+                onClick={() => setMode("regex")}
+              >
+                🔣 Regex Pattern (-G)
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 10px",
+                  "border-radius": "6px",
+                  border: mode() === "author" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                  background: mode() === "author" ? "rgba(56, 189, 248, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: mode() === "author" ? "#38bdf8" : "rgba(255,255,255,0.7)",
+                  "font-size": "11px",
+                  "font-family": "Space Mono, monospace",
+                  cursor: "pointer",
+                }}
+                onClick={() => setMode("author")}
+              >
+                👤 Author (--author)
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 10px",
+                  "border-radius": "6px",
+                  border: mode() === "message" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                  background: mode() === "message" ? "rgba(56, 189, 248, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: mode() === "message" ? "#38bdf8" : "rgba(255,255,255,0.7)",
+                  "font-size": "11px",
+                  "font-family": "Space Mono, monospace",
+                  cursor: "pointer",
+                }}
+                onClick={() => setMode("message")}
+              >
+                💬 Message (--grep)
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder={
+                  mode() === "string"
+                    ? "Exact string added/removed in diff (e.g. myFunction)..."
+                    : mode() === "regex"
+                    ? "Regex matching diff changes (e.g. const\\s+foo\\s*=)..."
+                    : mode() === "author"
+                    ? "Author name or email pattern..."
+                    : "Commit message search..."
+                }
+                value={query()}
+                onInput={(e) => setQuery(e.currentTarget.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  background: "rgba(0, 0, 0, 0.3)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  "border-radius": "6px",
+                  color: "#fff",
+                  "font-size": "12px",
+                  "font-family": "Space Mono, monospace",
+                }}
+              />
+              <Button size="sm" variant="primary" onClick={handleSearch} disabled={!query().trim()}>
+                Search History
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "8px" }}>
+            <Show
+              when={ctx.pickaxeResults().length > 0}
+              fallback={
+                <div style={{ "text-align": "center", padding: "40px 0", color: "rgba(255, 255, 255, 0.4)", "font-size": "12px" }}>
+                  Enter a search pattern above to scan git history.
+                </div>
+              }
+            >
+              <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "font-family": "Space Mono, monospace", "margin-bottom": "4px" }}>
+                Found {ctx.pickaxeResults().length} matching commits:
+              </div>
+              <For each={ctx.pickaxeResults()}>
+                {(commit) => (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      background: "rgba(0, 0, 0, 0.25)",
+                      border: "1px solid rgba(255, 255, 255, 0.06)",
+                      "border-radius": "8px",
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "space-between",
+                      gap: "12px",
+                    }}
+                  >
+                    <div style={{ overflow: "hidden", flex: 1 }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                        <code style={{ color: "#38bdf8", "font-weight": 700, "font-family": "Space Mono, monospace", "font-size": "12px" }}>
+                          {commit.hash.slice(0, 7)}
+                        </code>
+                        <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+                          {commit.author} • {formatTimestamp(commit.timestamp)}
+                        </span>
+                      </div>
+                      <div style={{ "font-size": "12.5px", color: "#f8fafc", "margin-top": "2px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {commit.message}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px", "flex-shrink": 0 }}>
+                      <Button size="sm" variant="primary" onClick={() => ctx.openDiffPrompt(commit.hash)}>
+                        Diff
+                      </Button>
+                      <Button size="sm" onClick={() => ctx.showCommitDetail(commit.hash)}>
+                        Details
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+// ---- Submodules Management Modal ----
+
+export function SubmodulesModal() {
+  const ctx = useGit();
+  const [subUrl, setSubUrl] = createSignal("");
+  const [subPath, setSubPath] = createSignal("");
+
+  const handleAdd = () => {
+    if (!subUrl().trim() || !subPath().trim()) return;
+    ctx.addSubmodule(subUrl().trim(), subPath().trim());
+    setSubUrl("");
+    setSubPath("");
+  };
+
+  return (
+    <Show when={ctx.submodulesModalOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeSubmodulesModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "740px",
+            "max-width": "92vw",
+            height: "580px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🧩</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Git Submodules Manager
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Inspect, sync, and recursively initialize nested repository submodules
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeSubmodulesModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ padding: "12px 20px", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)", display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+            <span style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+              Nested Submodules ({ctx.submodules().length})
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button size="sm" variant="primary" onClick={ctx.updateSubmodules}>
+                🔄 Update All (--init --recursive)
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "16px" }}>
+            <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "8px", padding: "12px 14px" }}>
+              <div style={{ "font-size": "11.5px", "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "margin-bottom": "8px" }}>
+                + Add New Submodule
+              </div>
+              <div style={{ display: "grid", "grid-template-columns": "2fr 1fr auto", gap: "8px" }}>
+                <input
+                  type="text"
+                  placeholder="https://github.com/owner/subrepo.git"
+                  value={subUrl()}
+                  onInput={(e) => setSubUrl(e.currentTarget.value)}
+                  style={{
+                    padding: "6px 10px",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    "border-radius": "6px",
+                    color: "#fff",
+                    "font-size": "11.5px",
+                    "font-family": "Space Mono, monospace",
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Path (e.g. libs/subrepo)"
+                  value={subPath()}
+                  onInput={(e) => setSubPath(e.currentTarget.value)}
+                  style={{
+                    padding: "6px 10px",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    "border-radius": "6px",
+                    color: "#fff",
+                    "font-size": "11.5px",
+                    "font-family": "Space Mono, monospace",
+                  }}
+                />
+                <Button size="sm" variant="primary" onClick={handleAdd} disabled={!subUrl().trim() || !subPath().trim()}>
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            <Show
+              when={ctx.submodules().length > 0}
+              fallback={
+                <div style={{ "text-align": "center", padding: "30px 0", color: "rgba(255, 255, 255, 0.4)", "font-size": "12px" }}>
+                  No submodules found in this repository (.gitmodules).
+                </div>
+              }
+            >
+              <For each={ctx.submodules()}>
+                {(sub) => (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      background: "rgba(0, 0, 0, 0.25)",
+                      border: "1px solid rgba(255, 255, 255, 0.06)",
+                      "border-radius": "8px",
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "space-between",
+                      gap: "12px",
+                    }}
+                  >
+                    <div style={{ overflow: "hidden" }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                        <span style={{ "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "font-size": "13px" }}>
+                          {sub.name}
+                        </span>
+                        <span style={{ padding: "1px 6px", "border-radius": "4px", background: sub.status === "clean" ? "rgba(34, 197, 94, 0.2)" : "rgba(245, 158, 11, 0.2)", color: sub.status === "clean" ? "#4ade80" : "#fbbf24", "font-size": "10.5px", "font-family": "Space Mono, monospace" }}>
+                          {sub.status.toUpperCase()}
+                        </span>
+                        <code style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "font-family": "Space Mono, monospace" }}>
+                          {sub.commit.slice(0, 7)}
+                        </code>
+                      </div>
+                      <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.6)", "font-family": "Space Mono, monospace", "margin-top": "2px" }}>
+                        📁 {sub.path} {sub.url ? `• 🌐 ${sub.url}` : ""}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <Button size="sm" onClick={() => ctx.openRepo(`${ctx.repoPath()}/${sub.path}`)} title="Open submodule repository in new tab">
+                        Open in Tab
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+// ---- Client Hooks Configuration Modal ----
+
+export function HooksManagerModal() {
+  const ctx = useGit();
+  const [selectedHook, setSelectedHook] = createSignal<string>("pre-commit");
+  const [hookContent, setHookContent] = createSignal("");
+  const [isActive, setIsActive] = createSignal(false);
+
+  createEffect(() => {
+    const list = ctx.hooks();
+    const cur = list.find((h) => h.name === selectedHook());
+    if (cur) {
+      setHookContent(cur.content);
+      setIsActive(cur.active);
+    }
+  });
+
+  const handleSave = () => {
+    ctx.saveHook(selectedHook(), hookContent(), isActive());
+  };
+
+  const applyTemplate = (type: "rust" | "ts" | "python" | "shell") => {
+    let script = "";
+    if (type === "ts") {
+      script = `#!/bin/sh\n# Pre-commit TypeScript & Linter check\nset -e\necho "Running test suite and linter..."\nbun test\nbun run build\n`;
+    } else if (type === "rust") {
+      script = `#!/bin/sh\n# Pre-commit Rust cargo check & clippy\nset -e\necho "Running cargo check and clippy..."\ncargo check --all-targets\ncargo clippy -- -D warnings\n`;
+    } else if (type === "python") {
+      script = `#!/bin/sh\n# Pre-commit Python ruff check\nset -e\necho "Running ruff and pytest..."\nruff check .\npytest\n`;
+    } else {
+      script = `#!/bin/sh\n# Shell pre-commit hook\nset -e\necho "Executing custom pre-commit validation..."\n`;
+    }
+    setHookContent(script);
+    setIsActive(true);
+  };
+
+  return (
+    <Show when={ctx.hooksModalOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeHooksModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "820px",
+            "max-width": "92vw",
+            height: "640px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🪝</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Git Client Hooks & Pre-Commit Automations
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Configure local pre-commit, commit-msg, and pre-push guardrail scripts
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeHooksModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+            <div style={{ width: "220px", background: "rgba(10, 14, 23, 0.5)", "border-right": "1px solid rgba(255, 255, 255, 0.08)", padding: "12px", display: "flex", "flex-direction": "column", gap: "4px" }}>
+              <For each={ctx.hooks()}>
+                {(h) => (
+                  <button
+                    type="button"
+                    style={{
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "space-between",
+                      padding: "8px 10px",
+                      "border-radius": "6px",
+                      border: "none",
+                      background: selectedHook() === h.name ? "rgba(56, 189, 248, 0.18)" : "transparent",
+                      color: selectedHook() === h.name ? "#38bdf8" : "rgba(255, 255, 255, 0.7)",
+                      "font-family": "Space Mono, monospace",
+                      "font-size": "11.5px",
+                      "font-weight": selectedHook() === h.name ? 700 : 400,
+                      cursor: "pointer",
+                      "text-align": "left",
+                    }}
+                    onClick={() => setSelectedHook(h.name)}
+                  >
+                    <span>{h.name}</span>
+                    <span style={{ "font-size": "10px", padding: "1px 5px", "border-radius": "4px", background: h.active ? "rgba(34, 197, 94, 0.2)" : "rgba(255,255,255,0.06)", color: h.active ? "#4ade80" : "rgba(255,255,255,0.4)" }}>
+                      {h.active ? "ON" : "OFF"}
+                    </span>
+                  </button>
+                )}
+              </For>
+            </div>
+
+            <div style={{ flex: 1, padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "12px", overflow: "hidden" }}>
+              <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+                <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+                  <span style={{ "font-weight": 700, color: "#fff", "font-family": "Space Mono, monospace", "font-size": "14px" }}>
+                    .git/hooks/{selectedHook()}
+                  </span>
+                  <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer", "font-size": "12px", color: isActive() ? "#4ade80" : "rgba(255,255,255,0.5)" }}>
+                    <input type="checkbox" checked={isActive()} onChange={(e) => setIsActive(e.currentTarget.checked)} />
+                    <span>Active Executable Hook</span>
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", gap: "4px" }}>
+                  <button
+                    type="button"
+                    style={{ padding: "3px 8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                    onClick={() => applyTemplate("ts")}
+                  >
+                    + TS/Bun
+                  </button>
+                  <button
+                    type="button"
+                    style={{ padding: "3px 8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                    onClick={() => applyTemplate("rust")}
+                  >
+                    + Rust
+                  </button>
+                  <button
+                    type="button"
+                    style={{ padding: "3px 8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                    onClick={() => applyTemplate("python")}
+                  >
+                    + Python
+                  </button>
+                </div>
+              </div>
+
+              <textarea
+                value={hookContent()}
+                onInput={(e) => setHookContent(e.currentTarget.value)}
+                style={{
+                  flex: 1,
+                  width: "100%",
+                  background: "rgba(0, 0, 0, 0.35)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  "border-radius": "8px",
+                  padding: "12px",
+                  color: "#e2e8f0",
+                  "font-family": "Space Mono, monospace",
+                  "font-size": "12px",
+                  "line-height": "1.5",
+                  resize: "none",
+                  "box-sizing": "border-box",
+                }}
+              />
+
+              <div style={{ display: "flex", "justify-content": "flex-end" }}>
+                <Button size="sm" variant="primary" onClick={handleSave}>
+                  Save & Apply Hook
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+// ---- Visual Interactive Rebase Modal ----
+
+export function InteractiveRebaseModal() {
+  const ctx = useGit();
+  const [todoList, setTodoList] = createSignal<GitRebaseTodoItem[]>([]);
+  const baseHash = () => ctx.rebasePlanModalBase();
+
+  createEffect(() => {
+    const base = baseHash();
+    if (base) {
+      const allCommits = ctx.commits();
+      const baseIdx = allCommits.findIndex((c) => c.hash.startsWith(base) || base.startsWith(c.hash));
+      const range = baseIdx !== -1 ? allCommits.slice(0, baseIdx) : allCommits.slice(0, 8);
+
+      const items: GitRebaseTodoItem[] = range.reverse().map((c) => ({
+        id: c.hash,
+        action: "pick",
+        hash: c.hash.slice(0, 7),
+        message: c.message,
+        author: c.author,
+      }));
+      setTodoList(items);
+    }
+  });
+
+  const moveItem = (index: number, direction: "up" | "down") => {
+    const next = [...todoList()];
+    const targetIdx = direction === "up" ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= next.length) return;
+    const temp = next[index];
+    next[index] = next[targetIdx];
+    next[targetIdx] = temp;
+    setTodoList(next);
+  };
+
+  const updateAction = (index: number, action: GitRebaseTodoItem["action"]) => {
+    const next = [...todoList()];
+    next[index].action = action;
+    setTodoList(next);
+  };
+
+  const updateMessage = (index: number, message: string) => {
+    const next = [...todoList()];
+    next[index].message = message;
+    setTodoList(next);
+  };
+
+  const handleExecute = () => {
+    const b = baseHash();
+    if (!b) return;
+    ctx.executeInteractiveRebase(b, todoList());
+  };
+
+  return (
+    <Show when={baseHash()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeInteractiveRebaseModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "820px",
+            "max-width": "92vw",
+            height: "640px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🔀</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Interactive Rebase Visualizer & Builder
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Onto Base: <code style={{ color: "#38bdf8" }}>{baseHash()!.slice(0, 7)}</code> ({todoList().length} commits)
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeInteractiveRebaseModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "8px" }}>
+            <For each={todoList()}>
+              {(item, idx) => (
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    background: item.action === "drop" ? "rgba(239, 68, 68, 0.1)" : "rgba(0, 0, 0, 0.25)",
+                    border: item.action === "drop" ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(255, 255, 255, 0.06)",
+                    "border-radius": "8px",
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "10px",
+                    opacity: item.action === "drop" ? 0.6 : 1,
+                  }}
+                >
+                  <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
+                    <button
+                      type="button"
+                      disabled={idx() === 0}
+                      onClick={() => moveItem(idx(), "up")}
+                      style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", "border-radius": "3px", cursor: "pointer", "font-size": "9px", padding: "2px 5px" }}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx() === todoList().length - 1}
+                      onClick={() => moveItem(idx(), "down")}
+                      style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", "border-radius": "3px", cursor: "pointer", "font-size": "9px", padding: "2px 5px" }}
+                    >
+                      ▼
+                    </button>
+                  </div>
+
+                  <select
+                    value={item.action}
+                    onChange={(e) => updateAction(idx(), e.currentTarget.value as any)}
+                    style={{
+                      padding: "5px 8px",
+                      background: "rgba(0, 0, 0, 0.4)",
+                      border: "1px solid rgba(255, 255, 255, 0.15)",
+                      "border-radius": "6px",
+                      color: item.action === "pick" ? "#38bdf8" : item.action === "squash" || item.action === "fixup" ? "#fbbf24" : item.action === "drop" ? "#f87171" : "#a855f7",
+                      "font-family": "Space Mono, monospace",
+                      "font-size": "11.5px",
+                      "font-weight": 700,
+                    }}
+                  >
+                    <option value="pick">pick (keep commit)</option>
+                    <option value="reword">reword (edit message)</option>
+                    <option value="edit">edit (pause for amendments)</option>
+                    <option value="squash">squash (meld into previous & combine msg)</option>
+                    <option value="fixup">fixup (meld into previous & discard msg)</option>
+                    <option value="drop">drop (remove commit)</option>
+                  </select>
+
+                  <code style={{ color: "#94a3b8", "font-family": "Space Mono, monospace", "font-size": "11.5px" }}>
+                    {item.hash}
+                  </code>
+
+                  <div style={{ flex: 1 }}>
+                    <Show
+                      when={item.action === "reword"}
+                      fallback={
+                        <span style={{ "font-size": "12.5px", color: "#f8fafc", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "block" }}>
+                          {item.message}
+                        </span>
+                      }
+                    >
+                      <input
+                        type="text"
+                        value={item.message}
+                        onInput={(e) => updateMessage(idx(), e.currentTarget.value)}
+                        style={{
+                          width: "100%",
+                          padding: "4px 8px",
+                          background: "rgba(0,0,0,0.3)",
+                          border: "1px solid rgba(56,189,248,0.4)",
+                          "border-radius": "4px",
+                          color: "#fff",
+                          "font-size": "12px",
+                          "font-family": "Space Mono, monospace",
+                          "box-sizing": "border-box",
+                        }}
+                      />
+                    </Show>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+
+          <div style={{ padding: "14px 20px", background: "rgba(10, 14, 23, 0.8)", "border-top": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "justify-content": "flex-end", gap: "10px" }}>
+            <Button size="sm" onClick={ctx.closeInteractiveRebaseModal}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="primary" onClick={handleExecute} disabled={todoList().length === 0}>
+              🚀 Execute Interactive Rebase
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+// ---- Multi-Repository Workspace Overview Modal ----
+
+export function WorkspaceOverviewModal() {
+  const ctx = useGit();
+  const openTabs = () => getSavedOpenTabs();
+
+  const handleBatchFetch = () => {
+    ctx.batchFetchAllRepos(openTabs());
+  };
+
+  return (
+    <Show when={ctx.workspaceOverviewOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeWorkspaceOverview}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "820px",
+            "max-width": "92vw",
+            height: "580px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🌐</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Multi-Repository Workspace Aggregator
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Aggregated status matrix across all open repositories ({openTabs().length} open)
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeWorkspaceOverview}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ padding: "12px 20px", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)", display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+            <span style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+              Workspace Status Matrix
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button size="sm" variant="primary" onClick={handleBatchFetch}>
+                🔄 Batch Fetch All Repos
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(340px, 1fr))", gap: "12px" }}>
+            <For each={ctx.multiRepoStatuses()}>
+              {(repo) => (
+                <div
+                  style={{
+                    padding: "14px",
+                    background: "rgba(0, 0, 0, 0.25)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    "border-radius": "10px",
+                    display: "flex",
+                    "flex-direction": "column",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                    <div style={{ "font-weight": 700, color: "#fff", "font-size": "14px" }}>
+                      {repo.name}
+                    </div>
+                    <span style={{ padding: "2px 7px", "border-radius": "999px", background: repo.clean ? "rgba(34, 197, 94, 0.2)" : "rgba(245, 158, 11, 0.2)", color: repo.clean ? "#4ade80" : "#fbbf24", "font-size": "10.5px", "font-family": "Space Mono, monospace" }}>
+                      {repo.clean ? "CLEAN" : `${repo.changesCount} MODIFIED`}
+                    </span>
+                  </div>
+
+                  <div style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    {repo.path}
+                  </div>
+
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-top": "4px" }}>
+                    <span style={{ color: "#38bdf8", "font-size": "12px", "font-weight": 600 }}>
+                      🌿 {repo.branch}
+                    </span>
+                    <span style={{ "font-size": "11px", color: "#4ade80", "font-family": "Space Mono, monospace" }}>
+                      ↑{repo.ahead} ↓{repo.behind}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", "justify-content": "flex-end", "margin-top": "6px" }}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        ctx.openRepo(repo.path);
+                        ctx.closeWorkspaceOverview();
+                      }}
+                    >
+                      Focus Tab ➔
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </For>
           </div>
         </div>
       </div>
