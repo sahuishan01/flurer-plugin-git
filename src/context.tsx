@@ -1,10 +1,11 @@
-import { createContext, useContext, createSignal, createMemo, onMount, type Accessor, type JSX, type ParentProps } from "solid-js";
+import { createContext, useContext, createSignal, createMemo, onMount, onCleanup, type Accessor, type JSX, type ParentProps } from "solid-js";
 import { saveRecentRepo, getSavedBranchSelection, saveBranchSelection, getSavedActiveView, saveActiveView } from "./utils";
 import { loadGraphCache, saveGraphCache } from "./cache";
 import * as git from "./git";
 import type {
-  GitView, GitStatus, GitCommit, GitBranch, GitGraphEntry,
-  GitDiff, GitStashEntry, GitWorktree, GitCommitDetail, BusyTask,
+  GitView, GitStatus, GitChange, GitCommit, GitBranch, GitGraphEntry,
+  GitDiff, DiffHunk, GitStashEntry, GitWorktree, GitCommitDetail, BusyTask,
+  GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
 } from "./types";
 
 interface GitContextValue {
@@ -25,6 +26,10 @@ interface GitContextValue {
   stashes: Accessor<GitStashEntry[]>;
   worktrees: Accessor<GitWorktree[]>;
   commitDetail: Accessor<GitCommitDetail | null>;
+  tags: Accessor<GitTag[]>;
+  remotes: Accessor<GitRemote[]>;
+  conflicts: Accessor<GitConflictFile[]>;
+  stats: Accessor<GitRepoStats | null>;
 
   selectedDiffFile: Accessor<string | null>;
   selectDiffFile: (path: string | null) => void;
@@ -49,8 +54,14 @@ interface GitContextValue {
   unstage: (path: string) => Promise<void>;
   stageAll: () => Promise<void>;
   unstageAll: () => Promise<void>;
+  stageHunk: (filePath: string, hunk: DiffHunk) => Promise<void>;
+  unstageHunk: (filePath: string, hunk: DiffHunk) => Promise<void>;
+  discardHunk: (filePath: string, hunk: DiffHunk) => Promise<void>;
   discardFile: (path: string, isUntracked?: boolean) => Promise<void>;
   commit: (message: string) => Promise<void>;
+  commitAmend: (message?: string) => Promise<void>;
+  isAmend: Accessor<boolean>;
+  setIsAmend: (val: boolean) => void;
   push: () => Promise<void>;
   pull: () => Promise<void>;
   fetchRemote: () => Promise<void>;
@@ -79,6 +90,32 @@ interface GitContextValue {
   loadBranches: () => Promise<void>;
   loadStashes: () => Promise<void>;
   loadWorktrees: () => Promise<void>;
+  loadTags: () => Promise<void>;
+  createTag: (name: string, commitHash?: string, message?: string) => Promise<void>;
+  deleteTag: (name: string) => Promise<void>;
+  pushTags: (name?: string) => Promise<void>;
+  loadRemotes: () => Promise<void>;
+  addRemote: (name: string, url: string) => Promise<void>;
+  removeRemote: (name: string) => Promise<void>;
+  loadConflicts: () => Promise<void>;
+  resolveConflict: (path: string, resolution: "ours" | "theirs" | "mark") => Promise<void>;
+  loadStats: () => Promise<void>;
+  fileLogModal: Accessor<{ path: string; commits: GitCommit[] } | null>;
+  openFileLog: (path: string) => Promise<void>;
+  closeFileLog: () => void;
+  blameModal: Accessor<{ path: string; lines: GitBlameLine[] } | null>;
+  openBlame: (path: string) => Promise<void>;
+  closeBlame: () => void;
+  tagModalCommit: Accessor<string | null>;
+  openTagModal: (commitHash: string) => void;
+  closeTagModal: () => void;
+  remotesModalOpen: Accessor<boolean>;
+  openRemotesModal: () => void;
+  closeRemotesModal: () => void;
+  commandLogs: Accessor<GitCommandLogEntry[]>;
+  consoleOpen: Accessor<boolean>;
+  toggleConsole: () => void;
+  clearCommandLogs: () => void;
   showCommitDetail: (hash: string) => Promise<void>;
   closeCommitDetail: () => void;
   selectedBranches: Accessor<string[]>;
@@ -149,6 +186,29 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const openShortcuts = () => setShortcutsOpen(true);
   const closeShortcuts = () => setShortcutsOpen(false);
   const toggleShortcuts = () => setShortcutsOpen((prev) => !prev);
+
+  const [isAmend, setIsAmend] = createSignal(false);
+  const [commandLogs, setCommandLogs] = createSignal<GitCommandLogEntry[]>(git.getCommandLogs());
+  const [consoleOpen, setConsoleOpen] = createSignal(false);
+  const toggleConsole = () => setConsoleOpen((prev) => !prev);
+  const clearCommandLogs = () => {
+    git.clearCommandLogs();
+    setCommandLogs([]);
+  };
+
+  const [tags, setTags] = createSignal<GitTag[]>([]);
+  const [remotes, setRemotes] = createSignal<GitRemote[]>([]);
+  const [conflicts, setConflicts] = createSignal<GitConflictFile[]>([]);
+  const [stats, setStats] = createSignal<GitRepoStats | null>(null);
+  const [fileLogModal, setFileLogModal] = createSignal<{ path: string; commits: GitCommit[] } | null>(null);
+  const [blameModal, setBlameModal] = createSignal<{ path: string; lines: GitBlameLine[] } | null>(null);
+  const [tagModalCommit, setTagModalCommit] = createSignal<string | null>(null);
+  const [remotesModalOpen, setRemotesModalOpen] = createSignal(false);
+
+  const openTagModal = (commitHash: string) => setTagModalCommit(commitHash);
+  const closeTagModal = () => setTagModalCommit(null);
+  const openRemotesModal = () => setRemotesModalOpen(true);
+  const closeRemotesModal = () => setRemotesModalOpen(false);
 
   async function withBusyTask<T>(title: string, detail: string | undefined, task: () => Promise<T>): Promise<T> {
     setBusyTask({ title, detail });
@@ -318,6 +378,48 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     });
   }
 
+  async function stageHunk(filePath: string, hunk: DiffHunk) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Staging Hunk", filePath, async () => {
+      try {
+        await git.gitApplyHunk(p, filePath, hunk, "stage");
+        showToast("Hunk staged", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to stage hunk: ${err}`, "error");
+      }
+    });
+  }
+
+  async function unstageHunk(filePath: string, hunk: DiffHunk) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Unstaging Hunk", filePath, async () => {
+      try {
+        await git.gitApplyHunk(p, filePath, hunk, "unstage");
+        showToast("Hunk unstaged", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to unstage hunk: ${err}`, "error");
+      }
+    });
+  }
+
+  async function discardHunk(filePath: string, hunk: DiffHunk) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Discarding Hunk", filePath, async () => {
+      try {
+        await git.gitApplyHunk(p, filePath, hunk, "discard");
+        showToast("Hunk changes discarded", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to discard hunk: ${err}`, "error");
+      }
+    });
+  }
+
   async function discardFile(filePath: string, isUntracked: boolean = false) {
     const p = repoPath();
     if (!p) return;
@@ -342,6 +444,21 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
         await refresh();
       } catch (err) {
         showToast(`Commit failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function commitAmend(message?: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Amending Commit", message ? message.slice(0, 48) : "Updating previous commit...", async () => {
+      try {
+        await git.gitCommitAmend(p, message);
+        showToast("Amended commit successfully", "success");
+        setIsAmend(false);
+        await refresh();
+      } catch (err) {
+        showToast(`Amend failed: ${err}`, "error");
       }
     });
   }
@@ -801,16 +918,178 @@ function toggleBranchSelection(branchName: string) {
     setCommitDetail(null);
   }
 
+  async function loadTags() {
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const t = await git.gitTagList(p);
+      setTags(t);
+    } catch {}
+  }
+
+  async function createTag(name: string, commitHash?: string, message?: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Creating Tag", name, async () => {
+      try {
+        await git.gitTagCreate(p, name, commitHash, message);
+        showToast(`Tag "${name}" created`, "success");
+        await loadTags();
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to create tag: ${err}`, "error");
+      }
+    });
+  }
+
+  async function deleteTag(name: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Deleting Tag", name, async () => {
+      try {
+        await git.gitTagDelete(p, name);
+        showToast(`Tag "${name}" deleted`, "success");
+        await loadTags();
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to delete tag: ${err}`, "error");
+      }
+    });
+  }
+
+  async function pushTags(name?: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Pushing Tags", name ? `Pushing tag ${name}...` : "Pushing all tags to origin...", async () => {
+      try {
+        await git.gitTagPush(p, name);
+        showToast(name ? `Pushed tag "${name}"` : "Pushed tags to remote", "success");
+      } catch (err) {
+        showToast(`Failed to push tags: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadRemotes() {
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const r = await git.gitRemotes(p);
+      setRemotes(r);
+    } catch {}
+  }
+
+  async function addRemote(name: string, url: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Adding Remote", name, async () => {
+      try {
+        await git.gitRemoteAdd(p, name, url);
+        showToast(`Remote "${name}" added`, "success");
+        await loadRemotes();
+      } catch (err) {
+        showToast(`Failed to add remote: ${err}`, "error");
+      }
+    });
+  }
+
+  async function removeRemote(name: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Removing Remote", name, async () => {
+      try {
+        await git.gitRemoteRemove(p, name);
+        showToast(`Remote "${name}" removed`, "success");
+        await loadRemotes();
+      } catch (err) {
+        showToast(`Failed to remove remote: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadConflicts() {
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const c = await git.gitConflictFiles(p);
+      setConflicts(c);
+    } catch {}
+  }
+
+  async function resolveConflict(path: string, resolution: "ours" | "theirs" | "mark") {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Resolving Conflict", path, async () => {
+      try {
+        await git.gitResolveConflict(p, path, resolution);
+        showToast(`Conflict resolved: "${path}"`, "success");
+        await refresh();
+        await loadConflicts();
+      } catch (err) {
+        showToast(`Failed to resolve conflict: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadStats() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Analyzing Repository", "Calculating commit punchcard, contributors, and metrics...", async () => {
+      try {
+        const s = await git.gitRepoStats(p);
+        setStats(s);
+      } catch (err) {
+        showToast(`Failed to load stats: ${err}`, "error");
+      }
+    });
+  }
+
+  async function openFileLog(path: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Loading File History", path, async () => {
+      try {
+        const commits = await git.gitFileLog(p, path, 60);
+        setFileLogModal({ path, commits });
+      } catch (err) {
+        showToast(`Failed to load file history: ${err}`, "error");
+      }
+    });
+  }
+
+  function closeFileLog() {
+    setFileLogModal(null);
+  }
+
+  async function openBlame(path: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Calculating Git Blame", path, async () => {
+      try {
+        const lines = await git.gitBlame(p, path);
+        setBlameModal({ path, lines });
+      } catch (err) {
+        showToast(`Failed to load blame: ${err}`, "error");
+      }
+    });
+  }
+
+  function closeBlame() {
+    setBlameModal(null);
+  }
+
   const ctx: GitContextValue = {
     activeView, switchView,
     repoPath, openRepo, backToDashboard,
     status, branches, commits, historyHasMore, graph, graphHasMore, graphLoading,
     stashes, worktrees, commitDetail,
+    tags, remotes, conflicts, stats,
     selectedBranches, isAllBranchesSelected, toggleBranchSelection, selectAllBranches,
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
     diffResult, diffMode, diffCommitHash, compareSourceHash, setCompareSourceHash: handleSetCompareSourceHash, diffCompareCommits, setDiffMode,
     loading, busyTask, setBusyTask, error, toast, showToast, shellAvailable: shellAvail,
-    refresh, stage, unstage, stageAll, unstageAll, discardFile, commit,
+    refresh, stage, unstage, stageAll, unstageAll, stageHunk, unstageHunk, discardHunk, discardFile, commit, commitAmend,
+    isAmend, setIsAmend,
     push, pull, fetchRemote,
     createBranch, deleteBranch, checkout, merge, cherryPick,
     stash, stashPop, stashDrop, loadStashDiff,
@@ -818,6 +1097,15 @@ function toggleBranchSelection(branchName: string) {
     loadDiff, loadDiffCompare, loadDiffWithCurrent, loadDiffWithWorkingTree,
     diffPromptHash, openDiffPrompt, closeDiffPrompt,
     loadGraph, loadMoreGraph, loadHistory, loadMoreHistory, loadBranches, loadStashes, loadWorktrees,
+    loadTags, createTag, deleteTag, pushTags,
+    loadRemotes, addRemote, removeRemote,
+    loadConflicts, resolveConflict,
+    loadStats,
+    fileLogModal, openFileLog, closeFileLog,
+    blameModal, openBlame, closeBlame,
+    tagModalCommit, openTagModal, closeTagModal,
+    remotesModalOpen, openRemotesModal, closeRemotesModal,
+    commandLogs, consoleOpen, toggleConsole, clearCommandLogs,
     showCommitDetail, closeCommitDetail,
     isDubiousOwnership, trustRepository,
     shortcutsOpen, openShortcuts, closeShortcuts, toggleShortcuts,

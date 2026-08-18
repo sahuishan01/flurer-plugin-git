@@ -37,7 +37,11 @@ export function ChangesView() {
   async function handleCommit() {
     const msg = commitMsg().trim();
     if (!msg) return;
-    await ctx.commit(msg);
+    if (ctx.isAmend()) {
+      await ctx.commitAmend(msg);
+    } else {
+      await ctx.commit(msg);
+    }
     setCommitMsg("");
     setInspectingFile(null);
   }
@@ -301,13 +305,37 @@ export function ChangesView() {
           </Show>
 
           {/* Commit Staged Box */}
-          <Show when={stagedFiles().length > 0}>
+          <Show when={stagedFiles().length > 0 || ctx.isAmend()}>
             <Card style={{ "margin-top": "8px", border: "1px solid rgba(56, 189, 248, 0.25)", background: "linear-gradient(180deg, rgba(15, 23, 42, 0.85), rgba(10, 14, 23, 0.9))" }}>
               <div style={S.cardHeader}>
-                <span style={{ "font-weight": 700 }}>Commit Staged Changes</span>
+                <span style={{ "font-weight": 700 }}>{ctx.isAmend() ? "Amend Previous Commit" : "Commit Staged Changes"}</span>
                 <span style={{ "font-size": "11px", "font-family": "Space Mono, monospace", color: msgLengthColor() }}>
                   {msgLength()} / 50 chars
                 </span>
+              </div>
+
+              {/* Amend Checkbox */}
+              <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "8px" }}>
+                <label style={{ display: "inline-flex", "align-items": "center", gap: "6px", "font-size": "12px", color: "var(--text-secondary, #94a3b8)", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={ctx.isAmend()}
+                    onChange={(e) => {
+                      const checked = e.currentTarget.checked;
+                      ctx.setIsAmend(checked);
+                      if (checked) {
+                        const headCommit = ctx.commits()[0];
+                        if (headCommit && !commitMsg()) {
+                          setCommitMsg(headCommit.message);
+                        }
+                      }
+                    }}
+                    style={{ cursor: "pointer", "accent-color": "var(--accent-default, #38bdf8)" }}
+                  />
+                  <span style={{ "font-weight": 600, color: ctx.isAmend() ? "var(--accent-default, #38bdf8)" : "inherit" }}>
+                    Amend Previous Commit (--amend)
+                  </span>
+                </label>
               </div>
 
               {/* Conventional Commit Type Chips */}
@@ -332,7 +360,7 @@ export function ChangesView() {
               <div style={{ display: "flex", gap: "10px", "align-items": "center" }}>
                 <input
                   type="text"
-                  placeholder="feat: concise commit summary..."
+                  placeholder={ctx.isAmend() ? "Amend commit message..." : "feat: concise commit summary..."}
                   value={commitMsg()}
                   onInput={(e) => setCommitMsg(e.currentTarget.value)}
                   onKeyDown={(e) => {
@@ -345,7 +373,7 @@ export function ChangesView() {
                   style={{ ...S.commitInput, flex: 1 }}
                 />
                 <Button variant="primary" onClick={handleCommit} disabled={!commitMsg().trim()} style={{ padding: "10px 18px" }}>
-                  Commit
+                  {ctx.isAmend() ? "Amend" : "Commit"}
                 </Button>
               </div>
             </Card>
@@ -399,10 +427,41 @@ export function ChangesView() {
                       {(hunk) => {
                         let oldLine = hunk.old_start;
                         let newLine = hunk.new_start;
+                        const currentFile = inspectingFile();
                         return (
                           <div style={{ "margin-bottom": "12px", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "6px", overflow: "hidden" }}>
-                            <div style={S.diffHunkHeader}>
-                              @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                            <div style={{ ...S.diffHunkHeader, display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "6px" }}>
+                              <span>@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@</span>
+                              <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                <Show when={currentFile && !currentFile.staged}>
+                                  <button
+                                    type="button"
+                                    onClick={() => ctx.stageHunk(currentFile!.path, hunk)}
+                                    style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(52, 211, 153, 0.2)", border: "1px solid rgba(52, 211, 153, 0.4)", color: "#34d399", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                    title="Stage this specific hunk"
+                                  >
+                                    + Stage Hunk
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => ctx.discardHunk(currentFile!.path, hunk)}
+                                    style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.2)", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#f87171", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                    title="Discard this hunk"
+                                  >
+                                    🗑️ Discard Hunk
+                                  </button>
+                                </Show>
+                                <Show when={currentFile && currentFile.staged}>
+                                  <button
+                                    type="button"
+                                    onClick={() => ctx.unstageHunk(currentFile!.path, hunk)}
+                                    style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(245, 158, 11, 0.2)", border: "1px solid rgba(245, 158, 11, 0.4)", color: "#fbbf24", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                    title="Unstage this specific hunk"
+                                  >
+                                    - Unstage Hunk
+                                  </button>
+                                </Show>
+                              </div>
                             </div>
                             <For each={hunk.lines}>
                               {(line) => {

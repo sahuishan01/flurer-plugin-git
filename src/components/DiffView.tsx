@@ -461,10 +461,41 @@ export function DiffView() {
                           {(hunk) => {
                             let oldLine = hunk.old_start;
                             let newLine = hunk.new_start;
+                            const filePath = fileItem.newPath || fileItem.oldPath;
                             return (
                               <div style={{ padding: "0 0 4px" }}>
-                                <div style={S.diffHunkHeader}>
-                                  @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                                <div style={{ ...S.diffHunkHeader, display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "6px" }}>
+                                  <span>@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@</span>
+                                  <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                    <Show when={ctx.diffMode() === "unstaged"}>
+                                      <button
+                                        type="button"
+                                        onClick={() => ctx.stageHunk(filePath, hunk)}
+                                        style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(52, 211, 153, 0.2)", border: "1px solid rgba(52, 211, 153, 0.4)", color: "#34d399", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                        title="Stage this specific hunk"
+                                      >
+                                        + Stage Hunk
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => ctx.discardHunk(filePath, hunk)}
+                                        style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.2)", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#f87171", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                        title="Discard changes in this hunk"
+                                      >
+                                        🗑️ Discard Hunk
+                                      </button>
+                                    </Show>
+                                    <Show when={ctx.diffMode() === "staged"}>
+                                      <button
+                                        type="button"
+                                        onClick={() => ctx.unstageHunk(filePath, hunk)}
+                                        style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(245, 158, 11, 0.2)", border: "1px solid rgba(245, 158, 11, 0.4)", color: "#fbbf24", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                        title="Unstage this specific hunk"
+                                      >
+                                        - Unstage Hunk
+                                      </button>
+                                    </Show>
+                                  </div>
                                 </div>
                                 <For each={hunk.lines}>
                                   {(line) => {
@@ -491,10 +522,41 @@ export function DiffView() {
                         <For each={fileItem.hunks}>
                           {(hunk) => {
                             const splitRows = buildSplitRows(hunk);
+                            const filePath = fileItem.newPath || fileItem.oldPath;
                             return (
                               <div style={{ padding: "0 0 4px", overflow: "auto" }}>
-                                <div style={S.diffHunkHeader}>
-                                  @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                                <div style={{ ...S.diffHunkHeader, display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "6px" }}>
+                                  <span>@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@</span>
+                                  <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                    <Show when={ctx.diffMode() === "unstaged"}>
+                                      <button
+                                        type="button"
+                                        onClick={() => ctx.stageHunk(filePath, hunk)}
+                                        style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(52, 211, 153, 0.2)", border: "1px solid rgba(52, 211, 153, 0.4)", color: "#34d399", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                        title="Stage this specific hunk"
+                                      >
+                                        + Stage Hunk
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => ctx.discardHunk(filePath, hunk)}
+                                        style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.2)", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#f87171", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                        title="Discard changes in this hunk"
+                                      >
+                                        🗑️ Discard Hunk
+                                      </button>
+                                    </Show>
+                                    <Show when={ctx.diffMode() === "staged"}>
+                                      <button
+                                        type="button"
+                                        onClick={() => ctx.unstageHunk(filePath, hunk)}
+                                        style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(245, 158, 11, 0.2)", border: "1px solid rgba(245, 158, 11, 0.4)", color: "#fbbf24", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
+                                        title="Unstage this specific hunk"
+                                      >
+                                        - Unstage Hunk
+                                      </button>
+                                    </Show>
+                                  </div>
                                 </div>
                                 <div style={{ display: "flex", "flex-direction": "column", width: "100%" }}>
                                   <For each={splitRows}>

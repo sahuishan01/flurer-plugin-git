@@ -1,4 +1,4 @@
-export type GitView = "dashboard" | "graph" | "branches" | "changes" | "diff" | "history" | "stash" | "worktrees";
+export type GitView = "dashboard" | "graph" | "branches" | "changes" | "diff" | "history" | "stash" | "worktrees" | "insights";
 
 export interface GitChange {
   path: string;
@@ -107,4 +107,54 @@ export interface BusyTask {
   title: string;
   detail?: string;
   cancellable?: boolean;
+}
+
+export interface GitCommandLogEntry {
+  id: string;
+  command: string;
+  args: string[];
+  durationMs: number;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  timestamp: number;
+}
+
+export interface GitTag {
+  name: string;
+  hash: string;
+  message?: string;
+  author?: string;
+  timestamp?: number;
+}
+
+export interface GitBlameLine {
+  lineNum: number;
+  commitHash: string;
+  shortHash: string;
+  author: string;
+  timestamp: number;
+  content: string;
+  message: string;
+}
+
+export interface GitRemote {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string;
+}
+
+export interface GitRepoStats {
+  totalCommits: number;
+  totalContributors: number;
+  contributors: Array<{ name: string; email: string; commits: number; additions: number; deletions: number }>;
+  punchcard: Array<{ day: number; hour: number; count: number }>;
+  weeklyActivity: Array<{ week: number; count: number }>;
+  languages: Array<{ ext: string; count: number; lines: number; percent: number }>;
+}
+
+export interface GitConflictFile {
+  path: string;
+  conflictType: string;
+  resolved: boolean;
 }

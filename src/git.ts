@@ -2,9 +2,31 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   GitStatus, GitChange, GitCommit, GitBranch, GitGraphEntry,
   GitDiff, DiffHunk, DiffLine, GitStashEntry, GitWorktree, GitCommitDetail,
+  GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
 } from "./types";
 
 let shellAvailable: boolean | null = null;
+
+const commandLogs: GitCommandLogEntry[] = [];
+const logListeners: Array<(logs: GitCommandLogEntry[]) => void> = [];
+
+export function getCommandLogs(): GitCommandLogEntry[] {
+  return [...commandLogs];
+}
+
+export function subscribeCommandLogs(listener: (logs: GitCommandLogEntry[]) => void): () => void {
+  logListeners.push(listener);
+  listener([...commandLogs]);
+  return () => {
+    const idx = logListeners.indexOf(listener);
+    if (idx !== -1) logListeners.splice(idx, 1);
+  };
+}
+
+export function clearCommandLogs(): void {
+  commandLogs.length = 0;
+  logListeners.forEach((l) => l([]));
+}
 
 function getShell() {
   const win = window as any;
@@ -36,15 +58,12 @@ async function execGit(repoPath: string, ...args: string[]): Promise<string> {
   const Command = getShell();
   if (Command) {
     const normalized = repoPath.replace(/\\/g, "/");
+    const startTime = performance.now();
     const run = async () => {
-      // -c color.ui=never guarantees machine-readable output regardless of the
-      // user's global git config.
-      // -c safe.directory=* and -c safe.directory=<normalized> prevents "detected dubious ownership"
-      // when repositories are owned by another user SID or previous Windows installation.
       return await Command.create("git", [
         "-C", repoPath,
         "-c", "color.ui=never",
-        "-c", "safe.directory=*",
+        "-c", "safe.directory=* ",
         "-c", `safe.directory=${normalized}`,
         ...args,
       ]).execute({ windowsHide: true });
@@ -63,6 +82,22 @@ async function execGit(repoPath: string, ...args: string[]): Promise<string> {
       }
     }
 
+    const durationMs = Math.round(performance.now() - startTime);
+    const entry: GitCommandLogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      command: `git ${args.join(" ")}`,
+      args,
+      durationMs,
+      exitCode: result.code,
+      stdout: result.stdout || "",
+      stderr: result.stderr || "",
+      timestamp: Date.now(),
+    };
+
+    commandLogs.unshift(entry);
+    if (commandLogs.length > 250) commandLogs.pop();
+    logListeners.forEach((l) => l([...commandLogs]));
+
     // Exit code 0: success / no diffs
     // Exit code 1: differences found (standard git diff exit code)
     if (result.code !== 0 && result.code !== 1) {
@@ -70,7 +105,6 @@ async function execGit(repoPath: string, ...args: string[]): Promise<string> {
     }
     return result.stdout;
   }
-  // Fallback: try invoke (requires Rust commands)
   throw new Error("Shell plugin not available");
 }
 
@@ -676,8 +710,374 @@ export async function gitShow(repoPath: string, commitHash: string): Promise<Git
   return invoke<GitCommitDetail>("git_show", { repoPath, commitHash });
 }
 
+// ---- Hunk Staging / Discarding & Amend ----
+
+export function createHunkPatch(filePath: string, hunk: DiffHunk): string {
+  const normPath = filePath.replace(/^\.\//, "");
+  let patch = `--- a/${normPath}\n+++ b/${normPath}\n@@ -${hunk.old_start},${hunk.old_lines} +${hunk.new_start},${hunk.new_lines} @@\n`;
+  for (const line of hunk.lines) {
+    patch += `${line.origin}${line.content}\n`;
+  }
+  return patch;
+}
+
+export async function gitApplyHunk(repoPath: string, filePath: string, hunk: DiffHunk, mode: "stage" | "unstage" | "discard"): Promise<void> {
+  const patch = createHunkPatch(filePath, hunk);
+  const Command = getShell();
+  if (Command) {
+    const isWindows = navigator.userAgent.includes("Windows");
+    const applyFlag = mode === "stage" ? "--cached" : (mode === "unstage" ? "--cached --reverse" : "--reverse");
+
+    if (!isWindows) {
+      await Command.create("sh", [
+        "-c",
+        `cat << 'FLURER_EOF' | git -C "${repoPath}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -\n${patch}\nFLURER_EOF`
+      ]).execute({ windowsHide: true });
+      return;
+    } else {
+      await Command.create("powershell", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `$p = @'\n${patch}\n'@; $p | git -C "${repoPath}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -`
+      ]).execute({ windowsHide: true });
+      return;
+    }
+  }
+  await invoke("git_apply_hunk", { repoPath, filePath, hunk, mode });
+}
+
+export async function gitCommitAmend(repoPath: string, message?: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    if (message) {
+      await execGit(repoPath, "commit", "--amend", "-m", message);
+    } else {
+      await execGit(repoPath, "commit", "--amend", "--no-edit");
+    }
+    return;
+  }
+  await invoke("git_commit_amend", { repoPath, message: message ?? null });
+}
+
+// ---- Tag Management ----
+
+export async function gitTagList(repoPath: string): Promise<GitTag[]> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(
+      repoPath,
+      "tag",
+      "-l",
+      "--format=%(refname:short)\x1f%(objectname:short)\x1f%(subject)\x1f%(taggername)\x1f%(taggerdate:unix)"
+    );
+    return out.trim().split("\n").filter(Boolean).map((line) => {
+      const [name, hash, message, author, timestamp] = line.split("\x1f");
+      return {
+        name,
+        hash,
+        message: message || "",
+        author: author || "",
+        timestamp: parseInt(timestamp, 10) || undefined,
+      };
+    });
+  }
+  return invoke<GitTag[]>("git_tag_list", { repoPath });
+}
+
+export async function gitTagCreate(repoPath: string, name: string, commitHash?: string, message?: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    const args = ["tag"];
+    if (message) {
+      args.push("-a", name, "-m", message);
+    } else {
+      args.push(name);
+    }
+    if (commitHash) args.push(commitHash);
+    await execGit(repoPath, ...args);
+    return;
+  }
+  await invoke("git_tag_create", { repoPath, name, commitHash: commitHash ?? null, message: message ?? null });
+}
+
+export async function gitTagDelete(repoPath: string, name: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "tag", "-d", name);
+    return;
+  }
+  await invoke("git_tag_delete", { repoPath, name });
+}
+
+export async function gitTagPush(repoPath: string, name?: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    if (name) {
+      await execGit(repoPath, "push", "origin", `refs/tags/${name}`);
+    } else {
+      await execGit(repoPath, "push", "origin", "--tags");
+    }
+    return;
+  }
+  await invoke("git_tag_push", { repoPath, name: name ?? null });
+}
+
+// ---- Per-File Log ----
+
+export async function gitFileLog(repoPath: string, filePath: string, maxCount = 50): Promise<GitCommit[]> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(
+      repoPath,
+      "log",
+      `--max-count=${maxCount}`,
+      "--format=%H%x1f%s%x1f%an%x1f%at",
+      "--follow",
+      "--",
+      filePath
+    );
+    return out.trim().split("\n").filter(Boolean).map((line) => {
+      const [hash, message, author, timestamp] = line.split("\x1f");
+      return { hash, message, author, timestamp: parseInt(timestamp, 10) };
+    });
+  }
+  return invoke<GitCommit[]>("git_file_log", { repoPath, filePath, maxCount });
+}
+
+// ---- Git Blame ----
+
+export async function gitBlame(repoPath: string, filePath: string): Promise<GitBlameLine[]> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(repoPath, "blame", "--line-porcelain", "--", filePath);
+    const lines: GitBlameLine[] = [];
+    const rawLines = out.split("\n");
+
+    let curHash = "";
+    let curAuthor = "";
+    let curTime = 0;
+    let curMsg = "";
+    let lineNum = 1;
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      if (line.match(/^[0-9a-f]{40}\s/)) {
+        curHash = line.split(" ")[0];
+      } else if (line.startsWith("author ")) {
+        curAuthor = line.substring(7);
+      } else if (line.startsWith("author-time ")) {
+        curTime = parseInt(line.substring(12), 10) || 0;
+      } else if (line.startsWith("summary ")) {
+        curMsg = line.substring(8);
+      } else if (line.startsWith("\t")) {
+        lines.push({
+          lineNum: lineNum++,
+          commitHash: curHash,
+          shortHash: curHash.slice(0, 7),
+          author: curAuthor,
+          timestamp: curTime,
+          message: curMsg,
+          content: line.substring(1),
+        });
+      }
+    }
+    return lines;
+  }
+  return invoke<GitBlameLine[]>("git_blame", { repoPath, filePath });
+}
+
+// ---- Git Remotes ----
+
+export async function gitRemotes(repoPath: string): Promise<GitRemote[]> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(repoPath, "remote", "-v");
+    const map = new Map<string, { fetchUrl: string; pushUrl: string }>();
+    for (const line of out.trim().split("\n").filter(Boolean)) {
+      const parts = line.split(/\s+/);
+      if (parts.length >= 3) {
+        const name = parts[0];
+        const url = parts[1];
+        const type = parts[2];
+        const existing = map.get(name) || { fetchUrl: "", pushUrl: "" };
+        if (type.includes("fetch")) existing.fetchUrl = url;
+        if (type.includes("push")) existing.pushUrl = url;
+        map.set(name, existing);
+      }
+    }
+    return Array.from(map.entries()).map(([name, { fetchUrl, pushUrl }]) => ({
+      name,
+      fetchUrl: fetchUrl || pushUrl,
+      pushUrl: pushUrl || fetchUrl,
+    }));
+  }
+  return invoke<GitRemote[]>("git_remotes", { repoPath });
+}
+
+export async function gitRemoteAdd(repoPath: string, name: string, url: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "remote", "add", name, url);
+    return;
+  }
+  await invoke("git_remote_add", { repoPath, name, url });
+}
+
+export async function gitRemoteRemove(repoPath: string, name: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "remote", "remove", name);
+    return;
+  }
+  await invoke("git_remote_remove", { repoPath, name });
+}
+
+// ---- Git Config ----
+
+export async function gitConfigGet(repoPath: string, key: string): Promise<string> {
+  const Command = getShell();
+  if (Command) {
+    try {
+      const out = await execGit(repoPath, "config", "--get", key);
+      return out.trim();
+    } catch {
+      return "";
+    }
+  }
+  return invoke<string>("git_config_get", { repoPath, key });
+}
+
+export async function gitConfigSet(repoPath: string, key: string, value: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "config", key, value);
+    return;
+  }
+  await invoke("git_config_set", { repoPath, key, value });
+}
+
+// ---- Conflicts ----
+
+export async function gitConflictFiles(repoPath: string): Promise<GitConflictFile[]> {
+  const Command = getShell();
+  if (Command) {
+    const out = await execGit(repoPath, "status", "--porcelain");
+    const conflicts: GitConflictFile[] = [];
+    for (const line of out.split("\n").filter(Boolean)) {
+      const code = line.substring(0, 2);
+      const filePath = line.substring(3).replace(/^"|"$/g, "");
+      if (code === "UU" || code === "AA" || code === "DD" || code === "AU" || code === "UA" || code === "DU" || code === "UD") {
+        conflicts.push({ path: filePath, conflictType: code, resolved: false });
+      }
+    }
+    return conflicts;
+  }
+  return invoke<GitConflictFile[]>("git_conflict_files", { repoPath });
+}
+
+export async function gitResolveConflict(repoPath: string, filePath: string, resolution: "ours" | "theirs" | "mark"): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    if (resolution === "ours") {
+      await execGit(repoPath, "checkout", "--ours", "--", filePath);
+      await execGit(repoPath, "add", filePath);
+    } else if (resolution === "theirs") {
+      await execGit(repoPath, "checkout", "--theirs", "--", filePath);
+      await execGit(repoPath, "add", filePath);
+    } else {
+      await execGit(repoPath, "add", filePath);
+    }
+    return;
+  }
+  await invoke("git_resolve_conflict", { repoPath, filePath, resolution });
+}
+
+// ---- Repository Statistics ----
+
+export async function gitRepoStats(repoPath: string): Promise<GitRepoStats> {
+  const Command = getShell();
+  if (Command) {
+    // 1. Shortlog for contributors
+    const shortlogOut = await execGit(repoPath, "shortlog", "-sne", "--all");
+    const contributors: Array<{ name: string; email: string; commits: number; additions: number; deletions: number }> = [];
+    let totalCommits = 0;
+
+    for (const line of shortlogOut.trim().split("\n").filter(Boolean)) {
+      const match = line.trim().match(/^(\d+)\s+(.+?)\s+<(.+?)>$/);
+      if (match) {
+        const count = parseInt(match[1], 10);
+        totalCommits += count;
+        contributors.push({
+          commits: count,
+          name: match[2],
+          email: match[3],
+          additions: 0,
+          deletions: 0,
+        });
+      }
+    }
+
+    // 2. Punchcard from commit timestamps
+    const timestampsOut = await execGit(repoPath, "log", "--format=%at", "--max-count=1500");
+    const punchcardMap = new Map<string, number>();
+    for (const line of timestampsOut.trim().split("\n").filter(Boolean)) {
+      const ts = parseInt(line, 10);
+      if (ts) {
+        const date = new Date(ts * 1000);
+        const day = date.getDay(); // 0-6
+        const hour = date.getHours(); // 0-23
+        const key = `${day}-${hour}`;
+        punchcardMap.set(key, (punchcardMap.get(key) || 0) + 1);
+      }
+    }
+
+    const punchcard: Array<{ day: number; hour: number; count: number }> = [];
+    for (let d = 0; d < 7; d++) {
+      for (let h = 0; h < 24; h++) {
+        punchcard.push({ day: d, hour: h, count: punchcardMap.get(`${d}-${h}`) || 0 });
+      }
+    }
+
+    // 3. Languages from git ls-files
+    const filesOut = await execGit(repoPath, "ls-files");
+    const langMap = new Map<string, { count: number; lines: number }>();
+    let totalFiles = 0;
+
+    for (const f of filesOut.trim().split("\n").filter(Boolean)) {
+      totalFiles++;
+      const ext = f.includes(".") ? f.substring(f.lastIndexOf(".") + 1).toLowerCase() : "other";
+      const existing = langMap.get(ext) || { count: 0, lines: 0 };
+      existing.count++;
+      langMap.set(ext, existing);
+    }
+
+    const languages = Array.from(langMap.entries())
+      .map(([ext, { count, lines }]) => ({
+        ext,
+        count,
+        lines,
+        percent: totalFiles > 0 ? Math.round((count / totalFiles) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    return {
+      totalCommits,
+      totalContributors: contributors.length,
+      contributors,
+      punchcard,
+      weeklyActivity: [],
+      languages,
+    };
+  }
+
+  return invoke<GitRepoStats>("git_repo_stats", { repoPath });
+}
+
 // ---- Utility: detect shell availability ----
 
 export function hasShellPlugin(): boolean {
   return getShell() !== null;
 }
+
