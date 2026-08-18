@@ -254,6 +254,25 @@ export function HistoryView() {
                   <div style={{ "font-weight": 600, "font-size": "14px", "margin-bottom": "10px", "white-space": "pre-wrap", "word-break": "break-word", color: "var(--text-primary, #f8fafc)", "line-height": "1.6" }}>
                     {detail.message}
                   </div>
+
+                  <Show when={detail.parent_hashes.length > 1}>
+                    <div style={{ background: "rgba(15, 23, 42, 0.94)", border: "1px solid rgba(56, 189, 248, 0.45)", padding: "10px 14px", "border-radius": "10px", margin: "10px 0", "box-shadow": "0 4px 14px rgba(0,0,0,0.4)" }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px", "font-weight": 700, "font-size": "12px", color: "#38bdf8", "text-shadow": "0 1px 2px rgba(0,0,0,0.8)" }}>
+                        🔀 Merge Commit Breakdown
+                      </div>
+                      <div style={{ "font-size": "12px", margin: "6px 0 2px", color: "#f8fafc", display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap" }}>
+                        <span style={{ color: "#94a3b8" }}>Merging <strong>Source Branch</strong></span>
+                        <code style={{ background: "rgba(74, 222, 128, 0.2)", border: "1px solid rgba(74, 222, 128, 0.5)", color: "#86efac", padding: "2px 7px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px", "font-weight": 700 }}>
+                          {detail.parent_hashes[1].slice(0, 7)}
+                        </code>
+                        <span style={{ "font-weight": 700, color: "#94a3b8" }}>➔ Into Target/Base Branch</span>
+                        <code style={{ background: "rgba(56, 189, 248, 0.2)", border: "1px solid rgba(56, 189, 248, 0.5)", color: "#7dd3fc", padding: "2px 7px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px", "font-weight": 700 }}>
+                          {detail.parent_hashes[0].slice(0, 7)}
+                        </code>
+                      </div>
+                    </div>
+                  </Show>
+
                   <div style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", "font-size": "11.5px", color: "rgba(255, 255, 255, 0.6)", "font-family": "Space Mono, monospace", "border-top": "1px solid rgba(255, 255, 255, 0.08)", "padding-top": "8px" }}>
                     <div>Author: <span style={{ color: "var(--text-primary, #f8fafc)" }}>{detail.author}</span> &lt;{detail.email}&gt;</div>
                     <div>Date: <span style={{ color: "var(--text-primary, #f8fafc)" }}>{formatTimestamp(detail.timestamp)}</span></div>

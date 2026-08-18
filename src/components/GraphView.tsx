@@ -1814,7 +1814,11 @@ export function GraphView() {
                   const textX = () => (row().refs && row().refs.length > 0) ? badgeData().nextX + 4 : refStart();
                   const isSelected = () => selectedHash() === row().hash;
                   const isMergeCommit = () => row().parents.length > 1;
-                  const msgLeft = () => textX() + (isMergeCommit() ? 202 : 68);
+                  const mergeSourceHash = () => row().parents[1]?.slice(0, 5) || "???";
+                  const mergeTargetHash = () => row().parents[0]?.slice(0, 5) || "???";
+                  const mergeLabel = () => `🔀 MERGE (${mergeSourceHash()}➔${mergeTargetHash()})`;
+                  const mergeBadgeW = () => isMergeCommit() ? Math.round(mergeLabel().length * 7.0 + 26) : 0;
+                  const msgLeft = () => textX() + 62 + (isMergeCommit() ? mergeBadgeW() + 10 : 0);
 
                   return (
                     <g style={{ cursor: "pointer" }} onClick={() => handleRowClick(row().hash)} onContextMenu={(e) => handleContextMenu(e, row().hash)}>
@@ -1846,9 +1850,26 @@ export function GraphView() {
 
                       <Show when={isMergeCommit()}>
                         <g>
-                          <rect x={textX() + 65} y={y - 9} width="128" height="17" rx="4" fill="rgba(96, 205, 255, 0.22)" stroke="rgba(96, 205, 255, 0.45)" />
-                          <text x={textX() + 71} y={y + 3} fill="var(--accent-default, #60cdff)" font-size="10" font-weight="700" font-family="Space Mono,monospace" style={{ "text-shadow": "var(--text-shadow)" }}>
-                            {"🔀 MERGE ("}{row().parents[1].slice(0, 5)}{"➔"}{row().parents[0].slice(0, 5)}{")"}
+                          <rect
+                            x={textX() + 62}
+                            y={y - 9}
+                            width={mergeBadgeW()}
+                            height={18}
+                            rx={4}
+                            fill="rgba(15, 23, 42, 0.94)"
+                            stroke="rgba(56, 189, 248, 0.65)"
+                            stroke-width="1"
+                          />
+                          <text
+                            x={textX() + 62 + 7}
+                            y={y + 4}
+                            fill="#38bdf8"
+                            font-size="10"
+                            font-weight="700"
+                            font-family="Space Mono,monospace"
+                            style={{ "text-shadow": "0 1px 3px rgba(0,0,0,0.8)" }}
+                          >
+                            {mergeLabel()}
                           </text>
                         </g>
                       </Show>
@@ -1961,17 +1982,17 @@ export function GraphView() {
                   </div>
 
                   <Show when={detail.parent_hashes.length > 1}>
-                    <div style={{ background: "linear-gradient(135deg, rgba(96,205,255,0.14), rgba(129,140,248,0.12))", border: "1px solid rgba(96,205,255,0.3)", padding: "10px 14px", "border-radius": "10px", margin: "10px 0", "box-shadow": "0 2px 10px rgba(0,0,0,0.12)" }}>
-                      <div style={{ display: "flex", "align-items": "center", gap: "6px", "font-weight": 600, "font-size": "12px", color: "var(--accent-default, #60cdff)", "text-shadow": "var(--text-shadow)" }}>
+                    <div style={{ background: "rgba(15, 23, 42, 0.94)", border: "1px solid rgba(56, 189, 248, 0.45)", padding: "10px 14px", "border-radius": "10px", margin: "10px 0", "box-shadow": "0 4px 14px rgba(0,0,0,0.4)" }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px", "font-weight": 700, "font-size": "12px", color: "#38bdf8", "text-shadow": "0 1px 2px rgba(0,0,0,0.8)" }}>
                         🔀 Merge Commit Breakdown
                       </div>
-                      <div style={{ "font-size": "12px", margin: "6px 0 2px", color: "var(--text-primary, var(--text-color))", "text-shadow": "var(--text-shadow)", display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap" }}>
-                        <span>Merging <strong>Source Branch</strong></span>
-                        <code style={{ background: "rgba(74, 222, 128, 0.2)", color: "#4ade80", padding: "2px 6px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                      <div style={{ "font-size": "12px", margin: "6px 0 2px", color: "#f8fafc", display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap" }}>
+                        <span style={{ color: "#94a3b8" }}>Merging <strong>Source Branch</strong></span>
+                        <code style={{ background: "rgba(74, 222, 128, 0.2)", border: "1px solid rgba(74, 222, 128, 0.5)", color: "#86efac", padding: "2px 7px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px", "font-weight": 700 }}>
                           {detail.parent_hashes[1].slice(0, 7)}
                         </code>
-                        <span style={{ "font-weight": 700 }}>➔ Into Target/Base Branch</span>
-                        <code style={{ background: "rgba(96, 165, 250, 0.2)", color: "#60a5fa", padding: "2px 6px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
+                        <span style={{ "font-weight": 700, color: "#94a3b8" }}>➔ Into Target/Base Branch</span>
+                        <code style={{ background: "rgba(56, 189, 248, 0.2)", border: "1px solid rgba(56, 189, 248, 0.5)", color: "#7dd3fc", padding: "2px 7px", "border-radius": "6px", "font-family": "Space Mono, monospace", "font-size": "11px", "font-weight": 700 }}>
                           {detail.parent_hashes[0].slice(0, 7)}
                         </code>
                       </div>
