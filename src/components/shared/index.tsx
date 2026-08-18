@@ -987,6 +987,30 @@ export function StatusBar() {
           {ctx.activeView()}
         </span>
 
+        {/* Output Console trigger button */}
+        <button
+          type="button"
+          onClick={ctx.toggleConsole}
+          title="Toggle Git Command Output Console"
+          style={{
+            background: ctx.consoleOpen() ? "rgba(56, 189, 248, 0.2)" : "rgba(255, 255, 255, 0.06)",
+            border: ctx.consoleOpen() ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid rgba(255, 255, 255, 0.12)",
+            color: ctx.consoleOpen() ? "#38bdf8" : "var(--text-primary, #f8fafc)",
+            padding: "2px 8px",
+            "border-radius": "4px",
+            "font-size": "10.5px",
+            "font-family": "Space Mono, monospace",
+            cursor: "pointer",
+            display: "inline-flex",
+            "align-items": "center",
+            gap: "4px",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span>&gt;_</span>
+          <span>Log ({ctx.commandLogs().length})</span>
+        </button>
+
         {/* Shortcuts trigger button */}
         <button
           type="button"
@@ -1011,6 +1035,298 @@ export function StatusBar() {
         </button>
       </div>
     </div>
+  );
+}
+
+export function CommandConsoleModal() {
+  const ctx = useGit();
+  const [filterQuery, setFilterQuery] = createSignal("");
+  const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
+
+  const filteredLogs = createMemo(() => {
+    const q = filterQuery().toLowerCase().trim();
+    if (!q) return ctx.commandLogs();
+    return ctx.commandLogs().filter(
+      (l) =>
+        l.command.toLowerCase().includes(q) ||
+        l.stdout.toLowerCase().includes(q) ||
+        l.stderr.toLowerCase().includes(q)
+    );
+  });
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const copyCommand = (cmd: string, e: MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(cmd);
+    ctx.showToast("Copied command to clipboard", "success");
+  };
+
+  return (
+    <Show when={ctx.consoleOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.toggleConsole}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.95)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            "border-radius": "12px",
+            width: "880px",
+            "max-width": "92vw",
+            height: "640px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.1)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Top Bar */}
+          <div
+            style={{
+              padding: "14px 20px",
+              background: "rgba(10, 14, 23, 0.8)",
+              "border-bottom": "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <div
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  "border-radius": "6px",
+                  background: "rgba(56, 189, 248, 0.15)",
+                  border: "1px solid rgba(56, 189, 248, 0.3)",
+                  display: "flex",
+                  "align-items": "center",
+                  "justify-content": "center",
+                  color: "#38bdf8",
+                  "font-family": "Space Mono, monospace",
+                  "font-weight": 700,
+                  "font-size": "13px",
+                }}
+              >
+                &gt;_
+              </div>
+              <div>
+                <div style={{ "font-size": "14px", "font-weight": 700, color: "#fff" }}>
+                  Git Command Execution Log
+                </div>
+                <div style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Real-time transparent CLI invocation history ({ctx.commandLogs().length} commands)
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder="Filter commands or output..."
+                value={filterQuery()}
+                onInput={(e) => setFilterQuery(e.currentTarget.value)}
+                style={{
+                  padding: "6px 12px",
+                  background: "rgba(0, 0, 0, 0.3)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  "border-radius": "6px",
+                  color: "#fff",
+                  "font-size": "12px",
+                  "font-family": "Space Mono, monospace",
+                  width: "220px",
+                  outline: "none",
+                }}
+              />
+              <Button size="sm" onClick={ctx.clearCommandLogs}>
+                Clear
+              </Button>
+              <button
+                type="button"
+                onClick={ctx.toggleConsole}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255, 255, 255, 0.6)",
+                  cursor: "pointer",
+                  "font-size": "16px",
+                  padding: "4px 8px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Console Content */}
+          <div
+            style={{
+              flex: 1,
+              overflow: "auto",
+              padding: "12px 16px",
+              background: "#080c14",
+              display: "flex",
+              "flex-direction": "column",
+              gap: "8px",
+            }}
+          >
+            <Show
+              when={filteredLogs().length > 0}
+              fallback={
+                <div style={{ padding: "48px 20px", "text-align": "center", color: "rgba(255, 255, 255, 0.4)", "font-family": "Space Mono, monospace", "font-size": "12.5px" }}>
+                  No git commands recorded yet. Execute actions to view live output logs.
+                </div>
+              }
+            >
+              <For each={filteredLogs()}>
+                {(log) => {
+                  const isExpanded = () => expandedIds().has(log.id);
+                  const isSuccess = log.exitCode === 0;
+                  const hasOutput = log.stdout.trim().length > 0 || log.stderr.trim().length > 0;
+                  const timeStr = new Date(log.timestamp).toLocaleTimeString();
+
+                  return (
+                    <div
+                      style={{
+                        background: "rgba(15, 23, 42, 0.7)",
+                        border: `1px solid ${isSuccess ? "rgba(255, 255, 255, 0.08)" : "rgba(239, 68, 68, 0.3)"}`,
+                        "border-radius": "8px",
+                        overflow: "hidden",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {/* Command Line Header */}
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          display: "flex",
+                          "align-items": "center",
+                          "justify-content": "space-between",
+                          gap: "8px",
+                          cursor: hasOutput ? "pointer" : "default",
+                          background: isExpanded() ? "rgba(0,0,0,0.3)" : "transparent",
+                        }}
+                        onClick={() => hasOutput && toggleExpand(log.id)}
+                      >
+                        <div style={{ display: "flex", "align-items": "center", gap: "8px", flex: 1, overflow: "hidden" }}>
+                          {/* Exit code badge */}
+                          <span
+                            style={{
+                              "font-size": "10px",
+                              "font-weight": 700,
+                              padding: "2px 6px",
+                              "border-radius": "4px",
+                              background: isSuccess ? "rgba(52, 211, 153, 0.15)" : "rgba(239, 68, 68, 0.2)",
+                              color: isSuccess ? "#34d399" : "#f87171",
+                              "font-family": "Space Mono, monospace",
+                            }}
+                          >
+                            {isSuccess ? "✓ 0" : `✗ ${log.exitCode}`}
+                          </span>
+
+                          <span style={{ "font-size": "10.5px", color: "rgba(255, 255, 255, 0.35)", "font-family": "Space Mono, monospace" }}>
+                            {timeStr}
+                          </span>
+
+                          <span
+                            style={{
+                              "font-family": "Space Mono, monospace",
+                              "font-size": "12px",
+                              "font-weight": 600,
+                              color: "#38bdf8",
+                              overflow: "hidden",
+                              "text-overflow": "ellipsis",
+                              "white-space": "nowrap",
+                            }}
+                          >
+                            $ {log.command}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                          <span style={{ "font-size": "10.5px", color: "rgba(255, 255, 255, 0.4)", "font-family": "Space Mono, monospace" }}>
+                            {log.durationMs}ms
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => copyCommand(log.command, e)}
+                            style={{
+                              background: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              color: "rgba(255, 255, 255, 0.7)",
+                              padding: "2px 6px",
+                              "border-radius": "4px",
+                              "font-size": "10px",
+                              cursor: "pointer",
+                              "font-family": "Space Mono, monospace",
+                            }}
+                            title="Copy command"
+                          >
+                            📋
+                          </button>
+                          <Show when={hasOutput}>
+                            <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                              {isExpanded() ? "▲" : "▼"}
+                            </span>
+                          </Show>
+                        </div>
+                      </div>
+
+                      {/* Expandable Output Drawer */}
+                      <Show when={isExpanded() && hasOutput}>
+                        <div
+                          style={{
+                            padding: "10px 14px",
+                            background: "#030712",
+                            "border-top": "1px solid rgba(255, 255, 255, 0.06)",
+                            "font-family": "Space Mono, monospace",
+                            "font-size": "11px",
+                            "line-height": "17px",
+                            "white-space": "pre-wrap",
+                            "word-break": "break-all",
+                            "max-height": "220px",
+                            overflow: "auto",
+                          }}
+                        >
+                          <Show when={log.stdout}>
+                            <div style={{ color: "var(--text-primary, #e2e8f0)" }}>{log.stdout}</div>
+                          </Show>
+                          <Show when={log.stderr}>
+                            <div style={{ color: "#fca5a5", "margin-top": log.stdout ? "6px" : 0 }}>{log.stderr}</div>
+                          </Show>
+                        </div>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
   );
 }
 
