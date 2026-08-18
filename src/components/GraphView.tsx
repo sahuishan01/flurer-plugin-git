@@ -900,6 +900,34 @@ export function GraphView() {
     focusVisibleCenter();
   }
 
+  function resizeGraph() {
+    if (!graphContainerRef || !forceInstance) return;
+    const rect = graphContainerRef.getBoundingClientRect();
+    const w = Math.floor(rect.width || graphContainerRef.clientWidth || graphContainerRef.offsetWidth);
+    const h = Math.floor(rect.height || graphContainerRef.clientHeight || graphContainerRef.offsetHeight);
+    if (w > 10 && h > 10) {
+      if (typeof forceInstance.width === "function") {
+        forceInstance.width(w);
+      }
+      if (typeof forceInstance.height === "function") {
+        forceInstance.height(h);
+      }
+      if (typeof forceInstance.camera === "function") {
+        const cam = forceInstance.camera();
+        if (cam && typeof cam.updateProjectionMatrix === "function") {
+          cam.aspect = w / h;
+          cam.updateProjectionMatrix();
+        }
+      }
+      if (typeof forceInstance.renderer === "function") {
+        const ren = forceInstance.renderer();
+        if (ren && typeof ren.setSize === "function") {
+          ren.setSize(w, h, false);
+        }
+      }
+    }
+  }
+
   onMount(() => {
     if (ctx.graph().length === 0) ctx.loadGraph();
     if (!document.getElementById(GRAPH_CSS_ID)) {
@@ -908,6 +936,18 @@ export function GraphView() {
       st.textContent = GRAPH_CSS;
       document.head.appendChild(st);
     }
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && graphContainerRef) {
+      resizeObserver = new ResizeObserver(() => {
+        resizeGraph();
+      });
+      resizeObserver.observe(graphContainerRef);
+    }
+
+    const handleWindowResize = () => {
+      resizeGraph();
+    };
 
     const handlePointerMove = (e: PointerEvent) => {
       if (graphContainerRef) {
@@ -964,10 +1004,15 @@ export function GraphView() {
       }
     };
 
+    window.addEventListener("resize", handleWindowResize);
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("dblclick", handleDblClick);
     onCleanup(() => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      window.removeEventListener("resize", handleWindowResize);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("dblclick", handleDblClick);
@@ -1007,7 +1052,7 @@ export function GraphView() {
         try { forceInstance._destructor(); } catch {}
       }
       container.innerHTML = "";
-      forceInstance = null;
+forceInstance = null;
     }
 
     if (entries.length === 0) return;
@@ -1015,7 +1060,13 @@ export function GraphView() {
     const data = buildForceGraphData(entries, query);
 
     if (mode === "3d") {
+      const rect = container.getBoundingClientRect();
+      const initialW = Math.max(10, Math.floor(rect.width || container.clientWidth || 800));
+      const initialH = Math.max(10, Math.floor(rect.height || container.clientHeight || 600));
+
       const inst = (ForceGraph3D as any)()(container)
+        .width(initialW)
+        .height(initialH)
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
@@ -1141,8 +1192,20 @@ export function GraphView() {
       }, 20);
 
       forceInstance = inst;
+      requestAnimationFrame(() => {
+        resizeGraph();
+      });
+      setTimeout(() => {
+        resizeGraph();
+      }, 100);
     } else if (mode === "2d") {
+      const rect = container.getBoundingClientRect();
+      const initialW = Math.max(10, Math.floor(rect.width || container.clientWidth || 800));
+      const initialH = Math.max(10, Math.floor(rect.height || container.clientHeight || 600));
+
       const inst = (ForceGraph2D as any)()(container)
+        .width(initialW)
+        .height(initialH)
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
@@ -1409,6 +1472,12 @@ export function GraphView() {
         });
 
       forceInstance = inst;
+      requestAnimationFrame(() => {
+        resizeGraph();
+      });
+      setTimeout(() => {
+        resizeGraph();
+      }, 100);
     }
   });
 
