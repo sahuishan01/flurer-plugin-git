@@ -1015,7 +1015,7 @@ export function GraphView() {
     const data = buildForceGraphData(entries, query);
 
     if (mode === "3d") {
-      const inst = ForceGraph3D()(container)
+      const inst = (ForceGraph3D as any)()(container)
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
@@ -1142,7 +1142,7 @@ export function GraphView() {
 
       forceInstance = inst;
     } else if (mode === "2d") {
-      const inst = ForceGraph2D()(container)
+      const inst = (ForceGraph2D as any)()(container)
         .graphData(data)
         .nodeId("id")
         .nodeVal("val")
@@ -1501,16 +1501,6 @@ export function GraphView() {
       return from <= end && to >= start;
     });
   });
-
-  function handleRowClick(hash: string) {
-    setSelectedHash(hash);
-    ctx.showCommitDetail(hash);
-  }
-
-  function handleContextMenu(e: MouseEvent, hash: string) {
-    e.preventDefault();
-    setMenuPos({ x: e.clientX, y: e.clientY, hash });
-  }
 
   const edgePath = (e: GraphEdge): string => {
     const x1 = laneX(e.fromLane);
@@ -1980,7 +1970,7 @@ export function GraphView() {
                       </Show>
 
                       <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 24}px)`} height={ROW_H}>
-                        <div xmlns="http://www.w3.org/1999/xhtml" style={{ display: "flex", "align-items": "center", gap: "10px", width: "100%", height: "100%" }}>
+                        <div style={{ display: "flex", "align-items": "center", gap: "10px", width: "100%", height: "100%" }}>
                           <div style={{ flex: 1, "min-width": 0, "font-size": "12px", color: isSelected() ? "var(--accent-default, var(--accent-color, #f59e0b))" : "var(--text-primary, var(--text-color))", "font-weight": isSelected() ? "600" : "400", "text-shadow": "var(--text-shadow)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }} title={row().message}>
                             {row().message}
                           </div>

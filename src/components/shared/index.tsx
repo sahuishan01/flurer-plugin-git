@@ -1,7 +1,8 @@
-import { Show, For, createSignal, createMemo, type JSX } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup, type JSX } from "solid-js";
 import { useGit } from "../../context";
 import { S } from "../../styles";
-import { buttonBg } from "../../utils";
+import { buttonBg, formatTimestamp, formatRelativeDate } from "../../utils";
+import * as git from "../../git";
 
 export function GitIcon(props: { size?: number }) {
   return (
@@ -110,13 +111,14 @@ export function CloseIcon(props: { size?: number }) {
   );
 }
 
-export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: () => void; children: JSX.Element; style?: any; title?: string }) {
+export function Button(props: { variant?: "primary" | "secondary" | "danger"; size?: "sm" | "md"; disabled?: boolean; onClick?: (e?: any) => void; children: JSX.Element; style?: any; title?: string }) {
   const base = { ...S.btn, ...(props.size === "sm" ? { padding: "4px 10px", "font-size": "11.5px" } : {}) };
   const variantStyle = props.variant === "danger" ? S.btnDanger : props.variant === "primary" ? S.btnPrimary : S.btnSecondary;
   return (
     <button
       type="button"
       title={props.title}
+      onClick={props.onClick}
       style={{
         ...base,
         ...variantStyle,
@@ -125,7 +127,6 @@ export function Button(props: { variant?: "primary" | "secondary" | "danger"; si
         ...props.style,
       }}
       disabled={props.disabled}
-      onClick={props.onClick}
     >
       {props.children}
     </button>
@@ -388,15 +389,33 @@ export function ComparisonBar() {
   );
 }
 
-export function ConfirmDialog(props: { open: boolean; message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
+export function ConfirmDialog(props: {
+  open: boolean;
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  variant?: "primary" | "secondary" | "danger";
+  danger?: boolean;
+  onConfirm: () => void | Promise<void>;
+  onCancel: () => void;
+}) {
   return (
     <Show when={props.open}>
       <div style={{ position: "fixed", inset: "0", background: "rgba(0,0,0,0.65)", "backdrop-filter": "blur(12px)", "-webkit-backdrop-filter": "blur(12px)", display: "flex", "align-items": "center", "justify-content": "center", "z-index": 10000 }} onClick={props.onCancel}>
-        <div style={{ ...S.card, "max-width": "380px", width: "90%", padding: "24px", "box-shadow": "0 20px 40px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
-          <div style={{ "font-size": "14.5px", "font-weight": 500, "line-height": "1.5", "margin-bottom": "20px", color: "var(--text-primary, var(--text-color, #f8fafc))" }}>{props.message}</div>
+        <div style={{ ...S.card, "max-width": "400px", width: "90%", padding: "24px", "box-shadow": "0 20px 40px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
+          <Show when={props.title}>
+            <div style={{ "font-size": "16px", "font-weight": 700, color: "var(--text-primary, #f8fafc)", "margin-bottom": "8px" }}>
+              {props.title}
+            </div>
+          </Show>
+          <div style={{ "font-size": "13.5px", "font-weight": 400, "line-height": "1.5", "margin-bottom": "20px", color: "var(--text-secondary, #94a3b8)" }}>
+            {props.message}
+          </div>
           <div style={{ display: "flex", gap: "10px", "justify-content": "flex-end" }}>
             <Button onClick={props.onCancel}>Cancel</Button>
-            <Button variant={props.danger ? "danger" : "primary"} onClick={props.onConfirm}>Confirm</Button>
+            <Button variant={props.variant || (props.danger ? "danger" : "primary")} onClick={() => props.onConfirm()}>
+              {props.confirmLabel || "Confirm"}
+            </Button>
           </div>
         </div>
       </div>
@@ -1771,7 +1790,6 @@ export function BlameModal() {
                     "font-size": "11.5px",
                     "line-height": "20px",
                     "border-bottom": "1px solid rgba(255,255,255,0.02)",
-                    "&:hover": { background: "rgba(255,255,255,0.04)" },
                   }}
                 >
                   {/* Blame Gutter Info */}

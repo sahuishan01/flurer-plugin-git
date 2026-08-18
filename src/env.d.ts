@@ -30,6 +30,9 @@ interface Window {
     author: string;
     viewRailButton: (props: any) => any;
     fullPanel: (props: any) => any;
+    mainPanel?: (props: any) => any;
+    sidebar?: (props: any) => any;
+    settingsPanel?: (props: any) => any;
   }): void;
   Solid: any;
   SolidWeb: any;

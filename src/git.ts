@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   GitStatus, GitChange, GitCommit, GitBranch, GitGraphEntry,
-  GitDiff, DiffHunk, DiffLine, GitStashEntry, GitWorktree, GitCommitDetail,
+  GitDiff, DiffHunk, DiffLine, DiffFile, GitStashEntry, GitWorktree, GitCommitDetail,
   GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
 } from "./types";
 
@@ -471,8 +471,12 @@ export async function gitDiff(repoPath: string, filePath: string = "."): Promise
           try {
             const uOut = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", u);
             const uParsed = parseDiff(uOut);
-            parsed.files.push(...uParsed.files);
-            parsed.hunks.push(...uParsed.hunks);
+            if (parsed.files && uParsed.files) {
+              parsed.files.push(...uParsed.files);
+            }
+            if (parsed.hunks && uParsed.hunks) {
+              parsed.hunks.push(...uParsed.hunks);
+            }
           } catch {}
         }
       } catch {}

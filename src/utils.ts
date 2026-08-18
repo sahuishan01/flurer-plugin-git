@@ -371,6 +371,8 @@ export function formatTimestamp(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
+export const formatRelativeDate = formatTimestamp;
+
 export function statusToLabel(status: string): string {
   switch (status) {
     case "M": return "Modified";
