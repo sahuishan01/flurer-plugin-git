@@ -15,6 +15,7 @@ import { HistoryView } from "./HistoryView";
 import { GraphView } from "./GraphView";
 import { StashView } from "./StashView";
 import { WorktreesView } from "./WorktreesView";
+import { InsightsView } from "./InsightsView";
 
 const TABS = [
   { id: "graph", label: "Graph" },
@@ -24,6 +25,7 @@ const TABS = [
   { id: "diff", label: "Diff" },
   { id: "stash", label: "Stash" },
   { id: "worktrees", label: "Worktrees" },
+  { id: "insights", label: "Insights" },
 ];
 
 type RepoViewProps = {
@@ -188,6 +190,7 @@ export function RepoView(props: RepoViewProps) {
           <Match when={ctx.activeView() === "diff"}><DiffView /></Match>
           <Match when={ctx.activeView() === "stash"}><StashView /></Match>
           <Match when={ctx.activeView() === "worktrees"}><WorktreesView /></Match>
+          <Match when={ctx.activeView() === "insights"}><InsightsView /></Match>
         </Switch>
       </div>
 
