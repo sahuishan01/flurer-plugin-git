@@ -580,6 +580,80 @@ export function CommitContextMenu(props: {
         >
           🌿 Checkout Commit
         </button>
+        <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.cherryPick(props.hash);
+            props.onClose();
+          }}
+        >
+          🍒 Cherry-Pick Commit
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.revertCommit(props.hash);
+            props.onClose();
+          }}
+        >
+          ⏪ Revert Commit
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.openResetModal(props.hash);
+            props.onClose();
+          }}
+        >
+          ⏮️ Reset Branch to Here...
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.openPatchModal(props.hash);
+            props.onClose();
+          }}
+        >
+          📦 Export Patch / Archive...
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.startBisect(undefined, props.hash);
+            props.onClose();
+          }}
+        >
+          🔍 Start Bisect from Here
+        </button>
+        <Show when={ctx.remoteWebLinks()}>
+          <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
+          <button
+            type="button"
+            style={{
+              ...menuBtnStyle,
+              color: "#38bdf8",
+              "font-weight": 600,
+            }}
+            onClick={() => {
+              const url = ctx.remoteWebLinks()!.commitUrl(props.hash);
+              const win = window as any;
+              if (win.TauriShell?.open) {
+                win.TauriShell.open(url);
+              } else {
+                window.open(url, "_blank");
+              }
+              props.onClose();
+            }}
+          >
+            🌐 Open in {ctx.remoteWebLinks()!.service.toUpperCase()} ↗
+          </button>
+        </Show>
       </div>
     </div>
   );
@@ -2100,6 +2174,843 @@ export function RemotesConfigModal() {
                 </div>
               </Show>
             </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function ResetModal() {
+  const ctx = useGit();
+  const [mode, setMode] = createSignal<"soft" | "mixed" | "hard">("mixed");
+  const hash = () => ctx.resetModalCommit();
+
+  const handleReset = () => {
+    const h = hash();
+    if (!h) return;
+    ctx.resetBranch(h, mode());
+  };
+
+  return (
+    <Show when={hash()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeResetModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "520px",
+            "max-width": "92vw",
+            padding: "24px",
+            display: "flex",
+            "flex-direction": "column",
+            gap: "18px",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>⏮️</span>
+              <div>
+                <div style={{ "font-size": "16px", "font-weight": 700, color: "#fff" }}>
+                  Reset Current Branch
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+                  Target Commit: <code style={{ color: "#38bdf8" }}>{hash()!.slice(0, 7)}</code>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeResetModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Mode Selector */}
+          <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
+            <label
+              style={{
+                display: "flex",
+                gap: "12px",
+                padding: "12px 14px",
+                background: mode() === "soft" ? "rgba(56, 189, 248, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                border: mode() === "soft" ? "1px solid rgba(56, 189, 248, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)",
+                "border-radius": "8px",
+                cursor: "pointer",
+              }}
+              onClick={() => setMode("soft")}
+            >
+              <input type="radio" checked={mode() === "soft"} readOnly style={{ "margin-top": "3px" }} />
+              <div>
+                <div style={{ "font-weight": 700, color: "#38bdf8", "font-size": "13px", "font-family": "Space Mono, monospace" }}>
+                  --soft (Keep staged changes)
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.6)", "margin-top": "2px" }}>
+                  Moves HEAD to target commit. All uncommitted changes and commit differences remain staged in the index.
+                </div>
+              </div>
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                gap: "12px",
+                padding: "12px 14px",
+                background: mode() === "mixed" ? "rgba(245, 158, 11, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                border: mode() === "mixed" ? "1px solid rgba(245, 158, 11, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)",
+                "border-radius": "8px",
+                cursor: "pointer",
+              }}
+              onClick={() => setMode("mixed")}
+            >
+              <input type="radio" checked={mode() === "mixed"} readOnly style={{ "margin-top": "3px" }} />
+              <div>
+                <div style={{ "font-weight": 700, color: "#fbbf24", "font-size": "13px", "font-family": "Space Mono, monospace" }}>
+                  --mixed (Default - Keep files modified)
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.6)", "margin-top": "2px" }}>
+                  Resets the staging index. All changes are preserved as unstaged modifications in your working directory.
+                </div>
+              </div>
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                gap: "12px",
+                padding: "12px 14px",
+                background: mode() === "hard" ? "rgba(239, 68, 68, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                border: mode() === "hard" ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)",
+                "border-radius": "8px",
+                cursor: "pointer",
+              }}
+              onClick={() => setMode("hard")}
+            >
+              <input type="radio" checked={mode() === "hard"} readOnly style={{ "margin-top": "3px" }} />
+              <div>
+                <div style={{ "font-weight": 700, color: "#f87171", "font-size": "13px", "font-family": "Space Mono, monospace" }}>
+                  --hard (Discard all working changes)
+                </div>
+                <div style={{ "font-size": "11.5px", color: "#fca5a5", "margin-top": "2px" }}>
+                  ⚠️ Dangerous: All uncommitted changes in both index and working tree will be permanently wiped out.
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div style={{ display: "flex", "justify-content": "flex-end", gap: "10px", "margin-top": "4px" }}>
+            <Button size="sm" onClick={ctx.closeResetModal}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant={mode() === "hard" ? "danger" : "primary"}
+              onClick={handleReset}
+            >
+              Confirm Reset (--{mode()})
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function BisectModal() {
+  const ctx = useGit();
+  const [badRef, setBadRef] = createSignal("HEAD");
+  const [goodRef, setGoodRef] = createSignal("");
+
+  const state = () => ctx.bisectState();
+
+  const handleStart = () => {
+    ctx.startBisect(badRef().trim() || undefined, goodRef().trim() || undefined);
+  };
+
+  return (
+    <Show when={ctx.bisectModalOpen() || state().active}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeBisectModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "560px",
+            "max-width": "92vw",
+            padding: "24px",
+            display: "flex",
+            "flex-direction": "column",
+            gap: "18px",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🔍</span>
+              <div>
+                <div style={{ "font-size": "16px", "font-weight": 700, color: "#fff" }}>
+                  Git Bisect Wizard
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+                  Binary search debugging to find the regression commit
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeBisectModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <Show
+            when={state().active}
+            fallback={
+              <div style={{ display: "flex", "flex-direction": "column", gap: "14px" }}>
+                <div style={{ "font-size": "12px", color: "rgba(255, 255, 255, 0.7)", "line-height": "1.6" }}>
+                  Bisect uses binary search to quickly pinpoint which commit introduced a bug. Specify the known bad commit (typically HEAD) and an older known good commit.
+                </div>
+
+                <div>
+                  <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                    Bad Commit / Ref (broken state)
+                  </div>
+                  <input
+                    type="text"
+                    value={badRef()}
+                    onInput={(e) => setBadRef(e.currentTarget.value)}
+                    placeholder="e.g. HEAD or commit hash"
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      "border-radius": "6px",
+                      color: "#fff",
+                      "font-size": "12px",
+                      "font-family": "Space Mono, monospace",
+                      "box-sizing": "border-box",
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                    Good Commit / Ref (working state)
+                  </div>
+                  <input
+                    type="text"
+                    value={goodRef()}
+                    onInput={(e) => setGoodRef(e.currentTarget.value)}
+                    placeholder="e.g. v1.0.0 or older commit hash"
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      "border-radius": "6px",
+                      color: "#fff",
+                      "font-size": "12px",
+                      "font-family": "Space Mono, monospace",
+                      "box-sizing": "border-box",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", "justify-content": "flex-end", gap: "10px" }}>
+                  <Button size="sm" onClick={ctx.closeBisectModal}>Cancel</Button>
+                  <Button size="sm" variant="primary" onClick={handleStart} disabled={!goodRef().trim()}>
+                    Start Bisect
+                  </Button>
+                </div>
+              </div>
+            }
+          >
+            {/* Active Bisect Session Controls */}
+            <div style={{ display: "flex", "flex-direction": "column", gap: "14px" }}>
+              <div style={{ background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.35)", "border-radius": "8px", padding: "12px 14px" }}>
+                <div style={{ "font-size": "11px", "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "text-transform": "uppercase" }}>
+                  Currently Testing Commit
+                </div>
+                <div style={{ "font-weight": 700, "font-size": "14px", color: "#fff", "margin-top": "4px", "font-family": "Space Mono, monospace" }}>
+                  {state().currentCommit?.slice(0, 7) || "HEAD"}
+                </div>
+                <div style={{ "font-size": "12px", color: "rgba(255, 255, 255, 0.7)", "margin-top": "2px" }}>
+                  {state().currentMessage}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                <Button size="sm" variant="primary" onClick={() => ctx.markBisect("good")}>
+                  ✅ Mark Good (Working)
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => ctx.markBisect("bad")}>
+                  ❌ Mark Bad (Broken)
+                </Button>
+                <Button size="sm" onClick={() => ctx.markBisect("skip")}>
+                  ⏭️ Skip Commit
+                </Button>
+                <Button size="sm" onClick={() => ctx.resetBisect()}>
+                  🛑 Abort Bisect
+                </Button>
+              </div>
+
+              {/* Bisect Log */}
+              <Show when={(state().log || []).length > 0}>
+                <div style={{ background: "rgba(0, 0, 0, 0.3)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "6px", padding: "10px", "max-height": "160px", overflow: "auto" }}>
+                  <div style={{ "font-size": "10.5px", color: "rgba(255,255,255,0.5)", "font-family": "Space Mono, monospace", "margin-bottom": "6px" }}>
+                    BISECT LOG
+                  </div>
+                  <For each={state().log}>
+                    {(l) => (
+                      <div style={{ "font-size": "11px", "font-family": "Space Mono, monospace", color: l.includes("good") ? "#4ade80" : l.includes("bad") ? "#f87171" : "#94a3b8", "line-height": "1.5" }}>
+                        {l}
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function StorageInspectorModal() {
+  const ctx = useGit();
+  const [activeTab, setActiveTab] = createSignal<"blobs" | "lfs">("blobs");
+  const [patternInput, setPatternInput] = createSignal("");
+
+  onMount(() => {
+    ctx.loadLargeBlobs();
+    ctx.loadLfsInfo();
+  });
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleTrack = () => {
+    const p = patternInput().trim();
+    if (!p) return;
+    ctx.trackLfsPattern(p);
+    setPatternInput("");
+  };
+
+  return (
+    <Show when={ctx.storageModalOpen()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeStorageModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "740px",
+            "max-width": "92vw",
+            height: "580px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>🗄️</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Storage & Large File (LFS) Inspector
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Analyze repository footprint and manage large binary assets
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeStorageModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Sub tabs */}
+          <div style={{ display: "flex", gap: "4px", padding: "10px 20px 0", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)" }}>
+            <button
+              type="button"
+              style={{
+                padding: "8px 14px",
+                border: "none",
+                background: "transparent",
+                color: activeTab() === "blobs" ? "#38bdf8" : "rgba(255, 255, 255, 0.6)",
+                "border-bottom": activeTab() === "blobs" ? "2px solid #38bdf8" : "2px solid transparent",
+                "font-weight": 600,
+                "font-size": "12.5px",
+                cursor: "pointer",
+              }}
+              onClick={() => setActiveTab("blobs")}
+            >
+              📦 Top Largest Files ({ctx.largeBlobs().length})
+            </button>
+            <button
+              type="button"
+              style={{
+                padding: "8px 14px",
+                border: "none",
+                background: "transparent",
+                color: activeTab() === "lfs" ? "#38bdf8" : "rgba(255, 255, 255, 0.6)",
+                "border-bottom": activeTab() === "lfs" ? "2px solid #38bdf8" : "2px solid transparent",
+                "font-weight": 600,
+                "font-size": "12.5px",
+                cursor: "pointer",
+              }}
+              onClick={() => setActiveTab("lfs")}
+            >
+              🚀 Git LFS Tracking
+            </button>
+          </div>
+
+          {/* Content Area */}
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
+            <Show when={activeTab() === "blobs"}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "4px" }}>
+                  <span style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+                    HEAD Working Tree Blobs sorted by disk size
+                  </span>
+                  <Button size="sm" onClick={ctx.loadLargeBlobs}>
+                    🔄 Rescan
+                  </Button>
+                </div>
+
+                <Show
+                  when={ctx.largeBlobs().length > 0}
+                  fallback={
+                    <div style={{ "text-align": "center", padding: "40px 0", color: "rgba(255, 255, 255, 0.4)", "font-size": "12px" }}>
+                      No blobs found or scanning in progress...
+                    </div>
+                  }
+                >
+                  <For each={ctx.largeBlobs()}>
+                    {(blob, idx) => (
+                      <div
+                        style={{
+                          display: "flex",
+                          "align-items": "center",
+                          "justify-content": "space-between",
+                          padding: "8px 12px",
+                          background: "rgba(0, 0, 0, 0.25)",
+                          border: "1px solid rgba(255, 255, 255, 0.06)",
+                          "border-radius": "6px",
+                          gap: "12px",
+                        }}
+                      >
+                        <div style={{ display: "flex", "align-items": "center", gap: "10px", overflow: "hidden" }}>
+                          <span style={{ "font-size": "11px", "font-weight": 700, color: "rgba(255,255,255,0.4)", "font-family": "Space Mono, monospace", width: "20px" }}>
+                            #{idx() + 1}
+                          </span>
+                          <span style={{ "font-size": "11.5px", "font-weight": 700, color: blob.sizeBytes > 5 * 1024 * 1024 ? "#f87171" : "#fbbf24", "font-family": "Space Mono, monospace", "min-width": "75px" }}>
+                            {formatSize(blob.sizeBytes)}
+                          </span>
+                          <span style={{ "font-size": "12px", color: "#f8fafc", "font-family": "Space Mono, monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                            {blob.path}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button
+                            type="button"
+                            style={{ background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#fff", padding: "2px 7px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                            onClick={() => {
+                              navigator.clipboard?.writeText(blob.path);
+                              ctx.showToast("Copied path", "success");
+                            }}
+                          >
+                            Copy
+                          </button>
+                          <button
+                            type="button"
+                            style={{ background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.35)", color: "#38bdf8", padding: "2px 7px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                            onClick={() => {
+                              const ext = blob.path.includes(".") ? `*${blob.path.substring(blob.path.lastIndexOf("."))}` : blob.path;
+                              ctx.trackLfsPattern(ext);
+                            }}
+                          >
+                            + LFS
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </Show>
+
+            <Show when={activeTab() === "lfs"}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
+                <div style={{ display: "flex", "align-items": "center", gap: "10px", padding: "10px 14px", background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "8px" }}>
+                  <span style={{ "font-size": "12px", color: "rgba(255, 255, 255, 0.7)" }}>Git LFS Engine:</span>
+                  <span style={{ "font-size": "11px", "font-weight": 700, padding: "2px 8px", "border-radius": "999px", background: ctx.lfsInfo()?.installed ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)", color: ctx.lfsInfo()?.installed ? "#4ade80" : "#f87171", "font-family": "Space Mono, monospace" }}>
+                    {ctx.lfsInfo()?.installed ? "INSTALLED & ACTIVE" : "NOT DETECTED"}
+                  </span>
+                </div>
+
+                {/* Track Pattern Input */}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. *.psd, *.zip, *.onnx, *.bin"
+                    value={patternInput()}
+                    onInput={(e) => setPatternInput(e.currentTarget.value)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      "border-radius": "6px",
+                      color: "#fff",
+                      "font-size": "12px",
+                      "font-family": "Space Mono, monospace",
+                    }}
+                  />
+                  <Button size="sm" variant="primary" onClick={handleTrack} disabled={!patternInput().trim()}>
+                    + Track Pattern
+                  </Button>
+                </div>
+
+                {/* Tracked Patterns List */}
+                <div>
+                  <div style={{ "font-size": "11.5px", "font-weight": 700, color: "#38bdf8", "margin-bottom": "8px", "font-family": "Space Mono, monospace" }}>
+                    Tracked Patterns (.gitattributes)
+                  </div>
+                  <Show
+                    when={(ctx.lfsInfo()?.patterns || []).length > 0}
+                    fallback={
+                      <div style={{ padding: "16px 0", color: "rgba(255, 255, 255, 0.4)", "font-size": "11.5px" }}>
+                        No LFS patterns tracked in this repository yet.
+                      </div>
+                    }
+                  >
+                    <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px" }}>
+                      <For each={ctx.lfsInfo()?.patterns}>
+                        {(pat) => (
+                          <div style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "4px 10px", background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.35)", "border-radius": "6px", "font-size": "11.5px", "font-family": "Space Mono, monospace", color: "#e0f2fe" }}>
+                            <span>{pat}</span>
+                            <button
+                              type="button"
+                              style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", "font-size": "12px", padding: "0 2px" }}
+                              onClick={() => ctx.untrackLfsPattern(pat)}
+                              title="Untrack pattern"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function PatchArchiveModal() {
+  const ctx = useGit();
+  const [activeTab, setActiveTab] = createSignal<"patch" | "archive">("patch");
+  const [patchText, setPatchText] = createSignal("");
+  const [loadingPatch, setLoadingPatch] = createSignal(false);
+
+  const [archiveFormat, setArchiveFormat] = createSignal<"zip" | "tar.gz" | "tar">("zip");
+  const [prefix, setPrefix] = createSignal("");
+  const [outputPath, setOutputPath] = createSignal("snapshot.zip");
+
+  const commitData = () => ctx.patchModalCommit();
+
+  createEffect(() => {
+    const data = commitData();
+    if (data) {
+      setLoadingPatch(true);
+      ctx.createPatch(data.commitHash, undefined, undefined).then((res) => {
+        setPatchText(res);
+        setLoadingPatch(false);
+      });
+      setOutputPath(data.commitHash ? `commit-${data.commitHash.slice(0, 7)}.zip` : "repository.zip");
+    }
+  });
+
+  const handleCopyPatch = () => {
+    navigator.clipboard?.writeText(patchText());
+    ctx.showToast("Copied patch to clipboard", "success");
+  };
+
+  const handleExportArchive = () => {
+    const data = commitData();
+    const ref = data?.commitHash || "HEAD";
+    ctx.exportArchive(ref, outputPath(), archiveFormat(), prefix().trim() || undefined);
+    ctx.closePatchModal();
+  };
+
+  return (
+    <Show when={commitData()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closePatchModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            "border-radius": "14px",
+            width: "680px",
+            "max-width": "92vw",
+            height: "560px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 60px rgba(0,0,0,0.75)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ padding: "16px 20px", background: "rgba(10, 14, 23, 0.8)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "20px" }}>📦</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Export Patch & Release Archive
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Ref: <code style={{ color: "#38bdf8" }}>{commitData()?.commitHash ? commitData()!.commitHash!.slice(0, 7) : "HEAD"}</code>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closePatchModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: "4px", padding: "10px 20px 0", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)" }}>
+            <button
+              type="button"
+              style={{
+                padding: "8px 14px",
+                border: "none",
+                background: "transparent",
+                color: activeTab() === "patch" ? "#38bdf8" : "rgba(255, 255, 255, 0.6)",
+                "border-bottom": activeTab() === "patch" ? "2px solid #38bdf8" : "2px solid transparent",
+                "font-weight": 600,
+                "font-size": "12.5px",
+                cursor: "pointer",
+              }}
+              onClick={() => setActiveTab("patch")}
+            >
+              📝 Git Unified Patch (.patch)
+            </button>
+            <button
+              type="button"
+              style={{
+                padding: "8px 14px",
+                border: "none",
+                background: "transparent",
+                color: activeTab() === "archive" ? "#38bdf8" : "rgba(255, 255, 255, 0.6)",
+                "border-bottom": activeTab() === "archive" ? "2px solid #38bdf8" : "2px solid transparent",
+                "font-weight": 600,
+                "font-size": "12.5px",
+                cursor: "pointer",
+              }}
+              onClick={() => setActiveTab("archive")}
+            >
+              📦 Snapshot Archive (ZIP / Tar.gz)
+            </button>
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "12px" }}>
+            <Show when={activeTab() === "patch"}>
+              <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+                <span style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
+                  Standard format-patch format compatible with `git apply`
+                </span>
+                <Button size="sm" variant="primary" onClick={handleCopyPatch} disabled={loadingPatch() || !patchText()}>
+                  📋 Copy Patch
+                </Button>
+              </div>
+
+              <textarea
+                readOnly
+                value={loadingPatch() ? "Generating patch..." : patchText()}
+                style={{
+                  flex: 1,
+                  width: "100%",
+                  background: "rgba(0, 0, 0, 0.35)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  "border-radius": "8px",
+                  padding: "12px",
+                  color: "#e2e8f0",
+                  "font-family": "Space Mono, monospace",
+                  "font-size": "11.5px",
+                  "line-height": "1.5",
+                  resize: "none",
+                  "box-sizing": "border-box",
+                }}
+              />
+            </Show>
+
+            <Show when={activeTab() === "archive"}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "14px" }}>
+                <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                      Archive Format
+                    </div>
+                    <select
+                      value={archiveFormat()}
+                      onChange={(e) => setArchiveFormat(e.currentTarget.value as any)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        background: "rgba(0, 0, 0, 0.3)",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        "border-radius": "6px",
+                        color: "#fff",
+                        "font-size": "12px",
+                        "font-family": "Space Mono, monospace",
+                      }}
+                    >
+                      <option value="zip">ZIP Archive (.zip)</option>
+                      <option value="tar.gz">Gzip Tarball (.tar.gz)</option>
+                      <option value="tar">Tarball (.tar)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                      Optional Root Prefix
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. project-v1.0/"
+                      value={prefix()}
+                      onInput={(e) => setPrefix(e.currentTarget.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        background: "rgba(0, 0, 0, 0.3)",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        "border-radius": "6px",
+                        color: "#fff",
+                        "font-size": "12px",
+                        "font-family": "Space Mono, monospace",
+                        "box-sizing": "border-box",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ "font-size": "11px", color: "rgba(255,255,255,0.5)", "margin-bottom": "4px", "font-family": "Space Mono, monospace" }}>
+                    Output File Destination
+                  </div>
+                  <input
+                    type="text"
+                    value={outputPath()}
+                    onInput={(e) => setOutputPath(e.currentTarget.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      "border-radius": "6px",
+                      color: "#fff",
+                      "font-size": "12px",
+                      "font-family": "Space Mono, monospace",
+                      "box-sizing": "border-box",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", "justify-content": "flex-end", "margin-top": "10px" }}>
+                  <Button size="sm" variant="primary" onClick={handleExportArchive}>
+                    📦 Generate & Save Archive
+                  </Button>
+                </div>
+              </div>
+            </Show>
           </div>
         </div>
       </div>

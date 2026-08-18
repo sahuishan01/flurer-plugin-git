@@ -6,6 +6,7 @@ import type {
   GitView, GitStatus, GitChange, GitCommit, GitBranch, GitGraphEntry,
   GitDiff, DiffHunk, GitStashEntry, GitWorktree, GitCommitDetail, BusyTask,
   GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
+  GitBisectState, GitLargeBlob, GitLfsInfo, GitRemoteWebLinks,
 } from "./types";
 
 interface GitContextValue {
@@ -70,6 +71,36 @@ interface GitContextValue {
   checkout: (branch: string) => Promise<void>;
   merge: (branch: string) => Promise<void>;
   cherryPick: (commitHash: string) => Promise<void>;
+  revertCommit: (commitHash: string) => Promise<void>;
+  resetBranch: (commitHash: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
+  resetModalCommit: Accessor<string | null>;
+  openResetModal: (commitHash: string) => void;
+  closeResetModal: () => void;
+  rebaseOnto: (upstreamRef: string) => Promise<void>;
+  rebaseAbort: () => Promise<void>;
+  rebaseContinue: () => Promise<void>;
+  bisectState: Accessor<GitBisectState>;
+  startBisect: (badHash?: string, goodHash?: string) => Promise<void>;
+  markBisect: (status: "good" | "bad" | "skip") => Promise<void>;
+  resetBisect: () => Promise<void>;
+  bisectModalOpen: Accessor<boolean>;
+  openBisectModal: () => void;
+  closeBisectModal: () => void;
+  largeBlobs: Accessor<GitLargeBlob[]>;
+  lfsInfo: Accessor<GitLfsInfo | null>;
+  loadLargeBlobs: () => Promise<void>;
+  loadLfsInfo: () => Promise<void>;
+  trackLfsPattern: (pattern: string) => Promise<void>;
+  untrackLfsPattern: (pattern: string) => Promise<void>;
+  storageModalOpen: Accessor<boolean>;
+  openStorageModal: () => void;
+  closeStorageModal: () => void;
+  createPatch: (commitHash?: string, fromHash?: string, toHash?: string) => Promise<string>;
+  exportArchive: (ref: string, outputPath: string, format?: "zip" | "tar.gz" | "tar", prefix?: string) => Promise<void>;
+  patchModalCommit: Accessor<{ commitHash?: string; range?: string } | null>;
+  openPatchModal: (commitHash?: string, range?: string) => void;
+  closePatchModal: () => void;
+  remoteWebLinks: Accessor<GitRemoteWebLinks | null>;
   stash: (message?: string) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
@@ -204,11 +235,33 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   const [blameModal, setBlameModal] = createSignal<{ path: string; lines: GitBlameLine[] } | null>(null);
   const [tagModalCommit, setTagModalCommit] = createSignal<string | null>(null);
   const [remotesModalOpen, setRemotesModalOpen] = createSignal(false);
+  const [resetModalCommit, setResetModalCommit] = createSignal<string | null>(null);
+  const [bisectState, setBisectState] = createSignal<GitBisectState>({ active: false, goodCommits: [], badCommits: [] });
+  const [bisectModalOpen, setBisectModalOpen] = createSignal(false);
+  const [largeBlobs, setLargeBlobs] = createSignal<GitLargeBlob[]>([]);
+  const [lfsInfo, setLfsInfo] = createSignal<GitLfsInfo | null>(null);
+  const [storageModalOpen, setStorageModalOpen] = createSignal(false);
+  const [patchModalCommit, setPatchModalCommit] = createSignal<{ commitHash?: string; range?: string } | null>(null);
 
   const openTagModal = (commitHash: string) => setTagModalCommit(commitHash);
   const closeTagModal = () => setTagModalCommit(null);
   const openRemotesModal = () => setRemotesModalOpen(true);
   const closeRemotesModal = () => setRemotesModalOpen(false);
+  const openResetModal = (commitHash: string) => setResetModalCommit(commitHash);
+  const closeResetModal = () => setResetModalCommit(null);
+  const openBisectModal = () => setBisectModalOpen(true);
+  const closeBisectModal = () => setBisectModalOpen(false);
+  const openStorageModal = () => setStorageModalOpen(true);
+  const closeStorageModal = () => setStorageModalOpen(false);
+  const openPatchModal = (commitHash?: string, range?: string) => setPatchModalCommit({ commitHash, range });
+  const closePatchModal = () => setPatchModalCommit(null);
+
+  const remoteWebLinks = createMemo(() => {
+    const rList = remotes();
+    const origin = rList.find((r) => r.name === "origin") || rList[0];
+    if (!origin || !origin.fetchUrl) return null;
+    return git.parseRemoteWebLinks(origin.fetchUrl);
+  });
 
   async function withBusyTask<T>(title: string, detail: string | undefined, task: () => Promise<T>): Promise<T> {
     setBusyTask({ title, detail });
@@ -569,8 +622,86 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
         await git.gitCherryPick(p, commitHash);
         showToast("Cherry-pick completed", "success");
         await refresh();
+        await loadGraph();
       } catch (err) {
         showToast(`Cherry-pick failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function revertCommit(commitHash: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Reverting Commit", `Reverting ${commitHash.slice(0, 7)}...`, async () => {
+      try {
+        await git.gitRevert(p, commitHash);
+        showToast(`Reverted commit ${commitHash.slice(0, 7)}`, "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Revert failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function resetBranch(commitHash: string, mode: "soft" | "mixed" | "hard") {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Resetting Branch", `git reset --${mode} ${commitHash.slice(0, 7)}`, async () => {
+      try {
+        await git.gitReset(p, commitHash, mode);
+        showToast(`Reset branch to ${commitHash.slice(0, 7)} (${mode})`, "success");
+        closeResetModal();
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Reset failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function rebaseOnto(upstreamRef: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Rebasing Branch", `Rebasing current branch onto ${upstreamRef}...`, async () => {
+      try {
+        await git.gitRebase(p, upstreamRef);
+        showToast(`Rebase onto ${upstreamRef} succeeded`, "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Rebase failed: ${err}`, "error");
+        await refresh();
+      }
+    });
+  }
+
+  async function rebaseAbort() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Aborting Rebase", "Aborting current rebase...", async () => {
+      try {
+        await git.gitRebaseAbort(p);
+        showToast("Rebase aborted", "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Failed to abort rebase: ${err}`, "error");
+      }
+    });
+  }
+
+  async function rebaseContinue() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Continuing Rebase", "Applying next commit...", async () => {
+      try {
+        await git.gitRebaseContinue(p);
+        showToast("Rebase continued", "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Rebase continue failed: ${err}`, "error");
       }
     });
   }
@@ -1078,6 +1209,132 @@ function toggleBranchSelection(branchName: string) {
     setBlameModal(null);
   }
 
+  async function startBisect(badHash?: string, goodHash?: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Starting Git Bisect", "Initializing binary search...", async () => {
+      try {
+        const state = await git.gitBisectStart(p, badHash, goodHash);
+        setBisectState(state);
+        showToast("Git Bisect started", "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Failed to start bisect: ${err}`, "error");
+      }
+    });
+  }
+
+  async function markBisect(status: "good" | "bad" | "skip") {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Marking Bisect Step", `Marking commit as ${status.toUpperCase()}...`, async () => {
+      try {
+        const state = await git.gitBisectMark(p, status);
+        setBisectState(state);
+        showToast(`Marked as ${status}`, "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Bisect step error: ${err}`, "error");
+      }
+    });
+  }
+
+  async function resetBisect() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Aborting Bisect", "Resetting bisect state...", async () => {
+      try {
+        await git.gitBisectReset(p);
+        setBisectState({ active: false, goodCommits: [], badCommits: [] });
+        showToast("Bisect session ended", "success");
+        await refresh();
+        await loadGraph();
+      } catch (err) {
+        showToast(`Failed to reset bisect: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadLargeBlobs() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Scanning Large Files", "Analyzing repository blob sizes...", async () => {
+      try {
+        const blobs = await git.gitInspectLargeBlobs(p, 40);
+        setLargeBlobs(blobs);
+      } catch (err) {
+        showToast(`Failed to scan files: ${err}`, "error");
+      }
+    });
+  }
+
+  async function loadLfsInfo() {
+    const p = repoPath();
+    if (!p) return;
+    try {
+      const info = await git.gitLfsInfo(p);
+      setLfsInfo(info);
+    } catch {}
+  }
+
+  async function trackLfsPattern(pattern: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Tracking LFS Pattern", pattern, async () => {
+      try {
+        await git.gitLfsTrack(p, pattern);
+        showToast(`LFS tracking enabled for "${pattern}"`, "success");
+        await loadLfsInfo();
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to track LFS: ${err}`, "error");
+      }
+    });
+  }
+
+  async function untrackLfsPattern(pattern: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Untracking LFS Pattern", pattern, async () => {
+      try {
+        await git.gitLfsUntrack(p, pattern);
+        showToast(`LFS tracking removed for "${pattern}"`, "success");
+        await loadLfsInfo();
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to untrack LFS: ${err}`, "error");
+      }
+    });
+  }
+
+  async function createPatch(commitHash?: string, fromHash?: string, toHash?: string): Promise<string> {
+    const p = repoPath();
+    if (!p) return "";
+    return withBusyTask("Generating Patch", "Exporting unified patch format...", async () => {
+      try {
+        return await git.gitCreatePatch(p, commitHash, fromHash, toHash);
+      } catch (err) {
+        showToast(`Failed to create patch: ${err}`, "error");
+        return "";
+      }
+    });
+  }
+
+  async function exportArchive(ref: string, outputPath: string, format: "zip" | "tar.gz" | "tar" = "zip", prefix?: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Exporting Archive", `Saving ${ref} as ${format}...`, async () => {
+      try {
+        await git.gitExportArchive(p, ref, outputPath, format, prefix);
+        showToast(`Exported ${format.toUpperCase()} archive successfully`, "success");
+      } catch (err) {
+        showToast(`Failed to export archive: ${err}`, "error");
+      }
+    });
+  }
+
   const ctx: GitContextValue = {
     activeView, switchView,
     repoPath, openRepo, backToDashboard,
@@ -1092,6 +1349,12 @@ function toggleBranchSelection(branchName: string) {
     isAmend, setIsAmend,
     push, pull, fetchRemote,
     createBranch, deleteBranch, checkout, merge, cherryPick,
+    revertCommit, resetBranch, resetModalCommit, openResetModal, closeResetModal,
+    rebaseOnto, rebaseAbort, rebaseContinue,
+    bisectState, startBisect, markBisect, resetBisect, bisectModalOpen, openBisectModal, closeBisectModal,
+    largeBlobs, lfsInfo, loadLargeBlobs, loadLfsInfo, trackLfsPattern, untrackLfsPattern, storageModalOpen, openStorageModal, closeStorageModal,
+    createPatch, exportArchive, patchModalCommit, openPatchModal, closePatchModal,
+    remoteWebLinks,
     stash, stashPop, stashDrop, loadStashDiff,
     addWorktree, removeWorktree,
     loadDiff, loadDiffCompare, loadDiffWithCurrent, loadDiffWithWorkingTree,

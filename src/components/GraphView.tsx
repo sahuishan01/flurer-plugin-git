@@ -2193,10 +2193,32 @@ forceInstance = null;
                     </div>
                   </Show>
 
-                  <div style={{ display: "flex", "flex-wrap": "wrap", gap: "16px", "font-size": "11px", color: "var(--text-secondary, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", "padding-top": "8px" }}>
+                  <div style={{ display: "flex", "flex-wrap": "wrap", "align-items": "center", gap: "16px", "font-size": "11px", color: "var(--text-secondary, #888)", "border-top": "1px solid var(--border-subtle, rgba(255,255,255,0.06))", "padding-top": "8px" }}>
                     <div><strong>Author:</strong> {detail.author} &lt;{detail.email}&gt;</div>
                     <div><strong>Date:</strong> {formatTimestamp(detail.timestamp)}</div>
                     <div><strong>Full Hash:</strong> <code style={{ "font-family": "Space Mono, monospace" }}>{detail.hash}</code></div>
+                    <Show when={detail.signature && detail.signature.status !== "N"}>
+                      <div style={{ display: "inline-flex", "align-items": "center", gap: "5px", padding: "2px 8px", "border-radius": "999px", background: detail.signature!.status === "G" ? "rgba(34, 197, 94, 0.18)" : "rgba(239, 68, 68, 0.18)", border: detail.signature!.status === "G" ? "1px solid rgba(34, 197, 94, 0.45)" : "1px solid rgba(239, 68, 68, 0.45)", color: detail.signature!.status === "G" ? "#4ade80" : "#f87171", "font-size": "11px", "font-weight": 600, "font-family": "Space Mono, monospace" }}>
+                        {detail.signature!.status === "G" ? `🛡️ Verified (${detail.signature!.signer || detail.signature!.key || "Valid GPG/SSH"})` : `⚠️ ${detail.signature!.status === "B" ? "Bad Signature" : "Untrusted Key"}`}
+                      </div>
+                    </Show>
+                    <Show when={ctx.remoteWebLinks()}>
+                      <button
+                        type="button"
+                        style={{ background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.35)", color: "#38bdf8", padding: "2px 8px", "border-radius": "4px", "font-size": "11px", "font-family": "Space Mono, monospace", cursor: "pointer" }}
+                        onClick={() => {
+                          const url = ctx.remoteWebLinks()!.commitUrl(detail.hash);
+                          const win = window as any;
+                          if (win.TauriShell?.open) {
+                            win.TauriShell.open(url);
+                          } else {
+                            window.open(url, "_blank");
+                          }
+                        }}
+                      >
+                        🌐 Open in {ctx.remoteWebLinks()!.service.toUpperCase()} ↗
+                      </button>
+                    </Show>
                   </div>
                 </div>
               </Card>

@@ -3,6 +3,7 @@ import type {
   GitStatus, GitChange, GitCommit, GitBranch, GitGraphEntry,
   GitDiff, DiffHunk, DiffLine, DiffFile, GitStashEntry, GitWorktree, GitCommitDetail,
   GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
+  GitSignature, GitBisectState, GitLargeBlob, GitLfsInfo, GitRemoteWebLinks,
 } from "./types";
 
 let shellAvailable: boolean | null = null;
@@ -346,6 +347,42 @@ export async function gitCherryPick(repoPath: string, commitHash: string): Promi
   await invoke("git_cherry_pick", { repoPath, commitHash });
 }
 
+export async function gitRevert(repoPath: string, commitHash: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "revert", "--no-edit", commitHash);
+    return;
+  }
+  await invoke("git_revert", { repoPath, commitHash });
+}
+
+export async function gitReset(repoPath: string, commitHash: string, mode: "soft" | "mixed" | "hard" = "mixed"): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "reset", `--${mode}`, commitHash);
+    return;
+  }
+  await invoke("git_reset", { repoPath, commitHash, mode });
+}
+
+export async function gitRebaseAbort(repoPath: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "rebase", "--abort");
+    return;
+  }
+  await invoke("git_rebase_abort", { repoPath });
+}
+
+export async function gitRebaseContinue(repoPath: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "rebase", "--continue");
+    return;
+  }
+  await invoke("git_rebase_continue", { repoPath });
+}
+
 // ---- Diff ----
 
 function parseDiff(output: string): GitDiff {
@@ -558,12 +595,15 @@ export async function gitGraph(
     const branchArgs = (!selectedBranches || selectedBranches.length === 0 || selectedBranches.includes("all"))
       ? ["--all"]
       : selectedBranches;
-    const out = await execGit(repoPath, "log", ...branchArgs, `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%cn%x1f%at%x1f%D");
+    const out = await execGit(repoPath, "log", ...branchArgs, `--max-count=${maxCount}`, `--skip=${skip}`, "--topo-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%cn%x1f%at%x1f%D%x1f%G?");
     return out.trim().split("\n").filter(Boolean).map((line) => {
-      const [hash, parentsStr, message, author, committer, timestamp, refsStr] = line.split("\x1f");
+      const [hash, parentsStr, message, author, committer, timestamp, refsStr, sigStatus] = line.split("\x1f");
       const parents = parentsStr ? parentsStr.split(" ") : [];
       const refs = refsStr ? refsStr.split(",").map((r) => r.trim()).filter(Boolean) : [];
-      return { hash, message, author, committer, timestamp: parseInt(timestamp, 10), parents, refs };
+      const signature: GitSignature | undefined = sigStatus && sigStatus !== "N" ? {
+        status: sigStatus.toUpperCase() as any,
+      } : undefined;
+      return { hash, message, author, committer, timestamp: parseInt(timestamp, 10), parents, refs, signature };
     });
   }
 
@@ -679,8 +719,8 @@ export async function gitWorktreeRemove(repoPath: string, worktreePath: string):
 export async function gitShow(repoPath: string, commitHash: string): Promise<GitCommitDetail> {
   const Command = getShell();
   if (Command) {
-    const out = await execGit(repoPath, "show", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%D%x1f%B", "--no-patch", commitHash);
-    const [hash, subject, author, email, timestamp, parentHashes, refsStr, ...bodyParts] = out.trim().split("\x1f");
+    const out = await execGit(repoPath, "show", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%D%x1f%G?%x1f%GS%x1f%GK%x1f%GF%x1f%B", "--no-patch", commitHash);
+    const [hash, subject, author, email, timestamp, parentHashes, refsStr, sigStatus, signer, key, fingerprint, ...bodyParts] = out.trim().split("\x1f");
     const fullBody = bodyParts.join("\x1f").trim() || subject || "";
     const rawRefs = refsStr ? refsStr.split(",").map((r) => r.trim()).filter(Boolean) : [];
     const tags: string[] = [];
@@ -698,6 +738,13 @@ export async function gitShow(repoPath: string, commitHash: string): Promise<Git
       }
     });
 
+    const signature: GitSignature | undefined = sigStatus && sigStatus !== "N" ? {
+      status: (sigStatus.toUpperCase() as any),
+      signer: signer || undefined,
+      key: key || undefined,
+      fingerprint: fingerprint || undefined,
+    } : undefined;
+
     return {
       hash,
       message: fullBody,
@@ -708,6 +755,7 @@ export async function gitShow(repoPath: string, commitHash: string): Promise<Git
       refs: rawRefs,
       tags,
       branches,
+      signature,
     };
   }
 
@@ -1077,6 +1125,280 @@ export async function gitRepoStats(repoPath: string): Promise<GitRepoStats> {
   }
 
   return invoke<GitRepoStats>("git_repo_stats", { repoPath });
+}
+
+// ---- Git Bisect Flow ----
+
+export async function gitBisectStart(repoPath: string, badHash?: string, goodHash?: string): Promise<GitBisectState> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "bisect", "start");
+    if (badHash) {
+      await execGit(repoPath, "bisect", "bad", badHash);
+    }
+    if (goodHash) {
+      await execGit(repoPath, "bisect", "good", goodHash);
+    }
+    return gitBisectStatus(repoPath);
+  }
+  return { active: false, goodCommits: [], badCommits: [] };
+}
+
+export async function gitBisectMark(repoPath: string, status: "good" | "bad" | "skip"): Promise<GitBisectState> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "bisect", status);
+    return gitBisectStatus(repoPath);
+  }
+  return { active: false, goodCommits: [], badCommits: [] };
+}
+
+export async function gitBisectReset(repoPath: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "bisect", "reset");
+    return;
+  }
+}
+
+export async function gitBisectStatus(repoPath: string): Promise<GitBisectState> {
+  const Command = getShell();
+  if (Command) {
+    try {
+      const logOut = await execGit(repoPath, "bisect", "log");
+      if (!logOut.trim() || logOut.includes("We are not bisecting")) {
+        return { active: false, goodCommits: [], badCommits: [] };
+      }
+      const lines = logOut.trim().split("\n");
+      const goodCommits: string[] = [];
+      const badCommits: string[] = [];
+      for (const l of lines) {
+        const trimmed = l.trim();
+        if (trimmed.startsWith("#") || !trimmed) continue;
+        const matchGood = trimmed.match(/^git bisect good ([0-9a-fA-F]+)/);
+        if (matchGood) goodCommits.push(matchGood[1]);
+        const matchBad = trimmed.match(/^git bisect bad ([0-9a-fA-F]+)/);
+        if (matchBad) badCommits.push(matchBad[1]);
+      }
+
+      let currentCommit = "";
+      let currentMessage = "";
+      try {
+        const headOut = await execGit(repoPath, "log", "-1", "--format=%H%x1f%s");
+        const [h, s] = headOut.trim().split("\x1f");
+        currentCommit = h || "";
+        currentMessage = s || "";
+      } catch {}
+
+      return {
+        active: true,
+        currentCommit,
+        currentMessage,
+        goodCommits,
+        badCommits,
+        log: lines.filter((l) => l.trim() && !l.startsWith("#")),
+      };
+    } catch {
+      return { active: false, goodCommits: [], badCommits: [] };
+    }
+  }
+  return { active: false, goodCommits: [], badCommits: [] };
+}
+
+// ---- Large Blob & LFS Inspector ----
+
+export async function gitInspectLargeBlobs(repoPath: string, limit: number = 30): Promise<GitLargeBlob[]> {
+  const Command = getShell();
+  if (Command) {
+    try {
+      const lsOut = await execGit(repoPath, "ls-tree", "-r", "-l", "--full-name", "HEAD");
+      const blobs: GitLargeBlob[] = [];
+      for (const line of lsOut.trim().split("\n").filter(Boolean)) {
+        const tabIdx = line.indexOf("\t");
+        if (tabIdx === -1) continue;
+        const meta = line.substring(0, tabIdx).trim().split(/\s+/);
+        const path = line.substring(tabIdx + 1).trim();
+        if (meta.length >= 4 && meta[1] === "blob") {
+          const hash = meta[2];
+          const sizeBytes = parseInt(meta[3], 10) || 0;
+          blobs.push({ hash, path, sizeBytes });
+        }
+      }
+
+      blobs.sort((a, b) => b.sizeBytes - a.sizeBytes);
+      return blobs.slice(0, limit);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function gitLfsInfo(repoPath: string): Promise<GitLfsInfo> {
+  const Command = getShell();
+  if (Command) {
+    let installed = false;
+    try {
+      const v = await execGit(repoPath, "lfs", "version");
+      installed = v.toLowerCase().includes("git-lfs");
+    } catch {
+      installed = false;
+    }
+
+    const patterns: string[] = [];
+    if (installed) {
+      try {
+        const trackOut = await execGit(repoPath, "lfs", "track");
+        for (const line of trackOut.trim().split("\n")) {
+          const trimmed = line.trim();
+          if (/^Listing tracked patterns/i.test(trimmed) || !trimmed) continue;
+          const matchPat = trimmed.match(/^(.+?)\s+\(/);
+          if (matchPat) patterns.push(matchPat[1]);
+          else patterns.push(trimmed);
+        }
+      } catch {}
+    }
+
+    const files: Array<{ path: string; size: string; oid: string }> = [];
+    if (installed) {
+      try {
+        const lsOut = await execGit(repoPath, "lfs", "ls-files", "-l");
+        for (const line of lsOut.trim().split("\n").filter(Boolean)) {
+          const parts = line.trim().split(/\s+[*|-]\s+/);
+          if (parts.length >= 2) {
+            files.push({ oid: parts[0], path: parts[1], size: "" });
+          }
+        }
+      } catch {}
+    }
+
+    return { installed, patterns, files };
+  }
+  return { installed: false, patterns: [], files: [] };
+}
+
+export async function gitLfsTrack(repoPath: string, pattern: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "lfs", "track", pattern);
+    await execGit(repoPath, "add", ".gitattributes");
+    return;
+  }
+}
+
+export async function gitLfsUntrack(repoPath: string, pattern: string): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    await execGit(repoPath, "lfs", "untrack", pattern);
+    await execGit(repoPath, "add", ".gitattributes");
+    return;
+  }
+}
+
+// ---- Git Patch & Archive Export ----
+
+export async function gitCreatePatch(repoPath: string, commitHash?: string, fromHash?: string, toHash?: string): Promise<string> {
+  const Command = getShell();
+  if (Command) {
+    if (commitHash) {
+      return await execGit(repoPath, "format-patch", "-1", commitHash, "--stdout");
+    }
+    if (fromHash && toHash) {
+      return await execGit(repoPath, "diff", `${fromHash}..${toHash}`);
+    }
+    return await execGit(repoPath, "diff");
+  }
+  return "";
+}
+
+export async function gitExportArchive(
+  repoPath: string,
+  ref: string,
+  outputPath: string,
+  format: "zip" | "tar.gz" | "tar" = "zip",
+  prefix?: string
+): Promise<void> {
+  const Command = getShell();
+  if (Command) {
+    const fmt = format === "tar.gz" ? "tgz" : format;
+    const args = ["archive", `--format=${fmt}`, `-o`, outputPath];
+    if (prefix) {
+      args.push(`--prefix=${prefix.endsWith("/") ? prefix : prefix + "/"}`);
+    }
+    args.push(ref || "HEAD");
+    await execGit(repoPath, ...args);
+    return;
+  }
+  await invoke("git_export_archive", { repoPath, ref, outputPath, format, prefix });
+}
+
+// ---- Remote Web Links Parser ----
+
+export function parseRemoteWebLinks(remoteUrl: string): GitRemoteWebLinks | null {
+  if (!remoteUrl) return null;
+  let clean = remoteUrl.trim();
+  clean = clean.replace(/\.git$/, "");
+
+  let host = "";
+  let userRepo = "";
+
+  const sshMatch = clean.match(/^(?:ssh:\/\/)?git@([^:]+):(.+)$/);
+  if (sshMatch) {
+    host = sshMatch[1].toLowerCase();
+    userRepo = sshMatch[2].replace(/^\/+/, "");
+  } else {
+    const httpMatch = clean.match(/^https?:\/\/([^/]+)\/(.+)$/);
+    if (httpMatch) {
+      host = httpMatch[1].toLowerCase();
+      userRepo = httpMatch[2].replace(/^\/+/, "");
+    }
+  }
+
+  if (!host || !userRepo) return null;
+
+  let service: GitRemoteWebLinks["service"] = "custom";
+  if (host.includes("github.com")) service = "github";
+  else if (host.includes("gitlab.com")) service = "gitlab";
+  else if (host.includes("bitbucket.org")) service = "bitbucket";
+  else if (host.includes("codeberg.org")) service = "codeberg";
+  else if (host.includes("gitea")) service = "gitea";
+
+  const baseUrl = `https://${host}/${userRepo}`;
+
+  return {
+    service,
+    repoWebUrl: baseUrl,
+    commitUrl: (hash: string) => {
+      if (service === "bitbucket") return `${baseUrl}/commits/${hash}`;
+      if (service === "gitlab") return `${baseUrl}/-/commit/${hash}`;
+      return `${baseUrl}/commit/${hash}`;
+    },
+    branchUrl: (branch: string) => {
+      const cleanBranch = branch.replace(/^origin\//, "");
+      if (service === "bitbucket") return `${baseUrl}/branch/${encodeURIComponent(cleanBranch)}`;
+      if (service === "gitlab") return `${baseUrl}/-/tree/${encodeURIComponent(cleanBranch)}`;
+      return `${baseUrl}/tree/${encodeURIComponent(cleanBranch)}`;
+    },
+    fileUrl: (path: string, ref = "HEAD") => {
+      const cleanRef = ref.replace(/^origin\//, "");
+      const cleanPath = path.replace(/^\.\//, "");
+      if (service === "bitbucket") return `${baseUrl}/src/${encodeURIComponent(cleanRef)}/${cleanPath}`;
+      if (service === "gitlab") return `${baseUrl}/-/blob/${encodeURIComponent(cleanRef)}/${cleanPath}`;
+      return `${baseUrl}/blob/${encodeURIComponent(cleanRef)}/${cleanPath}`;
+    },
+    blameUrl: (path: string, ref = "HEAD") => {
+      const cleanRef = ref.replace(/^origin\//, "");
+      const cleanPath = path.replace(/^\.\//, "");
+      if (service === "bitbucket") return `${baseUrl}/annotate/${encodeURIComponent(cleanRef)}/${cleanPath}`;
+      if (service === "gitlab") return `${baseUrl}/-/blame/${encodeURIComponent(cleanRef)}/${cleanPath}`;
+      return `${baseUrl}/blame/${encodeURIComponent(cleanRef)}/${cleanPath}`;
+    },
+    compareUrl: (base: string, head: string) => {
+      if (service === "bitbucket") return `${baseUrl}/branches/compare/${head}%0D${base}`;
+      if (service === "gitlab") return `${baseUrl}/-/compare/${base}...${head}`;
+      return `${baseUrl}/compare/${base}...${head}`;
+    },
+  };
 }
 
 // ---- Utility: detect shell availability ----

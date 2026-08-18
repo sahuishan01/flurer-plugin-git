@@ -6,7 +6,7 @@ import {
   BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal,
   Toast, ComparisonBar, GlobalLoadingOverlay, StatusBar, ShortcutsModal,
   CommandConsoleModal, TagManagementModal, FileLogModal, BlameModal,
-  RemotesConfigModal,
+  RemotesConfigModal, ResetModal, BisectModal, StorageInspectorModal, PatchArchiveModal,
 } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -38,33 +38,54 @@ export function RepoView(props: RepoViewProps) {
 
   const repoName = createMemo(() => {
     const p = ctx.repoPath();
-    return p ? basename(p) : "";
+    return p ? basename(p) : "Repository";
   });
 
-  const changeCount = createMemo(() => {
+  const handleTabSelect = (tabId: string) => {
+    ctx.switchView(tabId as any);
+  };
+
+  const tabsWithCount = createMemo(() => {
     const s = ctx.status();
-    return s ? s.changes.length : 0;
+    const changesCount = s ? s.changes.length : 0;
+    const stashCount = ctx.stashes().length;
+    const branchCount = ctx.branches().length;
+    const worktreeCount = ctx.worktrees().length;
+
+    return TABS.map((t) => {
+      let count: number | undefined;
+      if (t.id === "changes") count = changesCount;
+      if (t.id === "stash") count = stashCount;
+      if (t.id === "branches") count = branchCount;
+      if (t.id === "worktrees") count = worktreeCount;
+      return { ...t, count };
+    });
   });
-
-  function handleTabSelect(id: string) {
-    ctx.switchView(id as any);
-  }
-
-  const tabsWithCount = createMemo(() =>
-    TABS.map((t) => ({
-      ...t,
-      count: t.id === "changes" ? changeCount() : undefined,
-    }))
-  );
 
   onMount(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
 
       if (e.key === "Escape") {
         if (ctx.consoleOpen()) {
           ctx.toggleConsole();
+          return;
+        }
+        if (ctx.resetModalCommit() !== null) {
+          ctx.closeResetModal();
+          return;
+        }
+        if (ctx.bisectModalOpen()) {
+          ctx.closeBisectModal();
+          return;
+        }
+        if (ctx.storageModalOpen()) {
+          ctx.closeStorageModal();
+          return;
+        }
+        if (ctx.patchModalCommit() !== null) {
+          ctx.closePatchModal();
           return;
         }
         if (ctx.remotesModalOpen()) {
@@ -154,6 +175,15 @@ export function RepoView(props: RepoViewProps) {
                 <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()} title="Fetch remote branches">
                   <FetchIcon size={13} /> Fetch
                 </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openStorageModal} disabled={ctx.loading()} title="Inspect Large Files & Git LFS">
+                  🗄️ Storage
+                </Button>
+                <Button variant="secondary" size="sm" onClick={ctx.openBisectModal} disabled={ctx.loading()} title="Git Bisect Regression Debugger">
+                  🔍 Bisect
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => ctx.openPatchModal()} disabled={ctx.loading()} title="Export Patch or Snapshot Archive">
+                  📦 Export
+                </Button>
                 <Button variant="secondary" size="sm" onClick={ctx.openRemotesModal} disabled={ctx.loading()} title="Manage Remotes & Author Profile">
                   🌐 Remotes
                 </Button>
@@ -210,6 +240,10 @@ export function RepoView(props: RepoViewProps) {
       <FileLogModal />
       <BlameModal />
       <RemotesConfigModal />
+      <ResetModal />
+      <BisectModal />
+      <StorageInspectorModal />
+      <PatchArchiveModal />
       <GlobalLoadingOverlay />
       <Toast />
     </div>

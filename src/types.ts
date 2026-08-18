@@ -43,6 +43,7 @@ export interface GitGraphEntry {
   timestamp: number;
   parents: string[];
   refs: string[];
+  signature?: GitSignature;
 }
 
 export interface DiffFile {
@@ -94,6 +95,7 @@ export interface GitCommitDetail {
   refs?: string[];
   tags?: string[];
   branches?: string[];
+  signature?: GitSignature;
 }
 
 export interface RecentRepo {
@@ -157,4 +159,46 @@ export interface GitConflictFile {
   path: string;
   conflictType: string;
   resolved: boolean;
+}
+
+export interface GitSignature {
+  status: "G" | "B" | "U" | "X" | "Y" | "R" | "N"; // G: Good, B: Bad, U: Untrusted, X: Expired, Y: Expired Key, R: Revoked, N: None
+  signer?: string;
+  key?: string;
+  fingerprint?: string;
+}
+
+export interface GitBisectState {
+  active: boolean;
+  currentCommit?: string;
+  currentMessage?: string;
+  goodCommits: string[];
+  badCommits: string[];
+  estimatedStepsRemaining?: number;
+  revisionsRemaining?: number;
+  log?: string[];
+}
+
+export interface GitLargeBlob {
+  hash: string;
+  path: string;
+  sizeBytes: number;
+  commitHash?: string;
+  isLfsTracked?: boolean;
+}
+
+export interface GitLfsInfo {
+  installed: boolean;
+  patterns: string[];
+  files: Array<{ path: string; size: string; oid: string }>;
+}
+
+export interface GitRemoteWebLinks {
+  service: "github" | "gitlab" | "bitbucket" | "gitea" | "codeberg" | "custom";
+  repoWebUrl: string;
+  commitUrl: (hash: string) => string;
+  branchUrl: (branch: string) => string;
+  fileUrl: (path: string, ref?: string) => string;
+  blameUrl: (path: string, ref?: string) => string;
+  compareUrl: (base: string, head: string) => string;
 }
