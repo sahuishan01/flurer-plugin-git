@@ -1,7 +1,11 @@
 import { Show, Switch, Match, createMemo } from "solid-js";
 import { useGit } from "../context";
 import { basename } from "../utils";
-import { GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon, BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal } from "./shared";
+import {
+  GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon,
+  BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal,
+  Toast, ComparisonBar, GlobalLoadingOverlay,
+} from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
 import { DiffView } from "./DiffView";
@@ -50,7 +54,7 @@ export function RepoView(props: RepoViewProps) {
   );
 
   return (
-    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box" }}>
+    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", position: "relative" }}>
       <div style={{ ...S.section, "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-shrink": 0, background: "rgba(10, 14, 23, 0.65)", "backdrop-filter": "blur(16px)" }}>
         <div style={S.toolbar}>
           <Button onClick={props.onClose} size="sm" title="Close repository tab">
@@ -109,6 +113,8 @@ export function RepoView(props: RepoViewProps) {
 
       <TabBar tabs={tabsWithCount()} activeTab={ctx.activeView()} onSelect={handleTabSelect} />
 
+      <ComparisonBar />
+
       <Show when={ctx.loading() && !ctx.status()}>
         <div style={{ ...S.emptyState, "padding-top": "60px" }}>
           <div style={{ "font-size": "14px", opacity: 0.6 }}>Loading repository status…</div>
@@ -126,7 +132,10 @@ export function RepoView(props: RepoViewProps) {
           <Match when={ctx.activeView() === "worktrees"}><WorktreesView /></Match>
         </Switch>
       </div>
+
       <DiffCompareModal />
+      <GlobalLoadingOverlay />
+      <Toast />
     </div>
   );
 }

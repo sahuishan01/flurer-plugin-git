@@ -94,3 +94,9 @@ export interface RecentRepo {
   lastOpened: number;
   branch?: string;
 }
+
+export interface BusyTask {
+  title: string;
+  detail?: string;
+  cancellable?: boolean;
+}

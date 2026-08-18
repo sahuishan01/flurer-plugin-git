@@ -170,12 +170,19 @@ export function Toast() {
   const ctx = useGit();
   return (
     <Show when={ctx.toast()}>
-      {(t) => (
-        <div style={{ ...S.toast, ...(t().type === "success" ? S.toastSuccess : S.toastError) }}>
-          <span style={{ "margin-right": "8px" }}>{t().type === "success" ? "✓" : "⚠"}</span>
-          {t().message}
-        </div>
-      )}
+      {(t) => {
+        const isSuccess = t().type === "success";
+        const isInfo = t().type === "info";
+        const toastStyle = isSuccess ? S.toastSuccess : (isInfo ? (S as any).toastInfo : S.toastError);
+        const icon = isSuccess ? "✓" : (isInfo ? "ℹ️" : "⚠");
+
+        return (
+          <div style={{ ...S.toast, ...toastStyle, display: "inline-flex", "align-items": "center", gap: "8px" }}>
+            <span style={{ "font-size": "14px" }}>{icon}</span>
+            <span>{t().message}</span>
+          </div>
+        );
+      }}
     </Show>
   );
 }
@@ -190,11 +197,194 @@ export function EmptyState(props: { message: string; children?: JSX.Element }) {
 }
 
 export function Spinner(props: { size?: number }) {
-  const size = props.size ?? 20;
+  const size = props.size ?? 24;
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
-      <circle cx="12" cy="12" r="10" fill="none" stroke="var(--accent-default, #38bdf8)" stroke-width="2.5" stroke-dasharray="31.4 31.4" />
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ animation: "spin 0.8s linear infinite" }}>
+      <circle cx="12" cy="12" r="10" fill="none" stroke="rgba(56, 189, 248, 0.2)" stroke-width="2.5" />
+      <path d="M12 2 A10 10 0 0 1 22 12" fill="none" stroke="var(--accent-default, #38bdf8)" stroke-width="2.5" stroke-linecap="round" />
     </svg>
+  );
+}
+
+export function GlobalLoadingOverlay() {
+  const ctx = useGit();
+  const task = createMemo(() => ctx.busyTask());
+
+  return (
+    <Show when={task()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.72)",
+          "backdrop-filter": "blur(14px)",
+          "-webkit-backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+          animation: "fadeIn 0.2s ease",
+        }}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.94)",
+            border: "1px solid rgba(56, 189, 248, 0.35)",
+            "box-shadow": "0 24px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(56, 189, 248, 0.2)",
+            "border-radius": "16px",
+            padding: "26px 36px",
+            display: "flex",
+            "flex-direction": "column",
+            "align-items": "center",
+            gap: "14px",
+            "min-width": "300px",
+            "max-width": "440px",
+            "text-align": "center",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Glowing Animated Spinner */}
+          <div style={{ position: "relative", width: "48px", height: "48px", display: "flex", "align-items": "center", "justify-content": "center" }}>
+            <div style={{ position: "absolute", inset: "-4px", "border-radius": "50%", background: "radial-gradient(circle, rgba(56, 189, 248, 0.35) 0%, transparent 70%)", filter: "blur(4px)" }} />
+            <Spinner size={36} />
+          </div>
+
+          <div>
+            <div style={{ "font-size": "15px", "font-weight": 700, "font-family": "Space Mono, monospace", color: "var(--text-primary, #f8fafc)", "letter-spacing": "0.3px", "margin-bottom": "6px" }}>
+              {task()!.title}
+            </div>
+            <Show when={task()!.detail}>
+              <div style={{ "font-size": "12px", color: "var(--text-secondary, #94a3b8)", "font-family": "Space Mono, monospace", "word-break": "break-word", "line-height": "1.4" }}>
+                {task()!.detail}
+              </div>
+            </Show>
+          </div>
+
+          <button
+            type="button"
+            style={{
+              background: "rgba(255, 255, 255, 0.06)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              color: "rgba(255, 255, 255, 0.6)",
+              padding: "4px 14px",
+              "border-radius": "6px",
+              "font-size": "11px",
+              cursor: "pointer",
+              "margin-top": "4px",
+              transition: "all 0.15s ease",
+            }}
+            onClick={() => ctx.setBusyTask(null)}
+          >
+            Hide (Run in Background)
+          </button>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function ComparisonBar() {
+  const ctx = useGit();
+  const src = createMemo(() => ctx.compareSourceHash());
+
+  return (
+    <Show when={src()}>
+      <div
+        style={{
+          position: "sticky",
+          top: "8px",
+          left: 0,
+          right: 0,
+          margin: "0 auto 12px",
+          width: "max-content",
+          "max-width": "95%",
+          background: "rgba(15, 23, 42, 0.94)",
+          border: "1px solid rgba(168, 85, 247, 0.55)",
+          "box-shadow": "0 10px 30px rgba(0,0,0,0.6), 0 0 20px rgba(168, 85, 247, 0.25)",
+          "border-radius": "999px",
+          padding: "6px 16px",
+          display: "flex",
+          "align-items": "center",
+          gap: "10px",
+          "font-size": "12px",
+          "z-index": 1000,
+          "backdrop-filter": "blur(16px)",
+          "-webkit-backdrop-filter": "blur(16px)",
+          animation: "fadeIn 0.2s ease",
+          "flex-wrap": "wrap",
+        }}
+      >
+        <span style={{ display: "inline-flex", "align-items": "center", gap: "6px", "font-weight": 700, color: "#e9d5ff", "font-family": "Space Mono, monospace" }}>
+          <span>⚔️ Base:</span>
+          <code style={{ background: "rgba(168, 85, 247, 0.25)", border: "1px solid rgba(168, 85, 247, 0.5)", color: "#c084fc", padding: "1px 7px", "border-radius": "6px", "font-size": "11px" }}>
+            {src()!.slice(0, 7)}
+          </code>
+        </span>
+
+        <span style={{ color: "rgba(255, 255, 255, 0.65)", "font-size": "11.5px" }}>
+          Click or right-click any commit to compare
+        </span>
+
+        <div style={{ display: "inline-flex", gap: "6px", "align-items": "center" }}>
+          <button
+            type="button"
+            style={{
+              background: "rgba(56, 189, 248, 0.15)",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              color: "#38bdf8",
+              padding: "3px 10px",
+              "border-radius": "999px",
+              "font-size": "11px",
+              "font-weight": 600,
+              cursor: "pointer",
+            }}
+            onClick={() => {
+              const s = src()!;
+              ctx.setCompareSourceHash(null);
+              ctx.loadDiffWithCurrent(s);
+            }}
+          >
+            📍 vs HEAD
+          </button>
+          <button
+            type="button"
+            style={{
+              background: "rgba(74, 222, 128, 0.15)",
+              border: "1px solid rgba(74, 222, 128, 0.4)",
+              color: "#4ade80",
+              padding: "3px 10px",
+              "border-radius": "999px",
+              "font-size": "11px",
+              "font-weight": 600,
+              cursor: "pointer",
+            }}
+            onClick={() => {
+              const s = src()!;
+              ctx.setCompareSourceHash(null);
+              ctx.loadDiffWithWorkingTree(s);
+            }}
+          >
+            📝 vs Working Tree
+          </button>
+          <button
+            type="button"
+            style={{
+              background: "rgba(239, 68, 68, 0.15)",
+              border: "1px solid rgba(239, 68, 68, 0.4)",
+              color: "#f87171",
+              padding: "3px 10px",
+              "border-radius": "999px",
+              "font-size": "11px",
+              "font-weight": 600,
+              cursor: "pointer",
+            }}
+            onClick={() => ctx.setCompareSourceHash(null)}
+          >
+            ✕ Cancel
+          </button>
+        </div>
+      </div>
+    </Show>
   );
 }
 
@@ -242,6 +432,9 @@ export function CommitContextMenu(props: {
     if (src && src !== props.hash) {
       ctx.loadDiffCompare(src, props.hash);
       ctx.setCompareSourceHash(null);
+    } else if (src === props.hash) {
+      ctx.setCompareSourceHash(null);
+      ctx.showToast("Deselected comparison source", "info");
     } else {
       ctx.setCompareSourceHash(props.hash);
     }
@@ -250,6 +443,7 @@ export function CommitContextMenu(props: {
 
   const handleCopyHash = () => {
     navigator.clipboard?.writeText(props.hash);
+    ctx.showToast(`Copied commit hash ${props.hash.slice(0, 7)}`, "success");
     props.onClose();
   };
 
@@ -323,7 +517,11 @@ export function CommitContextMenu(props: {
         <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
         <button
           type="button"
-          style={menuBtnStyle}
+          style={{
+            ...menuBtnStyle,
+            color: ctx.compareSourceHash() ? "#c084fc" : undefined,
+            "font-weight": ctx.compareSourceHash() ? 700 : undefined,
+          }}
           onClick={handleCompareSelect}
         >
           ⚔️ {compareLabel()}

@@ -4,7 +4,7 @@ import { loadGraphCache, saveGraphCache } from "./cache";
 import * as git from "./git";
 import type {
   GitView, GitStatus, GitCommit, GitBranch, GitGraphEntry,
-  GitDiff, GitStashEntry, GitWorktree, GitCommitDetail,
+  GitDiff, GitStashEntry, GitWorktree, GitCommitDetail, BusyTask,
 } from "./types";
 
 interface GitContextValue {
@@ -37,8 +37,11 @@ interface GitContextValue {
   setDiffMode: (mode: "staged" | "unstaged" | "commit" | "compare") => void;
 
   loading: Accessor<boolean>;
+  busyTask: Accessor<BusyTask | null>;
+  setBusyTask: (task: BusyTask | null) => void;
   error: Accessor<string | null>;
-  toast: Accessor<{ message: string; type: "success" | "error" } | null>;
+  toast: Accessor<{ message: string; type: "success" | "error" | "info" } | null>;
+  showToast: (message: string, type?: "success" | "error" | "info") => void;
   shellAvailable: Accessor<boolean>;
 
   refresh: () => Promise<void>;
@@ -131,10 +134,29 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   }
 
   const [loading, setLoading] = createSignal(false);
+  const [busyTask, setBusyTask] = createSignal<BusyTask | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [isDubiousOwnership, setIsDubiousOwnership] = createSignal(false);
-  const [toast, setToast] = createSignal<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = createSignal<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [shellAvail, setShellAvail] = createSignal(false);
+
+  async function withBusyTask<T>(title: string, detail: string | undefined, task: () => Promise<T>): Promise<T> {
+    setBusyTask({ title, detail });
+    setLoading(true);
+    try {
+      return await task();
+    } finally {
+      setBusyTask(null);
+      setLoading(false);
+    }
+  }
+
+  function handleSetCompareSourceHash(hash: string | null) {
+    setCompareSourceHash(hash);
+    if (hash) {
+      showToast(`Selected commit ${hash.slice(0, 7)} for comparison. Click or right-click another commit to compare.`, "info");
+    }
+  }
 
   onMount(() => {
     if (props.initialPath) {
@@ -145,32 +167,31 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function showToast(message: string, type: "success" | "error") {
+  function showToast(message: string, type: "success" | "error" | "info" = "success") {
     setToast({ message, type });
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => setToast(null), 3000);
+    toastTimer = setTimeout(() => setToast(null), 3500);
   }
 
   async function trustRepository() {
     const p = repoPath();
     if (!p) return;
-    setLoading(true);
-    try {
-      const ok = await git.addSafeDirectory(p);
-      if (ok) {
-        showToast("Added directory to git safe.directory", "success");
-        setIsDubiousOwnership(false);
-        setError(null);
-        await refresh();
-        await loadGraph();
-      } else {
-        showToast("Failed to add safe.directory", "error");
+    return withBusyTask("Trusting Repository", "Adding path to git safe.directory...", async () => {
+      try {
+        const ok = await git.addSafeDirectory(p);
+        if (ok) {
+          showToast("Added directory to git safe.directory", "success");
+          setIsDubiousOwnership(false);
+          setError(null);
+          await refresh();
+          await loadGraph();
+        } else {
+          showToast("Failed to add safe.directory", "error");
+        }
+      } catch (err) {
+        showToast(`Error: ${err}`, "error");
       }
-    } catch (err) {
-      showToast(`Error: ${err}`, "error");
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function refresh() {
@@ -267,169 +288,222 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     const s = status();
     const p = repoPath();
     if (!s || !p) return;
-    for (const c of s.changes) {
-      if (!c.staged) await git.gitStage(p, c.path);
-    }
-    await refresh();
+    return withBusyTask("Staging All Changes", "Adding all modified & untracked files...", async () => {
+      for (const c of s.changes) {
+        if (!c.staged) await git.gitStage(p, c.path);
+      }
+      await refresh();
+    });
   }
 
   async function unstageAll() {
     const s = status();
     const p = repoPath();
     if (!s || !p) return;
-    for (const c of s.changes) {
-      if (c.staged) await git.gitUnstage(p, c.path);
-    }
-    await refresh();
+    return withBusyTask("Unstaging All Changes", "Resetting staged index...", async () => {
+      for (const c of s.changes) {
+        if (c.staged) await git.gitUnstage(p, c.path);
+      }
+      await refresh();
+    });
   }
 
   async function commit(message: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitCommit(p, message);
-    showToast("Committed successfully", "success");
-    await refresh();
+    return withBusyTask("Creating Commit", message.slice(0, 48), async () => {
+      try {
+        await git.gitCommit(p, message);
+        showToast("Committed successfully", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Commit failed: ${err}`, "error");
+      }
+    });
   }
 
   async function push() {
     const p = repoPath();
     if (!p) return;
-    setLoading(true);
-    try {
-      await git.gitPush(p);
-      showToast("Push completed", "success");
-      await refresh();
-    } catch (err) {
-      showToast(`Push failed: ${err}`, "error");
-    } finally {
-      setLoading(false);
-    }
+    return withBusyTask("Pushing Commits", "Pushing local commits to remote...", async () => {
+      try {
+        await git.gitPush(p);
+        showToast("Push completed", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Push failed: ${err}`, "error");
+      }
+    });
   }
 
   async function pull() {
     const p = repoPath();
     if (!p) return;
-    setLoading(true);
-    try {
-      await git.gitPull(p);
-      showToast("Pull completed", "success");
-      await refresh();
-    } catch (err) {
-      showToast(`Pull failed: ${err}`, "error");
-    } finally {
-      setLoading(false);
-    }
+    return withBusyTask("Pulling Changes", "Fetching and merging remote commits...", async () => {
+      try {
+        await git.gitPull(p);
+        showToast("Pull completed", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Pull failed: ${err}`, "error");
+      }
+    });
   }
 
   async function fetchRemote() {
     const p = repoPath();
     if (!p) return;
-    setLoading(true);
-    try {
-      await git.gitFetch(p);
-      showToast("Fetch completed", "success");
-      await refresh();
-    } catch (err) {
-      showToast(`Fetch failed: ${err}`, "error");
-    } finally {
-      setLoading(false);
-    }
+    return withBusyTask("Fetching Remotes", "Fetching all branches and tags from remote...", async () => {
+      try {
+        await git.gitFetch(p);
+        showToast("Fetch completed", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Fetch failed: ${err}`, "error");
+      }
+    });
   }
 
   async function createBranch(name: string, start_point?: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitBranchCreate(p, name, start_point);
-    showToast(`Branch "${name}" created`, "success");
-    await refresh();
+    return withBusyTask("Creating Branch", `Creating "${name}"...`, async () => {
+      try {
+        await git.gitBranchCreate(p, name, start_point);
+        showToast(`Branch "${name}" created`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to create branch: ${err}`, "error");
+      }
+    });
   }
 
   async function deleteBranch(name: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitBranchDelete(p, name);
-    showToast(`Branch "${name}" deleted`, "success");
-    await refresh();
+    return withBusyTask("Deleting Branch", `Deleting "${name}"...`, async () => {
+      try {
+        await git.gitBranchDelete(p, name);
+        showToast(`Branch "${name}" deleted`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to delete branch: ${err}`, "error");
+      }
+    });
   }
 
   async function checkout(branch: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitCheckout(p, branch);
-    showToast(`Switched to "${branch}"`, "success");
-    await refresh();
+    return withBusyTask("Switching Branch", `Checking out "${branch}"...`, async () => {
+      try {
+        await git.gitCheckout(p, branch);
+        showToast(`Switched to "${branch}"`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Checkout failed: ${err}`, "error");
+      }
+    });
   }
 
   async function merge(branch: string) {
     const p = repoPath();
     if (!p) return;
-    setLoading(true);
-    try {
-      await git.gitMerge(p, branch);
-      showToast(`Merged "${branch}"`, "success");
-      await refresh();
-    } catch (err) {
-      showToast(`Merge failed: ${err}`, "error");
-    } finally {
-      setLoading(false);
-    }
+    return withBusyTask("Merging Branch", `Merging "${branch}" into current branch...`, async () => {
+      try {
+        await git.gitMerge(p, branch);
+        showToast(`Merged "${branch}"`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Merge failed: ${err}`, "error");
+      }
+    });
   }
 
   async function cherryPick(commitHash: string) {
     const p = repoPath();
     if (!p) return;
-    setLoading(true);
-    try {
-      await git.gitCherryPick(p, commitHash);
-      showToast("Cherry-pick completed", "success");
-      await refresh();
-    } catch (err) {
-      showToast(`Cherry-pick failed: ${err}`, "error");
-    } finally {
-      setLoading(false);
-    }
+    return withBusyTask("Cherry-Picking", `Applying commit ${commitHash.slice(0, 7)}...`, async () => {
+      try {
+        await git.gitCherryPick(p, commitHash);
+        showToast("Cherry-pick completed", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Cherry-pick failed: ${err}`, "error");
+      }
+    });
   }
 
   async function stash(message?: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitStash(p, message);
-    showToast("Changes stashed", "success");
-    await refresh();
-    await loadStashes();
+    return withBusyTask("Stashing Changes", message || "WIP on current branch", async () => {
+      try {
+        await git.gitStash(p, message);
+        showToast("Changes stashed", "success");
+        await refresh();
+        await loadStashes();
+      } catch (err) {
+        showToast(`Stash failed: ${err}`, "error");
+      }
+    });
   }
 
   async function stashPop(index: number) {
     const p = repoPath();
     if (!p) return;
-    await git.gitStashPop(p, index);
-    showToast("Stash popped", "success");
-    await refresh();
-    await loadStashes();
+    return withBusyTask("Popping Stash", `Applying stash@{${index}}...`, async () => {
+      try {
+        await git.gitStashPop(p, index);
+        showToast("Stash popped", "success");
+        await refresh();
+        await loadStashes();
+      } catch (err) {
+        showToast(`Stash pop failed: ${err}`, "error");
+      }
+    });
   }
 
   async function stashDrop(index: number) {
     const p = repoPath();
     if (!p) return;
-    await git.gitStashDrop(p, index);
-    showToast("Stash dropped", "success");
-    await loadStashes();
+    return withBusyTask("Dropping Stash", `Deleting stash@{${index}}...`, async () => {
+      try {
+        await git.gitStashDrop(p, index);
+        showToast("Stash dropped", "success");
+        await loadStashes();
+      } catch (err) {
+        showToast(`Stash drop failed: ${err}`, "error");
+      }
+    });
   }
 
   async function addWorktree(path: string, branch?: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitWorktreeAdd(p, path, branch);
-    showToast("Worktree added", "success");
-    await loadWorktrees();
+    return withBusyTask("Creating Worktree", path, async () => {
+      try {
+        await git.gitWorktreeAdd(p, path, branch);
+        showToast("Worktree added", "success");
+        await loadWorktrees();
+      } catch (err) {
+        showToast(`Failed to add worktree: ${err}`, "error");
+      }
+    });
   }
 
   async function removeWorktree(path: string) {
     const p = repoPath();
     if (!p) return;
-    await git.gitWorktreeRemove(p, path);
-    showToast("Worktree removed", "success");
-    await loadWorktrees();
+    return withBusyTask("Removing Worktree", path, async () => {
+      try {
+        await git.gitWorktreeRemove(p, path);
+        showToast("Worktree removed", "success");
+        await loadWorktrees();
+      } catch (err) {
+        showToast(`Failed to remove worktree: ${err}`, "error");
+      }
+    });
   }
 
   let diffReqId = 0;
@@ -447,22 +521,26 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setDiffResult(null);
     const p = repoPath();
     if (!p) return;
-    try {
-      let diff: GitDiff;
-      if (mode === "commit" && commitHash) {
-        diff = await git.gitDiffCommit(p, commitHash, filePath);
-      } else if (mode === "staged") {
-        diff = await git.gitDiffStaged(p, filePath);
-      } else {
-        diff = await git.gitDiff(p, filePath);
+    const taskTitle = mode === "commit" ? "Calculating Commit Diff" : (mode === "staged" ? "Calculating Staged Diff" : "Calculating Unstaged Diff");
+    const taskDetail = filePath && filePath !== "." ? filePath : (commitHash ? `Commit ${commitHash.slice(0, 7)}` : "All files");
+    return withBusyTask(taskTitle, taskDetail, async () => {
+      try {
+        let diff: GitDiff;
+        if (mode === "commit" && commitHash) {
+          diff = await git.gitDiffCommit(p, commitHash, filePath);
+        } else if (mode === "staged") {
+          diff = await git.gitDiffStaged(p, filePath);
+        } else {
+          diff = await git.gitDiff(p, filePath);
+        }
+        if (myReq !== diffReqId) return;
+        setDiffResult(diff);
+        if (activeView() !== "diff") setActiveView("diff");
+      } catch (err) {
+        if (myReq !== diffReqId) return;
+        showToast(`Failed to load diff: ${err}`, "error");
       }
-      if (myReq !== diffReqId) return;
-      setDiffResult(diff);
-      if (activeView() !== "diff") setActiveView("diff");
-    } catch (err) {
-      if (myReq !== diffReqId) return;
-      showToast(`Failed to load diff: ${err}`, "error");
-    }
+    });
   }
 
   async function loadDiffCompare(fromHash: string, toHash: string, filePath: string = ".") {
@@ -474,15 +552,17 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setDiffResult(null);
     const p = repoPath();
     if (!p) return;
-    try {
-      const diff = await git.gitDiffBetween(p, fromHash, toHash, filePath);
-      if (myReq !== diffReqId) return;
-      setDiffResult(diff);
-      if (activeView() !== "diff") setActiveView("diff");
-    } catch (err) {
-      if (myReq !== diffReqId) return;
-      showToast(`Failed to load diff comparison: ${err}`, "error");
-    }
+    return withBusyTask("Comparing Commits", `Diffing ${fromHash.slice(0, 7)} ↔ ${toHash.slice(0, 7)}...`, async () => {
+      try {
+        const diff = await git.gitDiffBetween(p, fromHash, toHash, filePath);
+        if (myReq !== diffReqId) return;
+        setDiffResult(diff);
+        if (activeView() !== "diff") setActiveView("diff");
+      } catch (err) {
+        if (myReq !== diffReqId) return;
+        showToast(`Failed to load diff comparison: ${err}`, "error");
+      }
+    });
   }
 
   async function loadDiffWithCurrent(commitHash: string, filePath: string = ".") {
@@ -494,15 +574,17 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setDiffResult(null);
     const p = repoPath();
     if (!p) return;
-    try {
-      const diff = await git.gitDiffBetween(p, commitHash, "HEAD", filePath);
-      if (myReq !== diffReqId) return;
-      setDiffResult(diff);
-      if (activeView() !== "diff") setActiveView("diff");
-    } catch (err) {
-      if (myReq !== diffReqId) return;
-      showToast(`Failed to load diff with current: ${err}`, "error");
-    }
+    return withBusyTask("Diff with HEAD", `Diffing ${commitHash.slice(0, 7)} ↔ HEAD...`, async () => {
+      try {
+        const diff = await git.gitDiffBetween(p, commitHash, "HEAD", filePath);
+        if (myReq !== diffReqId) return;
+        setDiffResult(diff);
+        if (activeView() !== "diff") setActiveView("diff");
+      } catch (err) {
+        if (myReq !== diffReqId) return;
+        showToast(`Failed to load diff with current: ${err}`, "error");
+      }
+    });
   }
 
   async function loadDiffWithWorkingTree(commitHash: string, filePath: string = ".") {
@@ -514,15 +596,17 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
     setDiffResult(null);
     const p = repoPath();
     if (!p) return;
-    try {
-      const diff = await git.gitDiffCommitWithWorkingTree(p, commitHash, filePath);
-      if (myReq !== diffReqId) return;
-      setDiffResult(diff);
-      if (activeView() !== "diff") setActiveView("diff");
-    } catch (err) {
-      if (myReq !== diffReqId) return;
-      showToast(`Failed to load diff with working tree: ${err}`, "error");
-    }
+    return withBusyTask("Diff with Working Tree", `Diffing ${commitHash.slice(0, 7)} ↔ Uncommitted changes...`, async () => {
+      try {
+        const diff = await git.gitDiffCommitWithWorkingTree(p, commitHash, filePath);
+        if (myReq !== diffReqId) return;
+        setDiffResult(diff);
+        if (activeView() !== "diff") setActiveView("diff");
+      } catch (err) {
+        if (myReq !== diffReqId) return;
+        showToast(`Failed to load diff with working tree: ${err}`, "error");
+      }
+    });
   }
 
   const GRAPH_PAGE_SIZE = 1000;
@@ -687,8 +771,8 @@ function toggleBranchSelection(branchName: string) {
     stashes, worktrees, commitDetail,
     selectedBranches, isAllBranchesSelected, toggleBranchSelection, selectAllBranches,
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
-    diffResult, diffMode, diffCommitHash, compareSourceHash, setCompareSourceHash, diffCompareCommits, setDiffMode,
-    loading, error, toast, shellAvailable: shellAvail,
+    diffResult, diffMode, diffCommitHash, compareSourceHash, setCompareSourceHash: handleSetCompareSourceHash, diffCompareCommits, setDiffMode,
+    loading, busyTask, setBusyTask, error, toast, showToast, shellAvailable: shellAvail,
     refresh, stage, unstage, stageAll, unstageAll, commit,
     push, pull, fetchRemote,
     createBranch, deleteBranch, checkout, merge, cherryPick,

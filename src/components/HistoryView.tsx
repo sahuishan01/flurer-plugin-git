@@ -109,7 +109,15 @@ export function HistoryView() {
                     border: "none",
                     "border-bottom": "1px solid rgba(255, 255, 255, 0.05)",
                   }}
-                  onClick={() => ctx.showCommitDetail(c.hash)}
+                  onClick={() => {
+                    const src = ctx.compareSourceHash();
+                    if (src && src !== c.hash) {
+                      ctx.loadDiffCompare(src, c.hash);
+                      ctx.setCompareSourceHash(null);
+                      return;
+                    }
+                    ctx.showCommitDetail(c.hash);
+                  }}
                   onContextMenu={(e) => handleContextMenu(e, c.hash)}
                 >
                   <div

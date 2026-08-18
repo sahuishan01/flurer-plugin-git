@@ -301,4 +301,9 @@ export const S = {
     color: "#ffffff",
     border: "1px solid rgba(248, 113, 113, 0.5)",
   },
+  toastInfo: {
+    background: "rgba(15, 23, 42, 0.95)",
+    color: "#38bdf8",
+    border: "1px solid rgba(56, 189, 248, 0.5)",
+  },
 };

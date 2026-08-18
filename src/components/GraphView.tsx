@@ -541,6 +541,33 @@ export function GraphView() {
     ctx.showCommitDetail(node.hash);
   }
 
+  function handleNodeClick(node: ForceNode) {
+    if (!node) return;
+    const src = ctx.compareSourceHash();
+    if (src && src !== node.hash) {
+      ctx.loadDiffCompare(src, node.hash);
+      ctx.setCompareSourceHash(null);
+      return;
+    }
+    focusOnNode(node);
+  }
+
+  function handleRowClick(hash: string) {
+    const src = ctx.compareSourceHash();
+    if (src && src !== hash) {
+      ctx.loadDiffCompare(src, hash);
+      ctx.setCompareSourceHash(null);
+      return;
+    }
+    setSelectedHash(hash);
+    ctx.showCommitDetail(hash);
+  }
+
+  function handleContextMenu(e: MouseEvent, hash: string) {
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY, hash });
+  }
+
   function focusBranch(branchIdentifier: number | string) {
     const mode = displayMode();
     const duration = getGraphFocusTransitionTime();
@@ -1072,7 +1099,11 @@ export function GraphView() {
         .onNodeHover((node: any) => setHoveredNode(node || null))
         .onNodeClick((node: any) => {
           if (!node) return;
-          focusOnNode(node);
+          handleNodeClick(node);
+        })
+        .onNodeRightClick((node: any, event: MouseEvent) => {
+          if (!node) return;
+          setMenuPos({ x: event.clientX, y: event.clientY, hash: node.hash });
         })
         .onBackgroundClick(() => {
           setSelectedHash(null);
@@ -1366,7 +1397,11 @@ export function GraphView() {
         .onNodeHover((node: any) => setHoveredNode(node || null))
         .onNodeClick((node: any) => {
           if (!node) return;
-          focusOnNode(node);
+          handleNodeClick(node);
+        })
+        .onNodeRightClick((node: any, event: MouseEvent) => {
+          if (!node) return;
+          setMenuPos({ x: event.clientX, y: event.clientY, hash: node.hash });
         })
         .onBackgroundClick(() => {
           setSelectedHash(null);
