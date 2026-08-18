@@ -537,6 +537,26 @@ export function CommitContextMenu(props: {
         <button
           type="button"
           style={menuBtnStyle}
+          onClick={() => {
+            ctx.openTagModal(props.hash);
+            props.onClose();
+          }}
+        >
+          🏷️ Create Tag at this Commit
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
+          onClick={() => {
+            ctx.showCommitDetail(props.hash);
+            props.onClose();
+          }}
+        >
+          🔍 View Commit Details
+        </button>
+        <button
+          type="button"
+          style={menuBtnStyle}
           onClick={handleCheckout}
         >
           🌿 Checkout Commit
@@ -1323,6 +1343,481 @@ export function CommandConsoleModal() {
                 }}
               </For>
             </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function TagManagementModal() {
+  const ctx = useGit();
+  const [tagName, setTagName] = createSignal("");
+  const [tagMessage, setTagMessage] = createSignal("");
+  const [searchFilter, setSearchFilter] = createSignal("");
+
+  onMount(() => {
+    ctx.loadTags();
+  });
+
+  const targetHash = () => ctx.tagModalCommit() || "HEAD";
+
+  const handleCreate = async () => {
+    const name = tagName().trim();
+    if (!name) return;
+    await ctx.createTag(name, ctx.tagModalCommit() || undefined, tagMessage().trim() || undefined);
+    setTagName("");
+    setTagMessage("");
+  };
+
+  const filteredTags = createMemo(() => {
+    const q = searchFilter().toLowerCase().trim();
+    if (!q) return ctx.tags();
+    return ctx.tags().filter(
+      (t) => t.name.toLowerCase().includes(q) || (t.message && t.message.toLowerCase().includes(q))
+    );
+  });
+
+  return (
+    <Show when={ctx.tagModalCommit() !== null}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeTagModal}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            "border-radius": "12px",
+            width: "620px",
+            "max-width": "90vw",
+            "max-height": "82vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 48px rgba(0,0,0,0.7)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              background: "rgba(10, 14, 23, 0.8)",
+              "border-bottom": "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "18px" }}>🏷️</span>
+              <div>
+                <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
+                  Tag Management
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  Target commit: {targetHash()?.slice(0, 8)}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeTagModal}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px", padding: "4px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Form */}
+          <div style={{ padding: "16px 20px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "flex-direction": "column", gap: "10px" }}>
+            <div style={{ "font-size": "12.5px", "font-weight": 700, color: "var(--text-primary, #f8fafc)" }}>
+              Create New Tag
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder="v1.0.0, release-2026..."
+                value={tagName()}
+                onInput={(e) => setTagName(e.currentTarget.value)}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  background: "rgba(0, 0, 0, 0.3)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  "border-radius": "6px",
+                  color: "#fff",
+                  "font-size": "12px",
+                  "font-family": "Space Mono, monospace",
+                }}
+              />
+              <Button variant="primary" onClick={handleCreate} disabled={!tagName().trim()}>
+                Create Tag
+              </Button>
+            </div>
+            <input
+              type="text"
+              placeholder="Optional annotation message..."
+              value={tagMessage()}
+              onInput={(e) => setTagMessage(e.currentTarget.value)}
+              style={{
+                padding: "6px 12px",
+                background: "rgba(0, 0, 0, 0.2)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                "border-radius": "6px",
+                color: "#fff",
+                "font-size": "11.5px",
+                "font-family": "Space Mono, monospace",
+              }}
+            />
+          </div>
+
+          {/* Existing Tags List */}
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }}>
+              <div style={{ "font-size": "12px", "font-weight": 700, color: "rgba(255, 255, 255, 0.7)" }}>
+                Existing Tags ({ctx.tags().length})
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  placeholder="Filter tags..."
+                  value={searchFilter()}
+                  onInput={(e) => setSearchFilter(e.currentTarget.value)}
+                  style={{
+                    padding: "4px 8px",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    "border-radius": "4px",
+                    color: "#fff",
+                    "font-size": "11px",
+                    "font-family": "Space Mono, monospace",
+                    width: "140px",
+                  }}
+                />
+                <Button size="sm" onClick={() => ctx.pushTags()}>
+                  Push All Tags ↗
+                </Button>
+              </div>
+            </div>
+
+            <Show
+              when={filteredTags().length > 0}
+              fallback={
+                <div style={{ padding: "32px 0", "text-align": "center", color: "rgba(255, 255, 255, 0.4)", "font-size": "12px" }}>
+                  No tags found in this repository.
+                </div>
+              }
+            >
+              <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+                <For each={filteredTags()}>
+                  {(tag) => (
+                    <div
+                      style={{
+                        padding: "8px 12px",
+                        background: "rgba(255, 255, 255, 0.03)",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        "border-radius": "6px",
+                        display: "flex",
+                        "align-items": "center",
+                        "justify-content": "space-between",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px", overflow: "hidden" }}>
+                        <span style={{ "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "font-size": "12.5px" }}>
+                          🏷️ {tag.name}
+                        </span>
+                        <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.4)", "font-family": "Space Mono, monospace" }}>
+                          @{tag.hash.slice(0, 7)}
+                        </span>
+                        <Show when={tag.message}>
+                          <span style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.7)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                            — {tag.message}
+                          </span>
+                        </Show>
+                      </div>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          type="button"
+                          onClick={() => ctx.pushTags(tag.name)}
+                          style={{ background: "transparent", border: "1px solid rgba(255, 255, 255, 0.1)", color: "rgba(255, 255, 255, 0.8)", padding: "2px 8px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                          title="Push this tag to origin"
+                        >
+                          Push
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ctx.deleteTag(tag.name)}
+                          style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#f87171", padding: "2px 8px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                          title="Delete tag"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function FileLogModal() {
+  const ctx = useGit();
+  const fileLog = () => ctx.fileLogModal();
+
+  return (
+    <Show when={fileLog()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeFileLog}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            "border-radius": "12px",
+            width: "780px",
+            "max-width": "92vw",
+            height: "580px",
+            "max-height": "85vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 48px rgba(0,0,0,0.7)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              background: "rgba(10, 14, 23, 0.8)",
+              "border-bottom": "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "10px", overflow: "hidden" }}>
+              <span style={{ "font-size": "18px" }}>📜</span>
+              <div style={{ overflow: "hidden" }}>
+                <div style={{ "font-size": "14px", "font-weight": 700, color: "#fff", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                  File History: {fileLog()!.path}
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  {fileLog()!.commits.length} commits modifying this file
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeFileLog}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px", padding: "4px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* List */}
+          <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", display: "flex", "flex-direction": "column", gap: "6px" }}>
+            <For each={fileLog()!.commits}>
+              {(c) => (
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid rgba(255, 255, 255, 0.06)",
+                    "border-radius": "8px",
+                    display: "flex",
+                    "align-items": "center",
+                    "justify-content": "space-between",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                      <span style={{ "font-family": "Space Mono, monospace", "font-size": "11px", color: "#38bdf8", "font-weight": 700 }}>
+                        {c.hash.slice(0, 7)}
+                      </span>
+                      <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)" }}>
+                        {c.author} • {formatRelativeDate(c.timestamp)}
+                      </span>
+                    </div>
+                    <div style={{ "font-size": "12.5px", color: "var(--text-primary, #f8fafc)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "font-weight": 500 }}>
+                      {c.message}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        ctx.loadDiff(fileLog()!.path, "commit", c.hash);
+                        ctx.switchView("diff");
+                        ctx.closeFileLog();
+                      }}
+                    >
+                      Inspect Diff ↗
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function BlameModal() {
+  const ctx = useGit();
+  const blame = () => ctx.blameModal();
+
+  return (
+    <Show when={blame()}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 14, 23, 0.75)",
+          "backdrop-filter": "blur(14px)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          "z-index": 100050,
+        }}
+        onClick={ctx.closeBlame}
+      >
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            "border-radius": "12px",
+            width: "980px",
+            "max-width": "94vw",
+            height: "720px",
+            "max-height": "88vh",
+            display: "flex",
+            "flex-direction": "column",
+            overflow: "hidden",
+            "box-shadow": "0 24px 48px rgba(0,0,0,0.7)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              background: "rgba(10, 14, 23, 0.8)",
+              "border-bottom": "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "10px", overflow: "hidden" }}>
+              <span style={{ "font-size": "18px" }}>🔍</span>
+              <div style={{ overflow: "hidden" }}>
+                <div style={{ "font-size": "14px", "font-weight": 700, color: "#fff", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                  Git Blame: {blame()!.path}
+                </div>
+                <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                  {blame()!.lines.length} annotated lines
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={ctx.closeBlame}
+              style={{ background: "transparent", border: "none", color: "rgba(255, 255, 255, 0.6)", cursor: "pointer", "font-size": "16px", padding: "4px" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Line by line Blame View */}
+          <div style={{ flex: 1, overflow: "auto", background: "#080c14", padding: "8px 0" }}>
+            <For each={blame()!.lines}>
+              {(l) => (
+                <div
+                  style={{
+                    display: "flex",
+                    "font-family": "Space Mono, monospace",
+                    "font-size": "11.5px",
+                    "line-height": "20px",
+                    "border-bottom": "1px solid rgba(255,255,255,0.02)",
+                    "&:hover": { background: "rgba(255,255,255,0.04)" },
+                  }}
+                >
+                  {/* Blame Gutter Info */}
+                  <div
+                    style={{
+                      width: "320px",
+                      display: "flex",
+                      "align-items": "center",
+                      gap: "8px",
+                      padding: "0 10px",
+                      background: "rgba(15, 23, 42, 0.6)",
+                      "border-right": "1px solid rgba(255, 255, 255, 0.08)",
+                      color: "rgba(255, 255, 255, 0.55)",
+                      "flex-shrink": 0,
+                      overflow: "hidden",
+                    }}
+                    title={`${l.author} (${formatRelativeDate(l.timestamp)}): ${l.message}`}
+                  >
+                    <span
+                      style={{ color: "#38bdf8", cursor: "pointer", "font-weight": 600 }}
+                      onClick={() => {
+                        ctx.showCommitDetail(l.commitHash);
+                      }}
+                    >
+                      {l.shortHash}
+                    </span>
+                    <span style={{ color: "rgba(255, 255, 255, 0.8)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "110px" }}>
+                      {l.author}
+                    </span>
+                    <span style={{ "font-size": "10.5px", color: "rgba(255, 255, 255, 0.35)", "white-space": "nowrap" }}>
+                      {formatRelativeDate(l.timestamp)}
+                    </span>
+                  </div>
+
+                  {/* Line Number */}
+                  <div style={{ width: "45px", "text-align": "right", padding: "0 8px", color: "rgba(255, 255, 255, 0.3)", "flex-shrink": 0, "user-select": "none" }}>
+                    {l.lineNum}
+                  </div>
+
+                  {/* Source Code Content */}
+                  <div style={{ flex: 1, padding: "0 12px", color: "var(--text-primary, #f8fafc)", "white-space": "pre-wrap", "word-break": "break-all" }}>
+                    {l.content}
+                  </div>
+                </div>
+              )}
+            </For>
           </div>
         </div>
       </div>

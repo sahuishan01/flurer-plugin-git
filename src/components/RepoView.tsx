@@ -5,7 +5,7 @@ import {
   GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon,
   BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal,
   Toast, ComparisonBar, GlobalLoadingOverlay, StatusBar, ShortcutsModal,
-  CommandConsoleModal,
+  CommandConsoleModal, TagManagementModal, FileLogModal, BlameModal,
 } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -62,6 +62,18 @@ export function RepoView(props: RepoViewProps) {
       if (e.key === "Escape") {
         if (ctx.consoleOpen()) {
           ctx.toggleConsole();
+          return;
+        }
+        if (ctx.tagModalCommit() !== null) {
+          ctx.closeTagModal();
+          return;
+        }
+        if (ctx.fileLogModal() !== null) {
+          ctx.closeFileLog();
+          return;
+        }
+        if (ctx.blameModal() !== null) {
+          ctx.closeBlame();
           return;
         }
         if (ctx.shortcutsOpen()) {
@@ -183,6 +195,9 @@ export function RepoView(props: RepoViewProps) {
       <DiffCompareModal />
       <ShortcutsModal />
       <CommandConsoleModal />
+      <TagManagementModal />
+      <FileLogModal />
+      <BlameModal />
       <GlobalLoadingOverlay />
       <Toast />
     </div>

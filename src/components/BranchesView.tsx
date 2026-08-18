@@ -103,6 +103,9 @@ export function BranchesView() {
             <span style={{ ...S.badge, background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8" }}>{ctx.branches().length}</span>
           </div>
           <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+            <Button size="sm" onClick={() => ctx.openTagModal("HEAD")}>
+              🏷️ Manage Tags
+            </Button>
             <Button variant="primary" size="sm" onClick={() => setShowCreate(!showCreate())}>
               {showCreate() ? "Cancel" : "+ New Branch"}
             </Button>

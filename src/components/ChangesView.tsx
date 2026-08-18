@@ -183,7 +183,23 @@ export function ChangesView() {
                           {renderStatusBadge(f.status)}
                           <span style={{ "font-size": "12.5px", "font-weight": isInspecting() ? 700 : 500 }}>{f.path}</span>
                         </span>
-                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                          <button
+                            type="button"
+                            onClick={() => ctx.openFileLog(f.path)}
+                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                            title="View File History"
+                          >
+                            📜
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => ctx.openBlame(f.path)}
+                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                            title="View Git Blame"
+                          >
+                            🔍
+                          </button>
                           <Button size="sm" onClick={() => ctx.unstage(f.path)}>Unstage</Button>
                         </div>
                       </div>
@@ -228,7 +244,23 @@ export function ChangesView() {
                           {renderStatusBadge(f.status)}
                           <span style={{ "font-size": "12.5px", "font-weight": isInspecting() ? 700 : 500 }}>{f.path}</span>
                         </span>
-                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                          <button
+                            type="button"
+                            onClick={() => ctx.openFileLog(f.path)}
+                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                            title="View File History"
+                          >
+                            📜
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => ctx.openBlame(f.path)}
+                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                            title="View Git Blame"
+                          >
+                            🔍
+                          </button>
                           <Button variant="primary" size="sm" onClick={() => ctx.stage(f.path)}>Stage</Button>
                           <button
                             type="button"
