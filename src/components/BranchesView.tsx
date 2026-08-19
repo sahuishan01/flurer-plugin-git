@@ -80,14 +80,43 @@ export function BranchesView() {
           </div>
 
           <Show when={currentBranch()!.lastCommit}>
-            <div style={{ "margin-top": "12px", "padding-top": "10px", "border-top": "1px solid rgba(255, 255, 255, 0.06)", display: "flex", "align-items": "center", gap: "10px", "font-size": "12px", color: "var(--text-secondary, #94a3b8)" }}>
-              <code style={{ color: "var(--accent-default, #38bdf8)", "font-family": "Space Mono, monospace", "font-size": "11px" }}>
-                {currentBranch()!.lastCommit!.hash}
-              </code>
-              <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                {currentBranch()!.lastCommit!.message}
-              </span>
-              <span style={{ "font-size": "11px", opacity: 0.6, "font-family": "Space Mono, monospace", "flex-shrink": 0 }}>
+            <div style={{
+              "margin-top": "12px",
+              "padding-top": "10px",
+              "border-top": "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              "align-items": "flex-start",
+              "justify-content": "space-between",
+              "flex-wrap": "wrap",
+              gap: "10px",
+              "font-size": "12px",
+              color: "var(--text-secondary, #94a3b8)",
+            }}>
+              <div style={{ display: "flex", "align-items": "flex-start", gap: "8px", flex: 1, "min-width": "220px" }}>
+                <code style={{
+                  color: "var(--accent-default, #38bdf8)",
+                  "font-family": "Space Mono, monospace",
+                  "font-size": "11px",
+                  padding: "1px 5px",
+                  background: "rgba(56, 189, 248, 0.12)",
+                  "border-radius": "4px",
+                  "flex-shrink": 0,
+                  "margin-top": "1px",
+                }}>
+                  {currentBranch()!.lastCommit!.hash}
+                </code>
+                <span style={{
+                  flex: 1,
+                  "min-width": 0,
+                  "word-break": "break-word",
+                  "overflow-wrap": "anywhere",
+                  "line-height": 1.45,
+                  color: "var(--text-primary, #f1f5f9)",
+                }}>
+                  {currentBranch()!.lastCommit!.message}
+                </span>
+              </div>
+              <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace", "flex-shrink": 0, "align-self": "flex-start", "white-space": "nowrap" }}>
                 {currentBranch()!.lastCommit!.author} • {formatTimestamp(currentBranch()!.lastCommit!.timestamp)}
               </span>
             </div>
@@ -153,31 +182,31 @@ export function BranchesView() {
 
         <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
           <For each={filteredBranches()}>
-            {(branch) => (
+            {(branch, idx) => (
               <div
                 style={{
                   ...S.fileRow,
                   padding: "10px 14px",
-                  background: branch.is_current ? "rgba(56, 189, 248, 0.08)" : "rgba(255, 255, 255, 0.02)",
-                  border: branch.is_current ? "1px solid rgba(56, 189, 248, 0.25)" : "1px solid rgba(255, 255, 255, 0.04)",
+                  background: branch.is_current ? "rgba(56, 189, 248, 0.12)" : (idx() % 2 === 0 ? "rgba(255, 255, 255, 0.035)" : "rgba(0, 0, 0, 0.14)"),
+                  border: branch.is_current ? "1px solid rgba(56, 189, 248, 0.3)" : "1px solid rgba(255, 255, 255, 0.05)",
                   "border-radius": "8px",
                   margin: "2px 0",
                   transition: "all 0.15s ease",
                   display: "flex",
                   "flex-direction": "column",
-                  gap: "6px",
+                  gap: "8px",
                 }}
               >
                 <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "10px" }}>
-                  <div style={{ flex: 1, overflow: "hidden", display: "flex", "align-items": "center", gap: "8px" }}>
+                  <div style={{ flex: 1, overflow: "hidden", display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
                     <Show when={branch.is_current}>
                       <div style={{ width: "8px", height: "8px", "border-radius": "50%", background: "#38bdf8", "flex-shrink": 0 }} />
                     </Show>
-                    <span style={{ "font-family": "Space Mono, monospace", "font-size": "13px", "font-weight": branch.is_current ? 700 : 500, color: branch.is_current ? "#38bdf8" : "var(--text-primary, #f8fafc)" }}>
+                    <span style={{ "font-family": "Space Mono, monospace", "font-size": "13px", "font-weight": branch.is_current ? 700 : 500, color: branch.is_current ? "#38bdf8" : "var(--text-primary, #f8fafc)", "word-break": "break-all" }}>
                       {branch.name}
                     </span>
                     <Show when={branch.upstream}>
-                      <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
+                      <span style={{ "font-size": "11px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", "word-break": "break-all" }}>
                         → {branch.upstream}
                       </span>
                     </Show>
@@ -198,14 +227,42 @@ export function BranchesView() {
                 </div>
 
                 <Show when={branch.lastCommit}>
-                  <div style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)" }}>
-                    <code style={{ color: "#38bdf8", "font-family": "Space Mono, monospace", "font-size": "10.5px" }}>
-                      {branch.lastCommit!.hash}
-                    </code>
-                    <span style={{ flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                      {branch.lastCommit!.message}
-                    </span>
-                    <span style={{ "font-size": "10.5px", opacity: 0.7, "font-family": "Space Mono, monospace", "flex-shrink": 0 }}>
+                  <div style={{
+                    display: "flex",
+                    "align-items": "flex-start",
+                    "justify-content": "space-between",
+                    "flex-wrap": "wrap",
+                    gap: "8px",
+                    "font-size": "11.5px",
+                    color: "rgba(255, 255, 255, 0.65)",
+                    "padding-top": "6px",
+                    "border-top": "1px solid rgba(255, 255, 255, 0.05)",
+                  }}>
+                    <div style={{ display: "flex", "align-items": "flex-start", gap: "8px", flex: 1, "min-width": "200px" }}>
+                      <code style={{
+                        color: "#38bdf8",
+                        "font-family": "Space Mono, monospace",
+                        "font-size": "10.5px",
+                        padding: "1px 5px",
+                        background: "rgba(56, 189, 248, 0.1)",
+                        "border-radius": "4px",
+                        "flex-shrink": 0,
+                        "margin-top": "1px",
+                      }}>
+                        {branch.lastCommit!.hash}
+                      </code>
+                      <span style={{
+                        flex: 1,
+                        "min-width": 0,
+                        "word-break": "break-word",
+                        "overflow-wrap": "anywhere",
+                        "line-height": 1.45,
+                        color: "var(--text-primary, #e2e8f0)",
+                      }}>
+                        {branch.lastCommit!.message}
+                      </span>
+                    </div>
+                    <span style={{ "font-size": "10.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace", "flex-shrink": 0, "align-self": "flex-start", "white-space": "nowrap" }}>
                       {branch.lastCommit!.author} • {formatTimestamp(branch.lastCommit!.timestamp)}
                     </span>
                   </div>
