@@ -30,6 +30,8 @@ const GRAPH_CSS = `
 .flurer-git-loadmore:hover{background:var(--control-bg, rgba(255,255,255,0.06));transform:translateY(-1px);}
 .flurer-git-lanechip{transition:filter .15s ease;}
 .flurer-git-lanechip:hover{filter:brightness(1.15);}
+.flurer-git-tree-row{transition:fill .12s ease;}
+.flurer-git-tree-row:hover{fill:rgba(56,189,248,0.09)!important;}
 .flurer-git-modebtn{transition:all .15s ease; cursor:pointer; padding:5px 11px; font-size:11px; font-weight:600; border-radius:6px; border:1px solid transparent; user-select:none;}
 .flurer-git-modebtn:hover{filter:brightness(1.15);}
 .flurer-git-modebtn-active{background:var(--accent-default, #f59e0b); color:#000; font-weight:700; border-color:var(--accent-default, #f59e0b);}
@@ -2012,10 +2014,14 @@ forceInstance = null;
                   const mergeSourceHash = () => row().parents[1]?.slice(0, 5) || "???";
                   const mergeTargetHash = () => row().parents[0]?.slice(0, 5) || "???";
                   const mergeLabel = () => `🔀 MERGE (${mergeSourceHash()}➔${mergeTargetHash()})`;
+                  const rowBg = () => {
+                    if (isSelected()) return "rgba(245, 158, 11, 0.18)";
+                    return i() % 2 === 0 ? "rgba(255, 255, 255, 0.035)" : "rgba(0, 0, 0, 0.14)";
+                  };
 
                   return (
                     <g style={{ cursor: "pointer" }} onClick={() => handleRowClick(row().hash)} onContextMenu={(e) => handleContextMenu(e, row().hash)}>
-                      <rect x="0" y={y() - ROW_H / 2} width="100%" height={ROW_H} fill={isSelected() ? "rgba(245, 158, 11, 0.14)" : "transparent"} style={{ transition: "fill 0.15s" }} />
+                      <rect class="flurer-git-tree-row" x="0" y={y() - ROW_H / 2} width="100%" height={ROW_H} fill={rowBg()} />
 
                       <Show when={isMergeCommit()}>
                         <circle cx={cx()} cy={y()} r={DOT_R + 4.5} fill="rgba(96, 205, 255, 0.25)" stroke={color()} stroke-width="1.5" />

@@ -122,7 +122,7 @@ export function HistoryView() {
       <Show when={filteredCommits().length > 0}>
         <Card style={{ width: "100%", "max-width": "100%", "box-sizing": "border-box", overflow: "hidden", padding: "4px" }}>
           <For each={filteredCommits()}>
-            {(c) => {
+            {(c, idx) => {
               const initials = c.author
                 .split(" ")
                 .map((w) => w[0])
@@ -135,6 +135,12 @@ export function HistoryView() {
                 return (graphMatch?.refs || []).map(parseRef);
               });
 
+              const isSelected = () => ctx.commitDetail()?.hash === c.hash;
+              const rowBg = () => {
+                if (isSelected()) return "rgba(245, 158, 11, 0.18)";
+                return idx() % 2 === 0 ? "rgba(255, 255, 255, 0.028)" : "rgba(0, 0, 0, 0.12)";
+              };
+
               return (
                 <div
                   style={{
@@ -144,6 +150,7 @@ export function HistoryView() {
                     padding: density() === "compact" ? "5px 10px" : "8px 12px",
                     cursor: "pointer",
                     "border-radius": "6px",
+                    background: rowBg(),
                     transition: "background 0.15s ease",
                     width: "100%",
                     "max-width": "100%",
