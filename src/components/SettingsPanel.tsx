@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import {
   setSurfaceOpacity, getSurfaceOpacity,
   setSurfaceBlur, getSurfaceBlur,
@@ -7,7 +8,10 @@ import {
   setGraphRotateSpeed, getGraphRotateSpeed,
   setGraphFocusZoomStep, getGraphFocusZoomStep,
   setGraphFocusTransitionTime, getGraphFocusTransitionTime,
+  buttonBg,
 } from "../utils";
+import { BranchIcon, PushIcon, PullIcon } from "./shared";
+import { S as baseStyles } from "../styles";
 
 const S = {
   section: {
@@ -63,6 +67,8 @@ const S = {
 };
 
 export function SettingsPanel(props: any) {
+  const [previewBackdropMode, setPreviewBackdropMode] = createSignal<"mesh" | "wallpaper" | "dark" | "light">("mesh");
+
   const initialSurface = props.pluginSettings?.surfaceOpacity ?? getSurfaceOpacity();
   if (props.pluginSettings?.surfaceOpacity !== undefined && initialSurface !== getSurfaceOpacity()) {
     setSurfaceOpacity(initialSurface);
@@ -261,6 +267,170 @@ export function SettingsPanel(props: any) {
 
       <div style={S.header}>
         🎨 Theme & Translucent Surface Appearance
+      </div>
+
+      {/* Live Interactive Preview Card */}
+      <div style={{
+        "margin-bottom": "20px",
+        "border-radius": "12px",
+        overflow: "hidden",
+        border: "1px solid var(--border-strong, rgba(255, 255, 255, 0.15))",
+        position: "relative",
+        "box-shadow": "0 8px 30px rgba(0, 0, 0, 0.35)",
+        "min-height": "170px",
+      }}>
+        {/* Background scenery / wallpaper gradient */}
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          background: previewBackdropMode() === "mesh"
+            ? "radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.45) 0px, transparent 50%), radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.45) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.4) 0px, transparent 50%), radial-gradient(at 0% 100%, rgba(34, 197, 94, 0.35) 0px, transparent 50%), #0f172a"
+            : previewBackdropMode() === "wallpaper"
+            ? "linear-gradient(135deg, #312e81 0%, #0f172a 45%, #064e3b 100%)"
+            : previewBackdropMode() === "light"
+            ? "linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 50%, #94a3b8 100%)"
+            : "#070a12",
+          "z-index": 0,
+        }}>
+          {/* Visual elements under glass to highlight blur and translucency */}
+          <div style={{
+            position: "absolute",
+            top: "8px",
+            right: "20px",
+            width: "80px",
+            height: "80px",
+            "border-radius": "50%",
+            background: "linear-gradient(135deg, #f59e0b, #ef4444)",
+            opacity: 0.85,
+          }} />
+          <div style={{
+            position: "absolute",
+            bottom: "6px",
+            left: "24px",
+            width: "110px",
+            height: "55px",
+            "border-radius": "28px",
+            background: "linear-gradient(135deg, #38bdf8, #818cf8)",
+            opacity: 0.75,
+          }} />
+        </div>
+
+        {/* Live Glass Panel Surface Overlay */}
+        <div style={{
+          position: "relative",
+          "z-index": 1,
+          padding: "14px 16px",
+          background: `rgba(var(--panel-rgb, 15, 23, 42), ${getSurfaceOpacity()})`,
+          "backdrop-filter": `blur(${getSurfaceBlur()}px)`,
+          "-webkit-backdrop-filter": `blur(${getSurfaceBlur()}px)`,
+          display: "flex",
+          "flex-direction": "column",
+          gap: "10px",
+        }}>
+          {/* Header with Title + Backdrop Selector */}
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "8px" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <span style={{ "font-size": "11.5px", "font-weight": 700, "letter-spacing": "0.4px", color: "var(--text-primary, #f8fafc)", "text-transform": "uppercase" }}>
+                ✨ Live Appearance Preview
+              </span>
+              <span style={{ "font-size": "10.5px", padding: "1px 6px", "border-radius": "4px", background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8", "font-family": "Space Mono, monospace" }}>
+                {Math.round(getSurfaceOpacity() * 100)}% opacity • {getSurfaceBlur()}px blur
+              </span>
+            </div>
+
+            {/* Backdrop Switcher */}
+            <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+              <span style={{ "font-size": "10.5px", color: "rgba(255, 255, 255, 0.5)", "margin-right": "2px" }}>Backdrop:</span>
+              {(["mesh", "wallpaper", "dark", "light"] as const).map((m) => (
+                <button
+                  type="button"
+                  onClick={() => setPreviewBackdropMode(m)}
+                  style={{
+                    padding: "2px 7px",
+                    "font-size": "10px",
+                    "font-family": "Space Mono, monospace",
+                    "border-radius": "4px",
+                    border: previewBackdropMode() === m ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.12)",
+                    background: previewBackdropMode() === m ? "rgba(56, 189, 248, 0.25)" : "rgba(0,0,0,0.35)",
+                    color: previewBackdropMode() === m ? "#38bdf8" : "rgba(255,255,255,0.65)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sample Git UI Items */}
+          <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
+            <span style={baseStyles.branchBadge}>
+              <BranchIcon size={12} />
+              <span>feature/glassmorphism</span>
+              <span style={{ "font-size": "10px", padding: "0 4px", "border-radius": "3px", background: "rgba(0,0,0,0.3)", color: "#fff" }}>↑1 ↓0</span>
+            </span>
+
+            <button
+              type="button"
+              style={{
+                ...baseStyles.btn,
+                ...baseStyles.btnPrimary,
+                background: buttonBg("#0284c7"),
+                padding: "4px 10px",
+                "font-size": "11px",
+              }}
+            >
+              <PushIcon size={12} /> Push
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...baseStyles.btn,
+                ...baseStyles.btnSecondary,
+                padding: "4px 10px",
+                "font-size": "11px",
+              }}
+            >
+              <PullIcon size={12} /> Pull
+            </button>
+          </div>
+
+          {/* Sample Card & Diff row */}
+          <div style={{
+            background: "rgba(var(--panel-rgb, 15, 23, 42), 0.45)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            "border-radius": "8px",
+            padding: "8px 12px",
+            display: "flex",
+            "flex-direction": "column",
+            gap: "5px",
+          }}>
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "font-size": "11.5px" }}>
+              <span style={{ "font-weight": 600, color: "var(--text-primary, #f8fafc)" }}>
+                📄 src/styles.ts
+              </span>
+              <span style={{ color: "#4ade80", "font-family": "Space Mono, monospace", "font-size": "10.5px" }}>
+                +14 lines modified
+              </span>
+            </div>
+
+            {/* Sample diff line */}
+            <div style={{
+              display: "flex",
+              "font-family": "Space Mono, monospace",
+              "font-size": "11px",
+              background: "rgba(34, 197, 94, 0.14)",
+              color: "#4ade80",
+              "border-left": "3px solid #34d399",
+              padding: "2px 6px",
+              "border-radius": "0 4px 4px 0",
+            }}>
+              <span>+ background: "rgba(var(--panel-rgb), var(--plugin-surface-opacity))"</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <label style={S.label}>Surface Opacity</label>
