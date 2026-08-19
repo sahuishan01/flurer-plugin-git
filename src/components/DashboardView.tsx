@@ -33,7 +33,7 @@ export function DashboardView(props: DashboardViewProps) {
 
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden" }}>
-      <div style={{ ...S.section, "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-shrink": 0, background: "rgba(10, 14, 23, 0.6)", "backdrop-filter": "blur(12px)" }}>
+      <div style={{ ...S.section, "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-shrink": 0, background: "rgba(var(--panel-rgb, 10, 14, 23), 0.35)", "backdrop-filter": "blur(12px)" }}>
         <div style={S.toolbar}>
           <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
             <div style={{ width: "32px", height: "32px", "border-radius": "8px", background: "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.1))", border: "1px solid rgba(56, 189, 248, 0.3)", display: "flex", "align-items": "center", "justify-content": "center", color: "#38bdf8" }}>
@@ -48,7 +48,7 @@ export function DashboardView(props: DashboardViewProps) {
       </div>
 
       <div style={{ ...S.section, flex: 1, overflow: "auto", "padding-top": "20px", "padding-bottom": "28px", "max-width": "900px", margin: "0 auto", width: "100%", "box-sizing": "border-box" }}>
-        <div style={{ ...S.card, "margin-bottom": "20px", border: "1px solid rgba(56, 189, 248, 0.2)", background: "linear-gradient(180deg, rgba(15, 23, 42, 0.8), rgba(10, 14, 23, 0.85))" }}>
+        <div style={{ ...S.card, "margin-bottom": "20px", border: "1px solid rgba(56, 189, 248, 0.2)", background: "rgba(var(--panel-rgb, 15, 23, 42), 0.45)" }}>
           <div style={{ "font-size": "14px", "font-weight": 700, "margin-bottom": "12px", color: "var(--text-primary, #f8fafc)" }}>Open Repository</div>
           <div style={{ display: "flex", gap: "10px", "flex-wrap": "wrap" }}>
             <Button

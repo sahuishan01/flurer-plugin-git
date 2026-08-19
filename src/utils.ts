@@ -27,7 +27,10 @@ const _initialSettings = loadPluginSettings();
 let _isLight: boolean | null = null;
 let _bgColor: string | null = null;
 const [_surfaceOpacity, _setSurfaceOpacity] = createRoot(() =>
-  createSignal(typeof _initialSettings.surfaceOpacity === "number" ? _initialSettings.surfaceOpacity : 0.04)
+  createSignal(typeof _initialSettings.surfaceOpacity === "number" ? _initialSettings.surfaceOpacity : 0.45)
+);
+const [_surfaceBlur, _setSurfaceBlur] = createRoot(() =>
+  createSignal(typeof _initialSettings.surfaceBlur === "number" ? _initialSettings.surfaceBlur : 16)
 );
 const [_buttonTintOpacity, _setButtonTintOpacity] = createRoot(() =>
   createSignal(typeof _initialSettings.buttonTintOpacity === "number" ? _initialSettings.buttonTintOpacity : 0.12)
@@ -57,6 +60,17 @@ export function setSurfaceOpacity(opacity: number) {
 /** Get current surface tint opacity. */
 export function getSurfaceOpacity(): number {
   return _surfaceOpacity();
+}
+
+/** Override the surface blur in px (0–64). Passed via plugin settings. */
+export function setSurfaceBlur(blur: number) {
+  _setSurfaceBlur(Math.max(0, Math.min(64, blur)));
+  savePluginSettings({ surfaceBlur: blur });
+}
+
+/** Get current surface blur in px. */
+export function getSurfaceBlur(): number {
+  return _surfaceBlur();
 }
 
 /** Override the button tint opacity (0–1). Passed via plugin settings. */
@@ -165,22 +179,10 @@ function blendChannel(base: number, tint: number, opacity: number): number {
   return Math.round(base + (tint - base) * opacity);
 }
 
-/** Get a solid surface background blended against the detected bg color.
- *  For dark backgrounds, tints lighter. For light backgrounds, tints darker. */
+/** Get a translucent surface background utilizing Flurer panel tokens. */
 export function surfaceBg(opacity?: number): string {
   const o = opacity ?? _surfaceOpacity();
-  isLightBg(); // ensure _bgColor is cached
-  const hex = _bgColor || (isLightBg() ? "#f5f5f5" : "#1a1a2e");
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  if (isLightBg()) {
-    // Tint toward black (darker surface)
-    return `rgb(${blendChannel(r, 0, o)},${blendChannel(g, 0, o)},${blendChannel(b, 0, o)})`;
-  } else {
-    // Tint toward white (lighter surface)
-    return `rgb(${blendChannel(r, 255, o)},${blendChannel(g, 255, o)},${blendChannel(b, 255, o)})`;
-  }
+  return `rgba(var(--panel-rgb, 15, 23, 42), ${o})`;
 }
 
 /** Parse a CSS color string (#hex or rgb()) into [r, g, b]. */

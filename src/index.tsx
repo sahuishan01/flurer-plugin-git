@@ -1,9 +1,10 @@
 import { Show, For, createSignal, createMemo, createEffect, createRoot } from "solid-js";
 import { GitProvider } from "./context";
 import {
-  getRecentRepos, basename, setSurfaceOpacity, setButtonTintOpacity,
+  getRecentRepos, basename, setSurfaceOpacity, setSurfaceBlur, setButtonTintOpacity,
   setGraphPanSpeed, setGraphZoomSpeed, setGraphRotateSpeed,
-  surfaceBg, getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab,
+  setGraphFocusZoomStep, setGraphFocusTransitionTime,
+  getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab,
 } from "./utils";
 import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
@@ -77,10 +78,13 @@ function GitPanel(props: any) {
     const ps = props.pluginSettings;
     if (ps) {
       if (typeof ps.surfaceOpacity === "number") setSurfaceOpacity(ps.surfaceOpacity);
+      if (typeof ps.surfaceBlur === "number") setSurfaceBlur(ps.surfaceBlur);
       if (typeof ps.buttonTintOpacity === "number") setButtonTintOpacity(ps.buttonTintOpacity);
       if (typeof ps.graphPanSpeed === "number") setGraphPanSpeed(ps.graphPanSpeed);
       if (typeof ps.graphZoomSpeed === "number") setGraphZoomSpeed(ps.graphZoomSpeed);
       if (typeof ps.graphRotateSpeed === "number") setGraphRotateSpeed(ps.graphRotateSpeed);
+      if (typeof ps.graphFocusZoomStep === "number") setGraphFocusZoomStep(ps.graphFocusZoomStep);
+      if (typeof ps.graphFocusTransitionTime === "number") setGraphFocusTransitionTime(ps.graphFocusTransitionTime);
     }
   });
 
@@ -126,10 +130,10 @@ function GitPanel(props: any) {
   }
 
   return (
-    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", background: surfaceBg(0.06) }}>
+    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", background: "transparent" }}>
       {/* Tab bar — always visible when there are open repos */}
       <Show when={tabs().length > 0}>
-        <div style={{ display: "flex", gap: 0, "border-bottom": "1px solid var(--border-strong)", "flex-shrink": 0, "align-items": "stretch", overflow: "auto" }}>
+        <div style={{ display: "flex", gap: 0, "border-bottom": "1px solid var(--border-strong, rgba(255, 255, 255, 0.08))", "flex-shrink": 0, "align-items": "stretch", overflow: "auto", background: "rgba(var(--panel-rgb, 10, 14, 23), 0.35)", "backdrop-filter": "blur(12px)" }}>
           <For each={tabs()}>
             {(tab) => (
               <div
@@ -233,6 +237,7 @@ window.registerPlugin({
   description: "Full-featured git panel with graph, branches, diff, stash, worktrees, and more.",
   version: __VERSION__,
   author: "Algosculptor",
+  hasCustomAppearanceSettings: true,
   viewRailButton: (props: any) => (
     <button
       type="button"

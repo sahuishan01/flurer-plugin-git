@@ -1798,7 +1798,7 @@ forceInstance = null;
 
       {/* Force-directed Interactive 2D/3D Container */}
       <Show when={displayMode() !== "tree" && ctx.graph().length > 0}>
-        <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(10, 14, 23, 0.6)" }}>
+        <div style={{ flex: 1, width: "100%", position: "relative", overflow: "hidden", "border-radius": "10px", border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))", background: "rgba(var(--panel-rgb, 10, 14, 23), 0.35)" }}>
           {/* Top Floating Branch Chips Bar */}
           <Show when={data().laneLabels.some(Boolean)}>
             <div style={{
@@ -1818,24 +1818,22 @@ forceInstance = null;
                   <Show when={label}>
                     <span
                       class="flurer-git-lanechip"
-                      onClick={() => focusBranch(idx())}
-                      title={`Click to focus & frame branch: ${label}`}
+                      onClick={() => handleBranchChipClick(label!)}
+                      title={`Frame branch "${label}"`}
                       style={{
+                        background: "rgba(var(--panel-rgb, 15, 23, 42), 0.75)",
+                        "backdrop-filter": "blur(8px)",
+                        border: `1px solid ${lighten(laneColor(idx()), 0.35)}`,
+                        color: laneColor(idx()),
                         display: "inline-flex",
                         "align-items": "center",
-                        gap: "6px",
-                        padding: "3px 10px",
+                        gap: "5px",
+                        padding: "3px 9px",
                         "border-radius": "999px",
-                        "font-size": "10.5px",
+                        "font-size": "11px",
                         "font-weight": 600,
                         "font-family": "Space Mono, monospace",
-                        background: "rgba(15, 23, 42, 0.82)",
-                        "backdrop-filter": "blur(8px)",
-                        border: `1px solid ${lighten(laneColor(idx()), 0.45)}`,
-                        color: laneColor(idx()),
-                        "white-space": "nowrap",
                         cursor: "pointer",
-                        "box-shadow": "0 2px 8px rgba(0,0,0,0.3)",
                       }}
                     >
                       <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: laneColor(idx()), display: "inline-block", "flex-shrink": 0 }} />
@@ -1849,7 +1847,7 @@ forceInstance = null;
 
           <div ref={graphContainerRef} style={{ width: "100%", height: "100%" }} />
 
-          {/* Bottom Modern Glass HUD Pill */}
+          {/* Floating Canvas Controls Legend (Bottom Left) */}
           <div style={{
             position: "absolute",
             bottom: "10px",
@@ -1860,7 +1858,7 @@ forceInstance = null;
             "font-size": "11px",
             color: "var(--text-secondary, rgba(255,255,255,0.75))",
             "font-family": "Space Mono, monospace",
-            background: "rgba(10, 14, 23, 0.85)",
+            background: "rgba(var(--panel-rgb, 10, 14, 23), 0.65)",
             "backdrop-filter": "blur(12px)",
             padding: "5px 12px",
             "border-radius": "6px",
@@ -1886,7 +1884,7 @@ forceInstance = null;
             display: "flex",
             "align-items": "center",
             gap: "6px",
-            background: "rgba(10, 14, 23, 0.85)",
+            background: "rgba(var(--panel-rgb, 10, 14, 23), 0.65)",
             "backdrop-filter": "blur(12px)",
             padding: "4px 8px",
             "border-radius": "8px",

@@ -430,7 +430,7 @@ export function DiffView() {
                 return (
                   <Card style={{ padding: 0, overflow: "hidden", "margin-bottom": "16px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
                     <Show when={fileItem.newPath || fileItem.oldPath}>
-                      <div style={{ padding: "10px 14px", background: "rgba(10, 14, 23, 0.7)", "font-weight": 600, "font-size": "12.5px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                      <div style={{ padding: "10px 14px", background: "rgba(var(--panel-rgb, 10, 14, 23), 0.45)", "font-weight": 600, "font-size": "12.5px", "font-family": "Space Mono, monospace", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                         <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
                           <span style={{ color: "#38bdf8" }}>📄 {fileItem.newPath || fileItem.oldPath}</span>
                         </div>

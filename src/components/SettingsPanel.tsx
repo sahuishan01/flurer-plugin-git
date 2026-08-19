@@ -1,5 +1,6 @@
 import {
   setSurfaceOpacity, getSurfaceOpacity,
+  setSurfaceBlur, getSurfaceBlur,
   setButtonTintOpacity, getButtonTintOpacity,
   setGraphPanSpeed, getGraphPanSpeed,
   setGraphZoomSpeed, getGraphZoomSpeed,
@@ -63,29 +64,49 @@ const S = {
 
 export function SettingsPanel(props: any) {
   const initialSurface = props.pluginSettings?.surfaceOpacity ?? getSurfaceOpacity();
-  if (initialSurface !== getSurfaceOpacity()) setSurfaceOpacity(initialSurface);
+  if (props.pluginSettings?.surfaceOpacity !== undefined && initialSurface !== getSurfaceOpacity()) {
+    setSurfaceOpacity(initialSurface);
+  }
+
+  const initialBlur = props.pluginSettings?.surfaceBlur ?? getSurfaceBlur();
+  if (props.pluginSettings?.surfaceBlur !== undefined && initialBlur !== getSurfaceBlur()) {
+    setSurfaceBlur(initialBlur);
+  }
 
   const initialButton = props.pluginSettings?.buttonTintOpacity ?? getButtonTintOpacity();
-  if (initialButton !== getButtonTintOpacity()) setButtonTintOpacity(initialButton);
+  if (props.pluginSettings?.buttonTintOpacity !== undefined && initialButton !== getButtonTintOpacity()) {
+    setButtonTintOpacity(initialButton);
+  }
 
   const initialPan = props.pluginSettings?.graphPanSpeed ?? getGraphPanSpeed();
-  if (initialPan !== getGraphPanSpeed()) setGraphPanSpeed(initialPan);
+  if (props.pluginSettings?.graphPanSpeed !== undefined && initialPan !== getGraphPanSpeed()) {
+    setGraphPanSpeed(initialPan);
+  }
 
   const initialZoom = props.pluginSettings?.graphZoomSpeed ?? getGraphZoomSpeed();
-  if (initialZoom !== getGraphZoomSpeed()) setGraphZoomSpeed(initialZoom);
+  if (props.pluginSettings?.graphZoomSpeed !== undefined && initialZoom !== getGraphZoomSpeed()) {
+    setGraphZoomSpeed(initialZoom);
+  }
 
   const initialRotate = props.pluginSettings?.graphRotateSpeed ?? getGraphRotateSpeed();
-  if (initialRotate !== getGraphRotateSpeed()) setGraphRotateSpeed(initialRotate);
+  if (props.pluginSettings?.graphRotateSpeed !== undefined && initialRotate !== getGraphRotateSpeed()) {
+    setGraphRotateSpeed(initialRotate);
+  }
 
   const initialFocusStep = props.pluginSettings?.graphFocusZoomStep ?? getGraphFocusZoomStep();
-  if (initialFocusStep !== getGraphFocusZoomStep()) setGraphFocusZoomStep(initialFocusStep);
+  if (props.pluginSettings?.graphFocusZoomStep !== undefined && initialFocusStep !== getGraphFocusZoomStep()) {
+    setGraphFocusZoomStep(initialFocusStep);
+  }
 
   const initialFocusTime = props.pluginSettings?.graphFocusTransitionTime ?? getGraphFocusTransitionTime();
-  if (initialFocusTime !== getGraphFocusTransitionTime()) setGraphFocusTransitionTime(initialFocusTime);
+  if (props.pluginSettings?.graphFocusTransitionTime !== undefined && initialFocusTime !== getGraphFocusTransitionTime()) {
+    setGraphFocusTransitionTime(initialFocusTime);
+  }
 
   function syncAll() {
     props.onPluginSettingsChange?.({
       surfaceOpacity: getSurfaceOpacity(),
+      surfaceBlur: getSurfaceBlur(),
       buttonTintOpacity: getButtonTintOpacity(),
       graphPanSpeed: getGraphPanSpeed(),
       graphZoomSpeed: getGraphZoomSpeed(),
@@ -98,6 +119,12 @@ export function SettingsPanel(props: any) {
   function onSurfaceChange(e: Event) {
     const val = parseFloat((e.target as HTMLInputElement).value);
     setSurfaceOpacity(val);
+    syncAll();
+  }
+
+  function onBlurChange(e: Event) {
+    const val = parseInt((e.target as HTMLInputElement).value, 10);
+    setSurfaceBlur(val);
     syncAll();
   }
 
@@ -233,16 +260,16 @@ export function SettingsPanel(props: any) {
       </div>
 
       <div style={S.header}>
-        🎨 Theme & Surface Opacity
+        🎨 Theme & Translucent Surface Appearance
       </div>
 
-      <label style={S.label}>Surface tint opacity</label>
+      <label style={S.label}>Surface Opacity</label>
       <div style={S.row}>
         <input
           type="range"
           min="0"
-          max="0.2"
-          step="0.005"
+          max="1"
+          step="0.02"
           value={getSurfaceOpacity()}
           onInput={onSurfaceChange}
           style={S.slider}
@@ -250,7 +277,24 @@ export function SettingsPanel(props: any) {
         <span style={S.value}>{Math.round(getSurfaceOpacity() * 100)}%</span>
       </div>
       <div style={S.hint}>
-        Controls the tint strength of card and panel backgrounds.
+        Controls the translucent glass opacity of the Git panel surface (0% fully transparent to 100% opaque).
+      </div>
+
+      <label style={S.label}>Surface Blur</label>
+      <div style={S.row}>
+        <input
+          type="range"
+          min="0"
+          max="32"
+          step="1"
+          value={getSurfaceBlur()}
+          onInput={onBlurChange}
+          style={S.slider}
+        />
+        <span style={S.value}>{getSurfaceBlur()}px</span>
+      </div>
+      <div style={S.hint}>
+        Controls the backdrop blur radius behind the Git panel.
       </div>
 
       <label style={S.label}>Button tint opacity</label>

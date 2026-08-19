@@ -167,7 +167,7 @@ export function RepoView(props: RepoViewProps) {
 
   return (
     <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", position: "relative" }}>
-      <div style={{ ...S.section, "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-shrink": 0, background: "rgba(10, 14, 23, 0.65)", "backdrop-filter": "blur(16px)" }}>
+      <div style={{ ...S.section, "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-shrink": 0, background: "rgba(var(--panel-rgb, 10, 14, 23), 0.35)", "backdrop-filter": "blur(16px)" }}>
         <div style={S.toolbar}>
           <Button onClick={props.onClose} size="sm" title="Close repository tab">
             <CloseIcon size={14} />
