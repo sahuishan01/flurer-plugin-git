@@ -1348,6 +1348,7 @@ forceInstance = null;
 
           if (node.refs && node.refs.length > 0) {
             canvasCtx.font = `700 ${badgeGraphFontSize}px Space Mono, monospace`;
+            canvasCtx.textBaseline = "middle";
             let badgeX = x + r + 6 / globalScale;
 
             for (const rawRef of node.refs) {
@@ -1371,7 +1372,7 @@ forceInstance = null;
 
               // Badge Text
               canvasCtx.fillStyle = "#ffffff";
-              canvasCtx.fillText(displayLabel, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
+              canvasCtx.fillText(displayLabel, badgeX + paddingX, y);
 
               badgeX += badgeW + 4 / globalScale;
             }
@@ -1381,6 +1382,7 @@ forceInstance = null;
               const msgScreenFontSize = 10.5;
               const msgGraphFontSize = msgScreenFontSize / globalScale;
               canvasCtx.font = `500 ${msgGraphFontSize}px Space Mono, monospace`;
+              canvasCtx.textBaseline = "middle";
 
               const snippet = node.message?.length > 28 ? `${node.message.slice(0, 28)}…` : (node.message || "");
               const shortText = `${node.shortHash} ${snippet}`;
@@ -1401,11 +1403,12 @@ forceInstance = null;
               canvasCtx.fill();
 
               canvasCtx.fillStyle = "rgba(255, 255, 255, 0.88)";
-              canvasCtx.fillText(shortText, labelX + padX, labelY + labelH - 2.8 / globalScale);
+              canvasCtx.fillText(shortText, labelX + padX, y);
             }
           } else if (node.isBranchTip || isHigh) {
             // Branch tip or highlighted node
             canvasCtx.font = `700 ${badgeGraphFontSize}px Space Mono, monospace`;
+            canvasCtx.textBaseline = "middle";
             const tipLabel = isSelf ? `Active: ${node.shortHash}` : (node.isBranchTip ? `Tip: ${node.shortHash}` : node.shortHash);
             const textWidth = canvasCtx.measureText(tipLabel).width;
             const paddingX = 6 / globalScale;
@@ -1427,12 +1430,13 @@ forceInstance = null;
             canvasCtx.stroke();
 
             canvasCtx.fillStyle = isHigh ? "#38bdf8" : "#f8fafc";
-            canvasCtx.fillText(tipLabel, badgeX + paddingX, badgeY + badgeH - 3.5 / globalScale);
+            canvasCtx.fillText(tipLabel, badgeX + paddingX, y);
           } else if (globalScale >= 0.22) {
             // Show commit hash & message snippet with subtle backdrop when zoomed in
             const msgScreenFontSize = 10.5;
             const msgGraphFontSize = msgScreenFontSize / globalScale;
             canvasCtx.font = `500 ${msgGraphFontSize}px Space Mono, monospace`;
+            canvasCtx.textBaseline = "middle";
 
             const snippet = node.message?.length > 28 ? `${node.message.slice(0, 28)}…` : (node.message || "");
             const shortText = `${node.shortHash} ${snippet}`;
@@ -1453,7 +1457,7 @@ forceInstance = null;
             canvasCtx.fill();
 
             canvasCtx.fillStyle = "rgba(255, 255, 255, 0.88)";
-            canvasCtx.fillText(shortText, labelX + padX, labelY + labelH - 2.8 / globalScale);
+            canvasCtx.fillText(shortText, labelX + padX, y);
           }
 
           canvasCtx.globalAlpha = 1.0;
@@ -2002,15 +2006,12 @@ forceInstance = null;
                   const maxLane = () => rowMaxLanes()[i] ?? row().lane;
                   const railsW = () => (maxLane() + 1) * LANE_W;
                   const refStart = () => railsW() + 8;
-                  const badgeData = () => getRowBadges(row().refs || [], refStart(), color);
-                  const textX = () => (row().refs && row().refs.length > 0) ? badgeData().nextX + 4 : refStart();
+                  const parsedRefs = () => (row().refs || []).map(parseRef);
                   const isSelected = () => selectedHash() === row().hash;
                   const isMergeCommit = () => row().parents.length > 1;
                   const mergeSourceHash = () => row().parents[1]?.slice(0, 5) || "???";
                   const mergeTargetHash = () => row().parents[0]?.slice(0, 5) || "???";
                   const mergeLabel = () => `🔀 MERGE (${mergeSourceHash()}➔${mergeTargetHash()})`;
-                  const mergeBadgeW = () => isMergeCommit() ? Math.round(mergeLabel().length * 7.0 + 26) : 0;
-                  const msgLeft = () => textX() + 62 + (isMergeCommit() ? mergeBadgeW() + 10 : 0);
 
                   return (
                     <g style={{ cursor: "pointer" }} onClick={() => handleRowClick(row().hash)} onContextMenu={(e) => handleContextMenu(e, row().hash)}>
@@ -2025,53 +2026,54 @@ forceInstance = null;
                         <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
                       </Show>
 
-                      <Index each={badgeData().badges}>
-                        {(badge) => (
-                          <g>
-                            <rect x={badge().x} y={y - 9} width={badge().width} height={18} rx={4} fill={badge().bg} stroke={badge().stroke} stroke-width="1" />
-                            <text class="flurer-git-refs" x={badge().x + 7} y={y + 4} fill={badge().textCol} font-size="10" font-weight="700" font-family="Space Mono,monospace">
-                              {badge().label}
-                            </text>
-                          </g>
-                        )}
-                      </Index>
+                      <foreignObject x={refStart()} y={y - ROW_H / 2} width={`calc(100% - ${refStart() + 16}px)`} height={ROW_H} style={{ overflow: "visible" }}>
+                        <div style={{ display: "flex", "align-items": "center", gap: "7px", width: "100%", height: "100%", "box-sizing": "border-box" }}>
+                          {/* Commit Hash */}
+                          <span class="flurer-git-hash" style={{ color: "var(--accent-default, var(--accent-color,#f59e0b))", "font-family": "Space Mono,monospace", "font-size": "11px", "font-weight": 600, "flex-shrink": 0, "text-shadow": "var(--text-shadow)" }}>
+                            {row().hash.slice(0, 7)}
+                          </span>
 
-                      <text class="flurer-git-hash" x={textX()} y={y + 4} fill="var(--accent-default, var(--accent-color,#f59e0b))" font-size="11" font-family="Space Mono,monospace" style={{ "text-shadow": "var(--text-shadow)" }}>
-                        {row().hash.slice(0, 7)}
-                      </text>
+                          {/* Merge Indicator Badge */}
+                          <Show when={isMergeCommit()}>
+                            <span style={{ display: "inline-flex", "align-items": "center", gap: "3px", padding: "1px 6px", "border-radius": "4px", background: "rgba(15, 23, 42, 0.85)", border: "1px solid rgba(56, 189, 248, 0.6)", color: "#38bdf8", "font-size": "10px", "font-weight": 700, "font-family": "Space Mono, monospace", "flex-shrink": 0, "line-height": "14px", "box-shadow": "0 1px 4px rgba(0,0,0,0.3)" }}>
+                              {mergeLabel()}
+                            </span>
+                          </Show>
 
-                      <Show when={isMergeCommit()}>
-                        <g>
-                          <rect
-                            x={textX() + 62}
-                            y={y - 9}
-                            width={mergeBadgeW()}
-                            height={18}
-                            rx={4}
-                            fill="rgba(15, 23, 42, 0.94)"
-                            stroke="rgba(56, 189, 248, 0.65)"
-                            stroke-width="1"
-                          />
-                          <text
-                            x={textX() + 62 + 7}
-                            y={y + 4}
-                            fill="#38bdf8"
-                            font-size="10"
-                            font-weight="700"
-                            font-family="Space Mono,monospace"
-                            style={{ "text-shadow": "0 1px 3px rgba(0,0,0,0.8)" }}
-                          >
-                            {mergeLabel()}
-                          </text>
-                        </g>
-                      </Show>
+                          {/* Branch & Tag Badges */}
+                          <For each={parsedRefs()}>
+                            {(ref) => (
+                              <span
+                                class="flurer-git-refs"
+                                style={{
+                                  display: "inline-flex",
+                                  "align-items": "center",
+                                  gap: "3px",
+                                  padding: "1px 6px",
+                                  "border-radius": "4px",
+                                  "font-size": "10px",
+                                  "font-weight": 700,
+                                  "font-family": "Space Mono, monospace",
+                                  background: ref.isTag ? "rgba(168, 85, 247, 0.22)" : (ref.isHead ? "rgba(245, 158, 11, 0.22)" : "rgba(56, 189, 248, 0.18)"),
+                                  border: ref.isTag ? "1px solid rgba(168, 85, 247, 0.45)" : (ref.isHead ? "1px solid rgba(245, 158, 11, 0.45)" : `1px solid ${color}`),
+                                  color: ref.isTag ? "#e9d5ff" : (ref.isHead ? "#fef3c7" : color),
+                                  "flex-shrink": 0,
+                                  "line-height": "14px",
+                                }}
+                              >
+                                <span>{ref.isTag ? "🏷️" : "🌿"}</span>
+                                <span>{ref.label}</span>
+                              </span>
+                            )}
+                          </For>
 
-                      <foreignObject x={msgLeft()} y={y - 10} width={`calc(100% - ${msgLeft() + 24}px)`} height={ROW_H}>
-                        <div style={{ display: "flex", "align-items": "center", gap: "10px", width: "100%", height: "100%" }}>
-                          <div style={{ flex: 1, "min-width": 0, "font-size": "12px", color: isSelected() ? "var(--accent-default, var(--accent-color, #f59e0b))" : "var(--text-primary, var(--text-color))", "font-weight": isSelected() ? "600" : "400", "text-shadow": "var(--text-shadow)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }} title={row().message}>
+                          {/* Commit Message */}
+                          <div style={{ flex: 1, "min-width": 0, "font-size": "12px", color: isSelected() ? "var(--accent-default, var(--accent-color, #f59e0b))" : "var(--text-primary, var(--text-color))", "font-weight": isSelected() ? "600" : "400", "text-shadow": "var(--text-shadow)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis", "line-height": "1.3" }} title={row().message}>
                             {row().message}
                           </div>
-                          <div class="flurer-git-meta" style={{ flex: "0 0 auto", "white-space": "nowrap", "font-size": "11px", color: "var(--text-secondary, #c0c0c0)", "text-shadow": "var(--text-shadow)" }}>
+
+                          {/* Author & Timestamp */}
+                          <div class="flurer-git-meta" style={{ flex: "0 0 auto", "white-space": "nowrap", "font-size": "11px", color: "var(--text-secondary, #c0c0c0)", "text-shadow": "var(--text-shadow)", "margin-left": "auto", "padding-right": "8px" }}>
                             {row().author}{row().committer && row().committer !== row().author ? ` · ${row().committer}` : ""}{" · "}{formatTimestamp(row().timestamp)}
                           </div>
                         </div>
