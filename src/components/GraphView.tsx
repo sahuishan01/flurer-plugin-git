@@ -1998,12 +1998,12 @@ forceInstance = null;
               </Index>
               <Index each={visibleRows()}>
                 {(item) => {
-                  const i = item().index;
+                  const i = () => item().index;
                   const row = () => item().row;
-                  const y = rowY(i);
-                  const cx = laneX(row().lane);
-                  const color = laneColor(row().lane);
-                  const maxLane = () => rowMaxLanes()[i] ?? row().lane;
+                  const y = () => rowY(i());
+                  const cx = () => laneX(row().lane);
+                  const color = () => laneColor(row().lane);
+                  const maxLane = () => rowMaxLanes()[i()] ?? row().lane;
                   const railsW = () => (maxLane() + 1) * LANE_W;
                   const refStart = () => railsW() + 8;
                   const parsedRefs = () => (row().refs || []).map(parseRef);
@@ -2015,18 +2015,18 @@ forceInstance = null;
 
                   return (
                     <g style={{ cursor: "pointer" }} onClick={() => handleRowClick(row().hash)} onContextMenu={(e) => handleContextMenu(e, row().hash)}>
-                      <rect x="0" y={y - ROW_H / 2} width="100%" height={ROW_H} fill={isSelected() ? "rgba(245, 158, 11, 0.14)" : "transparent"} style={{ transition: "fill 0.15s" }} />
+                      <rect x="0" y={y() - ROW_H / 2} width="100%" height={ROW_H} fill={isSelected() ? "rgba(245, 158, 11, 0.14)" : "transparent"} style={{ transition: "fill 0.15s" }} />
 
                       <Show when={isMergeCommit()}>
-                        <circle cx={cx} cy={y} r={DOT_R + 4.5} fill="rgba(96, 205, 255, 0.25)" stroke={color} stroke-width="1.5" />
-                        <polygon points={`${cx},${y - DOT_R - 2} ${cx + DOT_R + 2},${y} ${cx},${y + DOT_R + 2} ${cx - DOT_R - 2},${y}`} fill="var(--accent-default, #60cdff)" stroke="var(--option-bg, #000)" stroke-width="1.5" />
+                        <circle cx={cx()} cy={y()} r={DOT_R + 4.5} fill="rgba(96, 205, 255, 0.25)" stroke={color()} stroke-width="1.5" />
+                        <polygon points={`${cx()},${y() - DOT_R - 2} ${cx() + DOT_R + 2},${y()} ${cx()},${y() + DOT_R + 2} ${cx() - DOT_R - 2},${y()}`} fill="var(--accent-default, #60cdff)" stroke="var(--option-bg, #000)" stroke-width="1.5" />
                       </Show>
                       <Show when={!isMergeCommit()}>
-                        <circle cx={cx} cy={y} r={DOT_R} fill={color} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
-                        <circle cx={cx} cy={y} r={DOT_R + 2.5} fill="none" stroke={color} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
+                        <circle cx={cx()} cy={y()} r={DOT_R} fill={color()} stroke="var(--panel-bg,#1a1a2e)" stroke-width="2" />
+                        <circle cx={cx()} cy={y()} r={DOT_R + 2.5} fill="none" stroke={color()} stroke-width="1.5" opacity={isSelected() ? "0.8" : "0.3"} />
                       </Show>
 
-                      <foreignObject x={refStart()} y={y - ROW_H / 2} width={`calc(100% - ${refStart() + 16}px)`} height={ROW_H} style={{ overflow: "visible" }}>
+                      <foreignObject x={refStart()} y={y() - ROW_H / 2} width={`calc(100% - ${refStart() + 16}px)`} height={ROW_H} style={{ overflow: "visible" }}>
                         <div style={{ display: "flex", "align-items": "center", gap: "7px", width: "100%", height: "100%", "box-sizing": "border-box" }}>
                           {/* Commit Hash */}
                           <span class="flurer-git-hash" style={{ color: "var(--accent-default, var(--accent-color,#f59e0b))", "font-family": "Space Mono,monospace", "font-size": "11px", "font-weight": 600, "flex-shrink": 0, "text-shadow": "var(--text-shadow)" }}>
@@ -2055,8 +2055,8 @@ forceInstance = null;
                                   "font-weight": 700,
                                   "font-family": "Space Mono, monospace",
                                   background: ref.isTag ? "rgba(168, 85, 247, 0.22)" : (ref.isHead ? "rgba(245, 158, 11, 0.22)" : "rgba(56, 189, 248, 0.18)"),
-                                  border: ref.isTag ? "1px solid rgba(168, 85, 247, 0.45)" : (ref.isHead ? "1px solid rgba(245, 158, 11, 0.45)" : `1px solid ${color}`),
-                                  color: ref.isTag ? "#e9d5ff" : (ref.isHead ? "#fef3c7" : color),
+                                  border: ref.isTag ? "1px solid rgba(168, 85, 247, 0.45)" : (ref.isHead ? "1px solid rgba(245, 158, 11, 0.45)" : `1px solid ${color()}`),
+                                  color: ref.isTag ? "#e9d5ff" : (ref.isHead ? "#fef3c7" : color()),
                                   "flex-shrink": 0,
                                   "line-height": "14px",
                                 }}
