@@ -218,7 +218,7 @@ function GitPanel(props: any) {
       <For each={tabs()}>
         {(tab) => (
           <Show when={!showDashboard() && activeTabId() === tab.id}>
-            <GitProvider initialPath={tab.path}>
+            <GitProvider initialPath={tab.path} onOpenRepoInNewTab={(p) => openRepo(p)}>
               <RepoView onClose={() => closeTab(tab.id, new MouseEvent("click"))} />
               <Toast />
             </GitProvider>

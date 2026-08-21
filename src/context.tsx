@@ -213,7 +213,7 @@ export function useGit(): GitContextValue {
   return ctx;
 }
 
-export function GitProvider(props: ParentProps & { initialPath?: string | null }) {
+export function GitProvider(props: ParentProps & { initialPath?: string | null; onOpenRepoInNewTab?: (path: string) => void }) {
   const initialView = props.initialPath ? ((getSavedActiveView(props.initialPath) as GitView) || "graph") : "dashboard";
   const [activeView, setActiveView] = createSignal<GitView>(initialView);
   const [repoPath, setRepoPath] = createSignal<string | null>(props.initialPath ?? null);
@@ -436,6 +436,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null }
   }
 
   function openRepo(path: string) {
+    if (props.onOpenRepoInNewTab && path !== repoPath()) {
+      props.onOpenRepoInNewTab(path);
+      return;
+    }
     setRepoPath(path);
     setIsDubiousOwnership(false);
     const saved = getSavedBranchSelection(path);
