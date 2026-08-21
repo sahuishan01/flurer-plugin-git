@@ -52,17 +52,7 @@ export function DashboardView(props: DashboardViewProps) {
     }
   }
 
-  async function handleBrowseFolder() {
-    if (window.TauriCore?.invoke) {
-      try {
-        const nativePath = await window.TauriCore.invoke<string | null>("pick_folder");
-        if (nativePath) {
-          props.onOpenRepo(nativePath);
-          return;
-        }
-        return;
-      } catch {}
-    }
+  function handleBrowseFolder() {
     setShowPicker(true);
   }
 

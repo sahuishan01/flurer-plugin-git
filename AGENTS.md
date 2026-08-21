@@ -4,6 +4,12 @@ A **Git Operations** plugin for [Flurer](https://github.com/sahuishan01/Flurer),
 
 ---
 
+## 0. Key Invariants & Rules
+- **Custom Explorer Only**: NEVER use Windows Explorer or native OS folder pickers (`pick_folder`). Strictly use our own in-app directory picker (`DirectoryPickerModal`).
+- **No Mirror Sync**: Do NOT copy build output into `Flurer/plugins/git/`.
+
+---
+
 ## 1. Project Structure
 
 ```

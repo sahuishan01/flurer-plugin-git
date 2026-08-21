@@ -194,18 +194,6 @@ export function DirectoryPickerModal(props: {
     }
   }
 
-  async function handleSystemPicker() {
-    if (window.TauriCore?.invoke) {
-      try {
-        const selected = await window.TauriCore.invoke<string | null>("pick_folder");
-        if (selected) {
-          props.onSelect(selected);
-          props.onClose();
-        }
-      } catch {}
-    }
-  }
-
   function handleConfirm() {
     props.onSelect(currentPath());
     props.onClose();
@@ -459,9 +447,6 @@ export function DirectoryPickerModal(props: {
               Selected: {currentPath()}
             </span>
             <div style={{ display: "flex", gap: "8px" }}>
-              <Button onClick={handleSystemPicker} title="Open system native folder dialog">
-                System Dialog
-              </Button>
               <Button onClick={props.onClose}>Cancel</Button>
               <Button variant="primary" onClick={handleConfirm}>
                 Select Directory
