@@ -1,8 +1,10 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup, type JSX } from "solid-js";
 import { useGit } from "../../context";
 import { S } from "../../styles";
-import { buttonBg, formatTimestamp, formatRelativeDate, getSavedOpenTabs } from "../../utils";
-import type { GitRebaseTodoItem } from "../../types";
+import { buttonBg, formatTimestamp, formatRelativeDate, getSavedOpenTabs, getMaxDiscoveredReposCap } from "../../utils";
+import type { GitRebaseTodoItem, DiscoveredRepo } from "../../types";
+import { SearchableRepoDropdown } from "../SearchableRepoDropdown";
+import { scanDirectoryForGitRepos } from "../../git";
 import * as git from "../../git";
 
 export function GitIcon(props: { size?: number }) {
@@ -3434,6 +3436,18 @@ export function SubmodulesModal() {
   const ctx = useGit();
   const [subUrl, setSubUrl] = createSignal("");
   const [subPath, setSubPath] = createSignal("");
+  const [discovered, setDiscovered] = createSignal<DiscoveredRepo[]>([]);
+  const [scanning, setScanning] = createSignal(false);
+
+  createEffect(() => {
+    if (ctx.submodulesModalOpen() && ctx.repoPath()) {
+      setScanning(true);
+      scanDirectoryForGitRepos(ctx.repoPath(), getMaxDiscoveredReposCap())
+        .then((repos) => setDiscovered(repos))
+        .catch(() => setDiscovered([]))
+        .finally(() => setScanning(false));
+    }
+  });
 
   const handleAdd = () => {
     if (!subUrl().trim() || !subPath().trim()) return;
@@ -3463,10 +3477,10 @@ export function SubmodulesModal() {
             background: "rgba(15, 23, 42, 0.96)",
             border: "1px solid rgba(255, 255, 255, 0.14)",
             "border-radius": "14px",
-            width: "740px",
+            width: "780px",
             "max-width": "92vw",
-            height: "580px",
-            "max-height": "85vh",
+            height: "640px",
+            "max-height": "88vh",
             display: "flex",
             "flex-direction": "column",
             overflow: "hidden",
@@ -3479,10 +3493,10 @@ export function SubmodulesModal() {
               <span style={{ "font-size": "20px" }}>🧩</span>
               <div>
                 <div style={{ "font-size": "15px", "font-weight": 700, color: "#fff" }}>
-                  Git Submodules Manager
+                  Git Submodules & Nested Repositories
                 </div>
                 <div style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.45)", "font-family": "Space Mono, monospace" }}>
-                  Inspect, sync, and recursively initialize nested repository submodules
+                  Search, inspect, sync, and jump to nested submodules inside this repository
                 </div>
               </div>
             </div>
@@ -3497,7 +3511,7 @@ export function SubmodulesModal() {
 
           <div style={{ padding: "12px 20px", background: "rgba(10, 14, 23, 0.4)", "border-bottom": "1px solid rgba(255, 255, 255, 0.06)", display: "flex", "justify-content": "space-between", "align-items": "center" }}>
             <span style={{ "font-size": "11.5px", color: "rgba(255, 255, 255, 0.5)", "font-family": "Space Mono, monospace" }}>
-              Nested Submodules ({ctx.submodules().length})
+              Declared Submodules ({ctx.submodules().length})
             </span>
             <div style={{ display: "flex", gap: "8px" }}>
               <Button size="sm" variant="primary" onClick={ctx.updateSubmodules}>
@@ -3507,6 +3521,22 @@ export function SubmodulesModal() {
           </div>
 
           <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", "flex-direction": "column", gap: "16px" }}>
+            {/* Searchable Submodule & Nested Repo Selector */}
+            <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(56, 189, 248, 0.2)", "border-radius": "8px", padding: "12px 14px" }}>
+              <div style={{ "font-size": "12px", "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "margin-bottom": "8px" }}>
+                🔍 Search & Switch Submodules / Nested Repositories
+              </div>
+              <SearchableRepoDropdown
+                repos={discovered()}
+                loading={scanning()}
+                maxCap={getMaxDiscoveredReposCap()}
+                onSelectRepo={(path) => {
+                  ctx.openRepo(path);
+                  ctx.closeSubmodulesModal();
+                }}
+              />
+            </div>
+
             <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "8px", padding: "12px 14px" }}>
               <div style={{ "font-size": "11.5px", "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "margin-bottom": "8px" }}>
                 + Add New Submodule

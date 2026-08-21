@@ -1,9 +1,6 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import { FolderIcon, CloseIcon, Button } from "./shared";
-import { SearchableRepoDropdown } from "./SearchableRepoDropdown";
-import { scanDirectoryForGitRepos, listSubdirectories } from "../git";
-import { getMaxDiscoveredReposCap } from "../utils";
-import type { DiscoveredRepo } from "../types";
+import { listSubdirectories } from "../git";
 
 interface DiskVolume {
   driveLetter: string;
@@ -58,8 +55,6 @@ export function DirectoryPickerModal(props: {
   const [recentPaths, setRecentPaths] = createSignal<string[]>([]);
   const [favouritePaths, setFavouritePaths] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(false);
-  const [discoveredRepos, setDiscoveredRepos] = createSignal<DiscoveredRepo[]>([]);
-  const [scanningRepos, setScanningRepos] = createSignal(false);
 
   async function loadDrivesAndQuickAccess() {
     if (typeof window !== "undefined" && window.TauriCore?.invoke) {
@@ -135,24 +130,10 @@ export function DirectoryPickerModal(props: {
     }
   }
 
-  async function triggerScanRepos(dirPath: string) {
-    if (!dirPath) return;
-    setScanningRepos(true);
-    try {
-      const found = await scanDirectoryForGitRepos(dirPath, getMaxDiscoveredReposCap());
-      setDiscoveredRepos(found);
-    } catch {
-      setDiscoveredRepos([]);
-    } finally {
-      setScanningRepos(false);
-    }
-  }
-
   async function loadDir(dirPath: string) {
     if (!dirPath) return;
     setLoading(true);
     setCurrentPath(dirPath);
-    triggerScanRepos(dirPath);
     try {
       const dirs = await listSubdirectories(dirPath);
       setItems(dirs);
@@ -386,17 +367,6 @@ export function DirectoryPickerModal(props: {
 
               {/* Items List */}
               <div style={{ flex: 1, "overflow-y": "auto", padding: "8px 12px" }}>
-                <Show when={discoveredRepos().length > 0 || scanningRepos()}>
-                  <SearchableRepoDropdown
-                    repos={discoveredRepos()}
-                    loading={scanningRepos()}
-                    maxCap={getMaxDiscoveredReposCap()}
-                    onSelectRepo={(repoPath) => {
-                      props.onSelect(repoPath);
-                      props.onClose();
-                    }}
-                  />
-                </Show>
                 <Show when={loading()}>
                   <div style={{ padding: "20px", "text-align": "center", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "font-size": "13px" }}>
                     Loading directories...
