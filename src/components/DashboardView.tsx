@@ -1,7 +1,10 @@
 import { createSignal, For, Show } from "solid-js";
-import { getRecentRepos, removeRecentRepo, formatTimestamp } from "../utils";
+import { getRecentRepos, removeRecentRepo, formatTimestamp, getMaxDiscoveredReposCap } from "../utils";
 import { GitIcon, FolderIcon, TrashIcon, Button } from "./shared";
 import { DirectoryPickerModal } from "./DirectoryPickerModal";
+import { SearchableRepoDropdown } from "./SearchableRepoDropdown";
+import { scanDirectoryForGitRepos } from "../git";
+import type { DiscoveredRepo } from "../types";
 import { S } from "../styles";
 
 type DashboardViewProps = {
@@ -11,8 +14,12 @@ type DashboardViewProps = {
 export function DashboardView(props: DashboardViewProps) {
   const [repos, setRepos] = createSignal(getRecentRepos());
   const [openPath, setOpenPath] = createSignal("");
+  const [scanPath, setScanPath] = createSignal("");
   const [showInput, setShowInput] = createSignal(false);
+  const [showScanSection, setShowScanSection] = createSignal(false);
   const [showPicker, setShowPicker] = createSignal(false);
+  const [discoveredRepos, setDiscoveredRepos] = createSignal<DiscoveredRepo[]>([]);
+  const [scanning, setScanning] = createSignal(false);
 
   function handleOpen(path: string) {
     props.onOpenRepo(path);
@@ -29,6 +36,34 @@ export function DashboardView(props: DashboardViewProps) {
     props.onOpenRepo(p);
     setOpenPath("");
     setShowInput(false);
+  }
+
+  async function handleScanDirectory() {
+    const target = scanPath().trim();
+    if (!target) return;
+    setScanning(true);
+    try {
+      const found = await scanDirectoryForGitRepos(target, getMaxDiscoveredReposCap());
+      setDiscoveredRepos(found);
+    } catch {
+      setDiscoveredRepos([]);
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function handleBrowseFolder() {
+    if (window.TauriCore?.invoke) {
+      try {
+        const nativePath = await window.TauriCore.invoke<string | null>("pick_folder");
+        if (nativePath) {
+          props.onOpenRepo(nativePath);
+          return;
+        }
+        return;
+      } catch {}
+    }
+    setShowPicker(true);
   }
 
   return (
@@ -53,7 +88,7 @@ export function DashboardView(props: DashboardViewProps) {
           <div style={{ display: "flex", gap: "10px", "flex-wrap": "wrap" }}>
             <Button
               variant="primary"
-              onClick={() => setShowPicker(true)}
+              onClick={handleBrowseFolder}
               style={{ flex: 1, padding: "10px 16px", display: "flex", "align-items": "center", "justify-content": "center", gap: "8px", "font-size": "13px" }}
             >
               <FolderIcon size={16} />
@@ -62,6 +97,11 @@ export function DashboardView(props: DashboardViewProps) {
             <Show when={!showInput()}>
               <Button onClick={() => setShowInput(true)} style={{ padding: "10px 16px", "font-size": "13px" }}>
                 Enter Path...
+              </Button>
+            </Show>
+            <Show when={!showScanSection()}>
+              <Button onClick={() => setShowScanSection(true)} style={{ padding: "10px 16px", "font-size": "13px" }}>
+                🔍 Scan Submodules & Repos...
               </Button>
             </Show>
           </div>
@@ -80,6 +120,37 @@ export function DashboardView(props: DashboardViewProps) {
                 <Button variant="primary" onClick={handleOpenPath}>Open</Button>
                 <Button onClick={() => setShowInput(false)}>Cancel</Button>
               </div>
+            </div>
+          </Show>
+
+          <Show when={showScanSection()}>
+            <div style={{ "margin-top": "14px", "padding-top": "12px", "border-top": "1px solid rgba(255, 255, 255, 0.08)" }}>
+              <div style={{ "font-size": "12px", "font-weight": 600, color: "#38bdf8", "margin-bottom": "8px" }}>
+                Recursive Directory Scan for Submodules & Repositories
+              </div>
+              <div style={{ display: "flex", gap: "8px", "margin-bottom": "12px" }}>
+                <input
+                  type="text"
+                  placeholder="/path/to/parent/workspace/folder"
+                  value={scanPath()}
+                  onInput={(e) => setScanPath(e.currentTarget.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleScanDirectory()}
+                  style={{ ...S.input, flex: 1 }}
+                />
+                <Button variant="primary" onClick={handleScanDirectory} disabled={scanning() || !scanPath().trim()}>
+                  {scanning() ? "Scanning..." : "Scan"}
+                </Button>
+                <Button onClick={() => setShowScanSection(false)}>Hide</Button>
+              </div>
+
+              <Show when={discoveredRepos().length > 0 || scanning()}>
+                <SearchableRepoDropdown
+                  repos={discoveredRepos()}
+                  loading={scanning()}
+                  maxCap={getMaxDiscoveredReposCap()}
+                  onSelectRepo={(path) => props.onOpenRepo(path)}
+                />
+              </Show>
             </div>
           </Show>
         </div>

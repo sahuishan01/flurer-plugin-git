@@ -4,7 +4,7 @@ import type {
   GitDiff, DiffHunk, DiffLine, DiffFile, GitStashEntry, GitWorktree, GitCommitDetail,
   GitCommandLogEntry, GitTag, GitBlameLine, GitRemote, GitRepoStats, GitConflictFile,
   GitSignature, GitBisectState, GitLargeBlob, GitLfsInfo, GitRemoteWebLinks,
-  GitReflogEntry, GitSubmodule, GitHook, GitRebaseTodoItem, MultiRepoStatus,
+  GitReflogEntry, GitSubmodule, GitHook, GitRebaseTodoItem, MultiRepoStatus, DiscoveredRepo,
 } from "./types";
 
 let shellAvailable: boolean | null = null;
@@ -1657,5 +1657,187 @@ export async function gitExecuteInteractiveRebasePlan(
 
 export function hasShellPlugin(): boolean {
   return getShell() !== null;
+}
+
+export interface SimpleDirItem {
+  name: string;
+  is_dir: boolean;
+  path: string;
+}
+
+/**
+ * Robustly lists subdirectories of a given directory.
+ * Strategy 1: Tries window.TauriCore.invoke("list_directory", ...).
+ * Strategy 2: If TauriCore fails or returns 0 items, falls back to TauriShell command execution (cmd dir / sh find).
+ */
+export async function listSubdirectories(dirPath: string): Promise<SimpleDirItem[]> {
+  if (!dirPath) return [];
+
+  const isWin = dirPath.includes("\\") || (typeof navigator !== "undefined" && navigator.platform.includes("Win"));
+  const sep = isWin ? "\\" : "/";
+  const base = dirPath.endsWith("\\") || dirPath.endsWith("/") ? dirPath : `${dirPath}${sep}`;
+
+  // Strategy 1: TauriCore invoke list_directory
+  if (typeof window !== "undefined" && window.TauriCore?.invoke) {
+    try {
+      const res = await window.TauriCore.invoke<any>("list_directory", {
+        path: dirPath,
+        sortKey: "name",
+        sortDirection: "ascending",
+        groupFoldersFirst: true,
+      });
+      const listed = Array.isArray(res) ? res : res?.entries;
+      if (Array.isArray(listed) && listed.length > 0) {
+        const dirs = listed
+          .filter((item: any) => item.is_dir === true || item.isDir === true || item.is_directory === true)
+          .map((item: any) => ({
+            name: item.name,
+            is_dir: true,
+            path: item.path || `${base}${item.name}`,
+          }))
+          .sort((a: SimpleDirItem, b: SimpleDirItem) => a.name.localeCompare(b.name));
+
+        if (dirs.length > 0) {
+          return dirs;
+        }
+      }
+    } catch (err) {
+      console.warn("[flurer-plugin-git] TauriCore list_directory failed, trying shell fallback:", err);
+    }
+  }
+
+  // Strategy 2: TauriShell fallback (cmd / sh / find / ls)
+  const Command = getShell();
+  if (Command) {
+    try {
+      let output = "";
+      if (isWin) {
+        // Windows CMD directory listing: dir /b /ad "dirPath"
+        const cmd = new Command("cmd", ["/c", `dir /b /ad "${dirPath}"`]);
+        const res = await cmd.execute();
+        if (res.code === 0 && res.stdout) {
+          output = res.stdout;
+        }
+      } else {
+        // Unix/Linux/macOS directory listing
+        const sh = new Command("sh", ["-c", `find "${dirPath}" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || ls -1d "${dirPath}"/*/ 2>/dev/null`]);
+        const res = await sh.execute();
+        if (res.code === 0 && res.stdout) {
+          output = res.stdout;
+        }
+      }
+
+      if (output.trim()) {
+        const lines = output.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+        const dirs: SimpleDirItem[] = [];
+
+        for (const line of lines) {
+          const cleanLine = line.replace(/[/\\]+$/, "");
+          const name = cleanLine.split(/[/\\]/).pop() || cleanLine;
+          if (name && name !== "." && name !== "..") {
+            const itemPath = cleanLine.includes(sep) || cleanLine.startsWith("/") || cleanLine.includes(":")
+              ? cleanLine
+              : `${base}${name}`;
+
+            dirs.push({
+              name,
+              is_dir: true,
+              path: itemPath,
+            });
+          }
+        }
+
+        dirs.sort((a, b) => a.name.localeCompare(b.name));
+        return dirs;
+      }
+    } catch (err) {
+      console.warn("[flurer-plugin-git] Shell listSubdirectories fallback failed:", err);
+    }
+  }
+
+  return [];
+}
+
+/**
+  * Recursively scans a directory for git submodules (via git CLI) and nested repositories (.git folders).
+  * Returns an array of DiscoveredRepo items up to maxCap.
+  */
+export async function scanDirectoryForGitRepos(dirPath: string, maxCap: number = 50): Promise<DiscoveredRepo[]> {
+  if (!dirPath) return [];
+  const results: DiscoveredRepo[] = [];
+  const visited = new Set<string>();
+
+  const normalizedDir = dirPath.replace(/[/\\]+$/, "");
+  const isWin = dirPath.includes("\\");
+  const sep = isWin ? "\\" : "/";
+
+  function normPath(p: string): string {
+    return p.replace(/[/\\]+/g, sep);
+  }
+
+  // 1. Recursive submodule check via git CLI (if dirPath is a git repository)
+  try {
+    const submodules = await gitSubmoduleList(normalizedDir);
+    for (const sub of submodules) {
+      if (results.length >= maxCap) break;
+      const fullSubPath = normPath(`${normalizedDir}/${sub.path}`);
+      const key = fullSubPath.toLowerCase();
+      if (!visited.has(key)) {
+        visited.add(key);
+        results.push({
+          name: sub.name || sub.path.split("/").pop() || sub.path,
+          path: fullSubPath,
+          relPath: sub.path,
+          isSubmodule: true,
+        });
+      }
+    }
+  } catch {}
+
+  // 2. Perform BFS directory traversal to discover all nested git repos (sub-folders containing .git)
+  const queue: Array<{ path: string; rel: string; depth: number }> = [{ path: normalizedDir, rel: "", depth: 0 }];
+  const MAX_DEPTH = 5;
+  const SKIP_DIRS = new Set([
+    ".git", "node_modules", "dist", "build", "target", ".cargo", "vendor", ".venv", "__pycache__", ".next", ".nuxt", ".output", "out"
+  ]);
+
+  while (queue.length > 0 && results.length < maxCap) {
+    const current = queue.shift()!;
+    if (current.depth > MAX_DEPTH) continue;
+
+    try {
+      const subDirs = await listSubdirectories(current.path);
+
+      // Traversal into child directories
+      for (const item of subDirs) {
+        if (results.length >= maxCap) break;
+        if (!SKIP_DIRS.has(item.name)) {
+          const childPath = normPath(item.path);
+          const childRel = current.rel ? `${current.rel}/${item.name}` : item.name;
+
+          // Check if this subfolder is a git repo by checking for .git or git status
+          try {
+            const hasGitSubDir = await isGitRepo(childPath);
+            if (hasGitSubDir) {
+              const key = childPath.toLowerCase();
+              if (!visited.has(key)) {
+                visited.add(key);
+                results.push({
+                  name: item.name,
+                  path: childPath,
+                  relPath: childRel,
+                  isSubmodule: false,
+                });
+              }
+            }
+          } catch {}
+
+          queue.push({ path: childPath, rel: childRel, depth: current.depth + 1 });
+        }
+      }
+    } catch {}
+  }
+
+  return results.slice(0, maxCap);
 }
 

@@ -50,6 +50,20 @@ const [_graphFocusZoomStep, _setGraphFocusZoomStep] = createRoot(() =>
 const [_graphFocusTransitionTime, _setGraphFocusTransitionTime] = createRoot(() =>
   createSignal(typeof _initialSettings.graphFocusTransitionTime === "number" ? _initialSettings.graphFocusTransitionTime : 650)
 );
+const [_maxDiscoveredReposCap, _setMaxDiscoveredReposCap] = createRoot(() =>
+  createSignal(typeof _initialSettings.maxDiscoveredReposCap === "number" ? _initialSettings.maxDiscoveredReposCap : 50)
+);
+
+/** Override max discovered repos scan cap (5–500). Passed via plugin settings. */
+export function setMaxDiscoveredReposCap(cap: number) {
+  _setMaxDiscoveredReposCap(Math.max(5, Math.min(500, cap)));
+  savePluginSettings({ maxDiscoveredReposCap: cap });
+}
+
+/** Get current max discovered repos scan cap. */
+export function getMaxDiscoveredReposCap(): number {
+  return _maxDiscoveredReposCap();
+}
 
 /** Override the surface tint opacity (0–1). Passed via plugin settings. */
 export function setSurfaceOpacity(opacity: number) {

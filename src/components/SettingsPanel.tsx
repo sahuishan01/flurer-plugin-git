@@ -8,6 +8,7 @@ import {
   setGraphRotateSpeed, getGraphRotateSpeed,
   setGraphFocusZoomStep, getGraphFocusZoomStep,
   setGraphFocusTransitionTime, getGraphFocusTransitionTime,
+  setMaxDiscoveredReposCap, getMaxDiscoveredReposCap,
   buttonBg,
 } from "../utils";
 import { BranchIcon, PushIcon, PullIcon } from "./shared";
@@ -109,6 +110,11 @@ export function SettingsPanel(props: any) {
     setGraphFocusTransitionTime(initialFocusTime);
   }
 
+  const initialMaxCap = props.pluginSettings?.maxDiscoveredReposCap ?? getMaxDiscoveredReposCap();
+  if (props.pluginSettings?.maxDiscoveredReposCap !== undefined && initialMaxCap !== getMaxDiscoveredReposCap()) {
+    setMaxDiscoveredReposCap(initialMaxCap);
+  }
+
   function syncAll() {
     props.onPluginSettingsChange?.({
       surfaceOpacity: getSurfaceOpacity(),
@@ -119,6 +125,7 @@ export function SettingsPanel(props: any) {
       graphRotateSpeed: getGraphRotateSpeed(),
       graphFocusZoomStep: getGraphFocusZoomStep(),
       graphFocusTransitionTime: getGraphFocusTransitionTime(),
+      maxDiscoveredReposCap: getMaxDiscoveredReposCap(),
     });
   }
 
@@ -263,6 +270,30 @@ export function SettingsPanel(props: any) {
       </div>
       <div style={S.hint}>
         Smooth camera interpolation duration during [F] focus, branch framing, and search selection.
+      </div>
+
+      <div style={S.header}>
+        <BranchIcon size={14} /> Submodule & Repo Discovery
+      </div>
+      <label style={S.label}>Max Discovered Repositories Cap</label>
+      <div style={S.row}>
+        <input
+          type="range"
+          min="5"
+          max="500"
+          step="5"
+          value={getMaxDiscoveredReposCap()}
+          onInput={(e) => {
+            const val = parseInt((e.target as HTMLInputElement).value, 10);
+            setMaxDiscoveredReposCap(val);
+            syncAll();
+          }}
+          style={S.slider}
+        />
+        <span style={S.value}>{getMaxDiscoveredReposCap()}</span>
+      </div>
+      <div style={S.hint}>
+        Maximum limit on total submodules and git repositories returned during recursive directory discovery (5–500).
       </div>
 
       <div style={S.header}>

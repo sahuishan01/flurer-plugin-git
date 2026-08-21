@@ -244,3 +244,11 @@ export interface MultiRepoStatus {
   changesCount: number;
   clean: boolean;
 }
+
+export interface DiscoveredRepo {
+  name: string;
+  path: string;
+  relPath?: string;
+  isSubmodule?: boolean;
+  isRoot?: boolean;
+}

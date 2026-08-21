@@ -1,5 +1,9 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import { FolderIcon, CloseIcon, Button } from "./shared";
+import { SearchableRepoDropdown } from "./SearchableRepoDropdown";
+import { scanDirectoryForGitRepos, listSubdirectories } from "../git";
+import { getMaxDiscoveredReposCap } from "../utils";
+import type { DiscoveredRepo } from "../types";
 
 interface DiskVolume {
   driveLetter: string;
@@ -54,57 +58,50 @@ export function DirectoryPickerModal(props: {
   const [recentPaths, setRecentPaths] = createSignal<string[]>([]);
   const [favouritePaths, setFavouritePaths] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const [discoveredRepos, setDiscoveredRepos] = createSignal<DiscoveredRepo[]>([]);
+  const [scanningRepos, setScanningRepos] = createSignal(false);
 
   async function loadDrivesAndQuickAccess() {
-    if (!window.TauriCore?.invoke) return;
-
-    // Try Windows disk topology first
-    try {
-      const topo = await window.TauriCore.invoke<PhysicalDisk[]>("get_disk_topology");
-      if (Array.isArray(topo) && topo.length > 0) {
-        const vols: DiskVolume[] = [];
-        topo.forEach((d) => {
-          if (d.volumes) vols.push(...d.volumes);
-        });
-        setDrives(vols.map((volume) => ({ ...volume, driveLetter: driveRoot(volume.driveLetter) })));
-        if (!currentPath() && vols.length > 0) {
-          loadDir(driveRoot(vols[0].driveLetter || "C:\\"));
+    if (typeof window !== "undefined" && window.TauriCore?.invoke) {
+      // Try Windows disk topology first
+      try {
+        const topo = await window.TauriCore.invoke<PhysicalDisk[]>("get_disk_topology");
+        if (Array.isArray(topo) && topo.length > 0) {
+          const vols: DiskVolume[] = [];
+          topo.forEach((d) => {
+            if (d.volumes) vols.push(...d.volumes);
+          });
+          setDrives(vols.map((volume) => ({ ...volume, driveLetter: driveRoot(volume.driveLetter) })));
+          if (!currentPath() && vols.length > 0) {
+            loadDir(driveRoot(vols[0].driveLetter || "C:\\"));
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
-    // Linux/macOS fallback: probe common mount points via list_directory
+    // Linux/macOS fallback: probe common mount points via listSubdirectories
     if (drives().length === 0) {
       try {
-        const isWin = navigator.platform.includes("Win");
-        if (!isWin && window.TauriCore?.invoke) {
-          const candidates = ["/home", "/mnt", "/media", "/run/media", "/Volumes", "/opt", "/data"];
+        const isWin = typeof navigator !== "undefined" && navigator.platform.includes("Win");
+        if (!isWin) {
+          const candidates = ["/home", "/mnt", "/media", "/run/media", "/Volumes", "/opt", "/data", "/"];
           const found: DiskVolume[] = [];
           for (const p of candidates) {
             try {
-              const res = await window.TauriCore.invoke<any[]>("list_directory", {
-                path: p,
-                sortKey: "name",
-                sortDirection: "ascending",
-              });
-              if (Array.isArray(res) && res.length > 0) {
-                for (const item of res) {
-                  if (item.is_dir || item.isDir) {
-                    const fullPath = item.path || `${p}/${item.name}`.replace(/\/+/g, "/");
-                    found.push({
-                      driveLetter: fullPath,
-                      volumeName: item.name,
-                      fileSystem: "",
-                      totalSpace: 0,
-                      freeSpace: 0,
-                    });
-                  }
-                }
+              const dirs = await listSubdirectories(p);
+              if (dirs.length > 0) {
+                found.push({
+                  driveLetter: p,
+                  volumeName: p === "/" ? "Root (/)" : p.replace(/^\//, ""),
+                  fileSystem: "",
+                  totalSpace: 0,
+                  freeSpace: 0,
+                });
               }
             } catch {}
           }
           if (found.length > 0) {
-        setDrives(found);
+            setDrives(found);
             if (!currentPath()) {
               const home = found.find((v) => v.driveLetter.startsWith("/home"));
               loadDir(home ? home.driveLetter : found[0].driveLetter);
@@ -115,24 +112,39 @@ export function DirectoryPickerModal(props: {
     }
 
     // Quick access (works cross-platform)
-    try {
-      const qa = await window.TauriCore.invoke<QuickAccessEntry[]>("get_quick_access");
-      if (Array.isArray(qa)) {
-        setQuickAccess(qa);
-        if (!currentPath() && qa.length > 0) {
-          loadDir(qa[0].path);
+    if (typeof window !== "undefined" && window.TauriCore?.invoke) {
+      try {
+        const qa = await window.TauriCore.invoke<QuickAccessEntry[]>("get_quick_access");
+        if (Array.isArray(qa)) {
+          setQuickAccess(qa);
+          if (!currentPath() && qa.length > 0) {
+            loadDir(qa[0].path);
+          }
         }
-      }
-    } catch {}
+      } catch {}
 
-    try {
-      const settings = await window.TauriCore.invoke<PickerSettings>("get_settings");
-      setRecentPaths(settings.recentPaths ?? []);
-      setFavouritePaths(settings.favouritePaths ?? []);
-    } catch {}
+      try {
+        const settings = await window.TauriCore.invoke<PickerSettings>("get_settings");
+        setRecentPaths(settings.recentPaths ?? []);
+        setFavouritePaths(settings.favouritePaths ?? []);
+      } catch {}
+    }
 
     if (!currentPath()) {
       loadDir("/");
+    }
+  }
+
+  async function triggerScanRepos(dirPath: string) {
+    if (!dirPath) return;
+    setScanningRepos(true);
+    try {
+      const found = await scanDirectoryForGitRepos(dirPath, getMaxDiscoveredReposCap());
+      setDiscoveredRepos(found);
+    } catch {
+      setDiscoveredRepos([]);
+    } finally {
+      setScanningRepos(false);
     }
   }
 
@@ -140,27 +152,12 @@ export function DirectoryPickerModal(props: {
     if (!dirPath) return;
     setLoading(true);
     setCurrentPath(dirPath);
+    triggerScanRepos(dirPath);
     try {
-      if (window.TauriCore?.invoke) {
-        const res = await window.TauriCore.invoke<DirListing | PickerEntry[]>("list_directory", {
-          path: dirPath,
-          sortKey: "name",
-          sortDirection: "ascending",
-        });
-        const listed = Array.isArray(res) ? res : res.entries;
-        if (Array.isArray(listed)) {
-          const dirs = listed
-            .filter((item) => item.is_dir || item.isDir)
-            .map((item) => ({
-              name: item.name,
-              is_dir: true,
-              path: item.path || `${dirPath}/${item.name}`.replace(/\/+/g, "/"),
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-          setItems(dirs);
-        }
-      }
+      const dirs = await listSubdirectories(dirPath);
+      setItems(dirs);
     } catch (err) {
+      console.warn("loadDir failed:", err);
       setItems([]);
     } finally {
       setLoading(false);
@@ -176,10 +173,37 @@ export function DirectoryPickerModal(props: {
 
   function handleNavigateUp() {
     const p = currentPath();
-    const parent = p.substring(0, Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")));
-    if (parent) loadDir(parent);
-    else if (p.includes(":") && !p.endsWith("\\")) loadDir(`${p.split(":")[0]}:\\`);
-    else if (p !== "/") loadDir("/");
+    if (!p || p === "/" || p === "\\") return;
+
+    const normalized = p.replace(/[/\\]+$/, "");
+    const idx = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+
+    if (idx < 0) return;
+
+    // Preserve Windows drive root ("C:\")
+    if (idx === 2 && normalized[1] === ":") {
+      loadDir(`${normalized.slice(0, 2)}\\`);
+      return;
+    }
+
+    const parent = normalized.slice(0, idx);
+    if (parent) {
+      loadDir(parent);
+    } else if (p.startsWith("/")) {
+      loadDir("/");
+    }
+  }
+
+  async function handleSystemPicker() {
+    if (window.TauriCore?.invoke) {
+      try {
+        const selected = await window.TauriCore.invoke<string | null>("pick_folder");
+        if (selected) {
+          props.onSelect(selected);
+          props.onClose();
+        }
+      } catch {}
+    }
   }
 
   function handleConfirm() {
@@ -374,6 +398,17 @@ export function DirectoryPickerModal(props: {
 
               {/* Items List */}
               <div style={{ flex: 1, "overflow-y": "auto", padding: "8px 12px" }}>
+                <Show when={discoveredRepos().length > 0 || scanningRepos()}>
+                  <SearchableRepoDropdown
+                    repos={discoveredRepos()}
+                    loading={scanningRepos()}
+                    maxCap={getMaxDiscoveredReposCap()}
+                    onSelectRepo={(repoPath) => {
+                      props.onSelect(repoPath);
+                      props.onClose();
+                    }}
+                  />
+                </Show>
                 <Show when={loading()}>
                   <div style={{ padding: "20px", "text-align": "center", color: "var(--text-secondary, #888)", "text-shadow": "var(--text-shadow)", "font-size": "13px" }}>
                     Loading directories...
@@ -424,6 +459,9 @@ export function DirectoryPickerModal(props: {
               Selected: {currentPath()}
             </span>
             <div style={{ display: "flex", gap: "8px" }}>
+              <Button onClick={handleSystemPicker} title="Open system native folder dialog">
+                System Dialog
+              </Button>
               <Button onClick={props.onClose}>Cancel</Button>
               <Button variant="primary" onClick={handleConfirm}>
                 Select Directory
