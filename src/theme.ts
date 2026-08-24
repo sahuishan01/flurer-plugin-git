@@ -158,39 +158,37 @@ function getSavedTheme(): ThemeId {
 
 export const [currentTheme, setCurrentTheme] = createRoot(() => createSignal<ThemeId>(getSavedTheme()));
 
-export function applyTheme(id: ThemeId) {
+export function getThemeStyles(id: ThemeId = currentTheme()): Record<string, string> {
   const theme = THEMES[id] || THEMES["minimal-dark"];
+  const c = theme.colors;
+  return {
+    "--bg-primary": c.bg,
+    "--panel-bg": c.panelBg,
+    "--panel-rgb": c.panelRgb,
+    "--card-bg": c.cardBg,
+    "--card-border": c.cardBorder,
+    "--text-primary": c.textPrimary,
+    "--text-secondary": c.textSecondary,
+    "--text-muted": c.textMuted,
+    "--border-color": c.border,
+    "--input-bg": c.inputBg,
+    "--accent-default": c.accent,
+    "--accent-bg": c.accentBg,
+    "--btn-primary-bg": c.btnPrimaryBg,
+    "--btn-primary-text": c.btnPrimaryText,
+    "--btn-secondary-bg": c.btnSecondaryBg,
+    "--btn-secondary-text": c.btnSecondaryText,
+    "--btn-danger-bg": c.btnDangerBg,
+    "--btn-danger-text": c.btnDangerText,
+    "--badge-bg": c.badgeBg,
+    "--badge-text": c.badgeText,
+    "--badge-border": c.badgeBorder,
+  };
+}
+
+export function applyTheme(id: ThemeId) {
   setCurrentTheme(id);
   try {
     localStorage.setItem(THEME_KEY, id);
   } catch {}
-
-  const root = document.documentElement;
-  if (!root) return;
-
-  const c = theme.colors;
-  root.style.setProperty("--bg-primary", c.bg);
-  root.style.setProperty("--panel-bg", c.panelBg);
-  root.style.setProperty("--panel-rgb", c.panelRgb);
-  root.style.setProperty("--card-bg", c.cardBg);
-  root.style.setProperty("--card-border", c.cardBorder);
-  root.style.setProperty("--text-primary", c.textPrimary);
-  root.style.setProperty("--text-secondary", c.textSecondary);
-  root.style.setProperty("--text-muted", c.textMuted);
-  root.style.setProperty("--border-color", c.border);
-  root.style.setProperty("--input-bg", c.inputBg);
-  root.style.setProperty("--accent-default", c.accent);
-  root.style.setProperty("--accent-bg", c.accentBg);
-  root.style.setProperty("--btn-primary-bg", c.btnPrimaryBg);
-  root.style.setProperty("--btn-primary-text", c.btnPrimaryText);
-  root.style.setProperty("--btn-secondary-bg", c.btnSecondaryBg);
-  root.style.setProperty("--btn-secondary-text", c.btnSecondaryText);
-  root.style.setProperty("--btn-danger-bg", c.btnDangerBg);
-  root.style.setProperty("--btn-danger-text", c.btnDangerText);
-  root.style.setProperty("--badge-bg", c.badgeBg);
-  root.style.setProperty("--badge-text", c.badgeText);
-  root.style.setProperty("--badge-border", c.badgeBorder);
 }
-
-// Apply initial saved theme on load
-applyTheme(getSavedTheme());

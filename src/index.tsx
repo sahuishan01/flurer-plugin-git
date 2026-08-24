@@ -44,6 +44,8 @@ const [globalTabs, setGlobalTabs] = createRoot(() => createSignal<OpenTab[]>(ini
 const [globalActiveTabId, setGlobalActiveTabId] = createRoot(() => createSignal<string | null>(initialTabState.activeId));
 const [globalShowDashManual, setGlobalShowDashManual] = createRoot(() => createSignal(false));
 
+import { currentTheme, getThemeStyles } from "./theme";
+
 function GitPanel(props: any) {
   const tabs = globalTabs;
   const activeTabId = globalActiveTabId;
@@ -130,7 +132,20 @@ function GitPanel(props: any) {
   }
 
   return (
-    <div style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", "box-sizing": "border-box", background: "transparent" }}>
+    <div
+      class="flurer-plugin-git-root"
+      style={{
+        ...getThemeStyles(currentTheme()),
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        "flex-direction": "column",
+        overflow: "hidden",
+        "box-sizing": "border-box",
+        background: "var(--bg-primary, #0b0f19)",
+        color: "var(--text-primary, #f8fafc)",
+      }}
+    >
       {/* Tab bar — always visible when there are open repos */}
       <Show when={tabs().length > 0}>
         <div style={{ display: "flex", gap: 0, "border-bottom": "1px solid var(--border-strong, rgba(255, 255, 255, 0.08))", "flex-shrink": 0, "align-items": "stretch", overflow: "auto", background: "rgba(var(--panel-rgb, 10, 14, 23), 0.35)", "backdrop-filter": "blur(12px)" }}>

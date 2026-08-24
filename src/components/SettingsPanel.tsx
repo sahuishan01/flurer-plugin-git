@@ -1,5 +1,5 @@
 import { createSignal, For } from "solid-js";
-import { currentTheme, applyTheme, THEMES, type ThemeId } from "../theme";
+import { currentTheme, applyTheme, getThemeStyles, THEMES, type ThemeId } from "../theme";
 import {
   setSurfaceOpacity, getSurfaceOpacity,
   setSurfaceBlur, getSurfaceBlur,
@@ -179,7 +179,18 @@ export function SettingsPanel(props: any) {
   }
 
   return (
-    <div style={S.section}>
+    <div
+      class="flurer-plugin-git-root"
+      style={{
+        ...getThemeStyles(currentTheme()),
+        ...S.section,
+        height: "100%",
+        overflow: "auto",
+        "box-sizing": "border-box",
+        background: "var(--bg-primary, #0b0f19)",
+        color: "var(--text-primary, #f8fafc)",
+      }}
+    >
       <div style={{ ...S.header, "margin-top": "0" }}>
         🌐 Graph Navigation Sensitivity
       </div>
