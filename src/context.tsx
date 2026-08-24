@@ -5,6 +5,7 @@ import {
 } from "./utils";
 import { loadGraphCache, saveGraphCache } from "./cache";
 import * as git from "./git";
+import { currentTheme, applyTheme, type ThemeId } from "./theme";
 import type {
   GitView, GitStatus, GitChange, GitCommit, GitBranch, GitGraphEntry,
   GitDiff, DiffHunk, GitStashEntry, GitWorktree, GitCommitDetail, BusyTask,
@@ -14,6 +15,8 @@ import type {
 } from "./types";
 
 interface GitContextValue {
+  theme: Accessor<ThemeId>;
+  setTheme: (id: ThemeId) => void;
   activeView: Accessor<GitView>;
   switchView: (view: GitView) => void;
 
@@ -1633,6 +1636,7 @@ function toggleBranchSelection(branchName: string) {
     commandLogs, consoleOpen, toggleConsole, clearCommandLogs,
     showCommitDetail, closeCommitDetail,
     isDubiousOwnership, trustRepository,
+    theme: currentTheme, setTheme: applyTheme,
     shortcutsOpen, openShortcuts, closeShortcuts, toggleShortcuts,
   };
 

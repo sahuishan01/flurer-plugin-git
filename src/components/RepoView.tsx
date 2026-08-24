@@ -228,6 +228,17 @@ export function RepoView(props: RepoViewProps) {
                 <Button variant="secondary" size="sm" onClick={ctx.openRemotesModal} disabled={ctx.loading()} title="Manage Remotes & Author Profile">
                   🌐 Remotes
                 </Button>
+                <select
+                  value={ctx.theme()}
+                  onChange={(e) => ctx.setTheme(e.currentTarget.value as any)}
+                  style={{ ...S.select, padding: "4px 8px", "font-size": "11.5px", background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+                  title="Switch visual theme"
+                >
+                  <option value="minimal-dark">🎨 Minimal Dark</option>
+                  <option value="midnight-oled">🖤 Midnight OLED</option>
+                  <option value="grounded-warmth">🪴 Grounded Warmth</option>
+                  <option value="nord-slate">❄️ Nord Slate</option>
+                </select>
                 <Button variant="secondary" size="sm" onClick={ctx.refresh} disabled={ctx.loading()} title="Refresh git status">
                   <RefreshIcon size={13} />
                 </Button>

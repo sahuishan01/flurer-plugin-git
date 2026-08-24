@@ -404,13 +404,13 @@ export function statusToLabel(status: string): string {
 
 export function statusColor(status: string): string {
   switch (status) {
-    case "M": return "#f59e0b";
-    case "A": return "#4ade80";
-    case "D": return "#f87171";
-    case "R": return "#c084fc";
-    case "C": return "#60a5fa";
-    case "??": return "#f87171";
-    default: return "var(--text-muted, #888)";
+    case "M": return "#cbd5e1";
+    case "A": return "#e2e8f0";
+    case "D": return "#a1a1aa";
+    case "R": return "#cbd5e1";
+    case "C": return "#cbd5e1";
+    case "??": return "#94a3b8";
+    default: return "var(--text-muted, #94a3b8)";
   }
 }
 

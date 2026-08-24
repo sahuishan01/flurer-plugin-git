@@ -1,4 +1,5 @@
-import { createSignal } from "solid-js";
+import { createSignal, For } from "solid-js";
+import { currentTheme, applyTheme, THEMES, type ThemeId } from "../theme";
 import {
   setSurfaceOpacity, getSurfaceOpacity,
   setSurfaceBlur, getSurfaceBlur,
@@ -297,7 +298,35 @@ export function SettingsPanel(props: any) {
       </div>
 
       <div style={S.header}>
-        🎨 Theme & Translucent Surface Appearance
+        🎨 Plugin Visual Theme
+      </div>
+      <label style={S.label}>Active Theme</label>
+      <div style={S.row}>
+        <select
+          value={currentTheme()}
+          onChange={(e) => applyTheme(e.currentTarget.value as ThemeId)}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            "border-radius": "8px",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            background: "rgba(0, 0, 0, 0.4)",
+            color: "var(--text-primary, #f8fafc)",
+            "font-size": "13px",
+            cursor: "pointer",
+          }}
+        >
+          <For each={Object.values(THEMES)}>
+            {(t) => <option value={t.id}>{t.name} — {t.description}</option>}
+          </For>
+        </select>
+      </div>
+      <div style={S.hint}>
+        Simplifies UI chrome into clean monochrome tones, isolating solid colors exclusively to the commit graph.
+      </div>
+
+      <div style={S.header}>
+        🎨 Translucent Surface & Background Appearance
       </div>
 
       {/* Live Interactive Preview Card */}
