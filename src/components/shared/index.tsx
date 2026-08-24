@@ -692,6 +692,7 @@ const menuBtnStyle = {
 export function BranchMultiSelect() {
   const ctx = useGit();
   const [open, setOpen] = createSignal(false);
+  const [coords, setCoords] = createSignal<{ top: number; right: number } | null>(null);
 
   const labelText = createMemo(() => {
     if (ctx.isAllBranchesSelected()) return "Branches: All";
@@ -699,6 +700,19 @@ export function BranchMultiSelect() {
     if (selected.length === 1) return `Branch: ${selected[0]}`;
     return `Branches: (${selected.length}) ${selected.join(", ")}`;
   });
+
+  function toggleOpen(e: MouseEvent) {
+    if (!open()) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setCoords({
+        top: rect.bottom + 6,
+        right: Math.max(12, window.innerWidth - rect.right),
+      });
+      setOpen(true);
+    } else {
+      setOpen(false);
+    }
+  }
 
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
@@ -719,7 +733,7 @@ export function BranchMultiSelect() {
           transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
           "backdrop-filter": "blur(8px)",
         }}
-        onClick={() => setOpen(!open())}
+        onClick={toggleOpen}
         title="Filter graph & history by specific branches"
       >
         <BranchIcon size={14} />
@@ -732,28 +746,28 @@ export function BranchMultiSelect() {
       <Show when={open()}>
         {/* Backdrop overlay for closing dropdown */}
         <div
-          style={{ position: "fixed", inset: 0, "z-index": 99990 }}
+          style={{ position: "fixed", inset: 0, "z-index": 100090 }}
           onClick={() => setOpen(false)}
         />
 
-        {/* Dropdown Menu */}
+        {/* Dropdown Menu — top-level fixed position */}
         <div
           style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            background: "rgba(15, 23, 42, 0.94)",
-            border: "1px solid rgba(255, 255, 255, 0.14)",
+            position: "fixed",
+            top: `${coords()?.top ?? 60}px`,
+            right: `${coords()?.right ?? 16}px`,
+            background: "var(--panel-bg, #0f172a)",
+            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.18))",
             "border-radius": "10px",
             padding: "8px",
-            "box-shadow": "0 16px 36px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)",
+            "box-shadow": "0 20px 48px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
             "backdrop-filter": "blur(16px)",
             "-webkit-backdrop-filter": "blur(16px)",
             "min-width": "230px",
-            "max-width": "320px",
-            "max-height": "340px",
+            "max-width": "340px",
+            "max-height": "380px",
             "overflow-y": "auto",
-            "z-index": 99991,
+            "z-index": 100095,
             display: "flex",
             "flex-direction": "column",
             gap: "4px",
