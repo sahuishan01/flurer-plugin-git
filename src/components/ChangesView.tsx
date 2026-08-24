@@ -58,7 +58,7 @@ export function ChangesView() {
       setInspectingFile(null);
     } else {
       setInspectingFile({ path, staged });
-      ctx.loadDiff(path, staged ? "staged" : "unstaged");
+      ctx.loadDiff(path, staged ? "staged" : "unstaged", undefined, false);
     }
   }
 

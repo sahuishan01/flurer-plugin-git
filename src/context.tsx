@@ -151,7 +151,7 @@ interface GitContextValue {
   loadStashDiff: (index: number) => Promise<GitDiff | null>;
   addWorktree: (path: string, branch?: string) => Promise<void>;
   removeWorktree: (path: string) => Promise<void>;
-  loadDiff: (filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string) => Promise<void>;
+  loadDiff: (filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string, switchTab?: boolean) => Promise<void>;
   loadDiffCompare: (fromHash: string, toHash: string, filePath?: string) => Promise<void>;
   loadDiffWithCurrent: (commitHash: string, filePath?: string) => Promise<void>;
   loadDiffWithWorkingTree: (commitHash: string, filePath?: string) => Promise<void>;
@@ -883,7 +883,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
 
   let diffReqId = 0;
 
-  async function loadDiff(filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string) {
+  async function loadDiff(filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string, switchTab: boolean = true) {
     const myReq = ++diffReqId;
     setSelectedDiffFile(filePath === "." ? null : filePath);
     setDiffMode(mode);
@@ -910,7 +910,7 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
         }
         if (myReq !== diffReqId) return;
         setDiffResult(diff);
-        if (activeView() !== "diff") setActiveView("diff");
+        if (switchTab && activeView() !== "diff") setActiveView("diff");
       } catch (err) {
         if (myReq !== diffReqId) return;
         showToast(`Failed to load diff: ${err}`, "error");

@@ -403,21 +403,33 @@ function parseDiff(output: string): GitDiff {
     const rawLine = lines[i];
 
     if (rawLine.startsWith("diff --git ") || rawLine.startsWith("diff --no-index ")) {
-      const prefix = rawLine.startsWith("diff --git ") ? "diff --git " : "diff --no-index ";
+      const isNoIndex = rawLine.startsWith("diff --no-index ");
+      const prefix = isNoIndex ? "diff --no-index " : "diff --git ";
       const cleanLine = rawLine.substring(prefix.length).trim();
+
       let oldPath = "";
       let newPath = "";
-      const match = cleanLine.match(/^(?:"?a\/(.*?)"?)\s+(?:"?b\/(.*?)"?)$/);
-      if (match) {
-        oldPath = match[1].replace(/^"|"$/g, "");
-        newPath = match[2].replace(/^"|"$/g, "");
+
+      // Match quoted format: "a/path with space" "b/path with space"
+      const quotedMatch = cleanLine.match(/^(?:"?a\/(.*?)"?)\s+(?:"?b\/(.*?)"?)$/);
+      if (quotedMatch && quotedMatch[1] && quotedMatch[2]) {
+        oldPath = quotedMatch[1].replace(/^"|"$/g, "").replace(/\\/g, "/");
+        newPath = quotedMatch[2].replace(/^"|"$/g, "").replace(/\\/g, "/");
       } else {
-        const parts = cleanLine.split(" ");
-        if (parts.length >= 2) {
-          oldPath = parts[0].replace(/^"?a\//, "").replace(/^"|"$/g, "");
-          newPath = parts[1].replace(/^"?b\//, "").replace(/^"|"$/g, "");
+        // Unquoted format: a/path/file.txt b/path/file.txt
+        const idxB = cleanLine.indexOf(" b/");
+        if (idxB !== -1) {
+          oldPath = cleanLine.substring(0, idxB).replace(/^a\//, "").replace(/^"|"$/g, "").replace(/\\/g, "/");
+          newPath = cleanLine.substring(idxB + 3).replace(/^"|"$/g, "").replace(/\\/g, "/");
+        } else {
+          const parts = cleanLine.split(/\s+/);
+          if (parts.length >= 2) {
+            oldPath = parts[0].replace(/^a\//, "").replace(/^"|"$/g, "").replace(/\\/g, "/");
+            newPath = parts[parts.length - 1].replace(/^b\//, "").replace(/^"|"$/g, "").replace(/\\/g, "/");
+          }
         }
       }
+
       currentFile = { oldPath, newPath, hunks: [], binary: false };
       files.push(currentFile);
       currentHunk = null;
@@ -447,22 +459,22 @@ function parseDiff(output: string): GitDiff {
       continue;
     }
 
-if (currentHunk) {
-        if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ") || rawLine.startsWith("new file mode") || rawLine.startsWith("new file") || rawLine.startsWith("deleted file")) {
-          continue;
-        }
-        // "\ No newline at end of file" marker — annotation, not a code line
-        if (rawLine.startsWith("\\")) {
-          continue;
-        }
-        if (rawLine.startsWith("+")) {
-          currentHunk.lines.push({ origin: "+", content: rawLine.substring(1) });
-        } else if (rawLine.startsWith("-")) {
-          currentHunk.lines.push({ origin: "-", content: rawLine.substring(1) });
-        } else if (rawLine.startsWith(" ")) {
-          currentHunk.lines.push({ origin: " ", content: rawLine.substring(1) });
-        }
+    if (currentHunk) {
+      if (rawLine.startsWith("--- ") || rawLine.startsWith("+++ ") || rawLine.startsWith("index ") || rawLine.startsWith("mode ") || rawLine.startsWith("new file mode") || rawLine.startsWith("new file") || rawLine.startsWith("deleted file")) {
+        continue;
       }
+      // "\ No newline at end of file" marker — annotation, not a code line
+      if (rawLine.startsWith("\\")) {
+        continue;
+      }
+      if (rawLine.startsWith("+")) {
+        currentHunk.lines.push({ origin: "+", content: rawLine.substring(1) });
+      } else if (rawLine.startsWith("-")) {
+        currentHunk.lines.push({ origin: "-", content: rawLine.substring(1) });
+      } else if (rawLine.startsWith(" ")) {
+        currentHunk.lines.push({ origin: " ", content: rawLine.substring(1) });
+      }
+    }
   }
 
   return { files, hunks: allHunks };
@@ -479,30 +491,46 @@ export async function gitUntrackedFiles(repoPath: string): Promise<string[]> {
 
 export async function gitDiff(repoPath: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
+  const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
     const args = ["diff"];
-    if (filePath && filePath !== ".") args.push("--", filePath);
+    if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
     let out = await execGit(repoPath, ...args);
 
     // Fallback 1: If empty and specific file requested, check staged diff
-    if ((!out || !out.trim()) && filePath && filePath !== ".") {
+    if ((!out || !out.trim()) && cleanPath && cleanPath !== ".") {
       try {
-        const stagedArgs = ["diff", "--cached", "--", filePath];
+        const stagedArgs = ["diff", "--cached", "--", cleanPath];
         out = await execGit(repoPath, ...stagedArgs);
       } catch {}
     }
 
     // Fallback 2: If still empty and specific file requested, check untracked file via --no-index
-    if ((!out || !out.trim()) && filePath && filePath !== ".") {
+    if ((!out || !out.trim()) && cleanPath && cleanPath !== ".") {
       try {
-        out = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", filePath);
+        out = await execGit(repoPath, "diff", "--no-index", "--", "/dev/null", cleanPath);
       } catch {}
     }
+
+    // Fallback 3: If still empty and specific file is untracked/new, read content via git show / fs
+    if ((!out || !out.trim()) && cleanPath && cleanPath !== ".") {
+      try {
+        const fileContent = await execGit(repoPath, "show", `:${cleanPath}`).catch(() => "");
+        if (fileContent) {
+          const lines = fileContent.split("\n");
+          return {
+            files: [{ oldPath: cleanPath, newPath: cleanPath, hunks: [{ old_start: 1, old_lines: 0, new_start: 1, new_lines: lines.length, lines: lines.map((l) => ({ origin: "+", content: l })) }], binary: false }],
+            hunks: [{ old_start: 1, old_lines: 0, new_start: 1, new_lines: lines.length, lines: lines.map((l) => ({ origin: "+", content: l })) }],
+          };
+        }
+      } catch {}
+    }
+
     const parsed = parseDiff(out);
 
     // "All changes" mode: git diff never includes untracked files, so append
     // their /dev/null diffs so they show up in the diff section too
-    if (!filePath || filePath === ".") {
+    if (!cleanPath || cleanPath === ".") {
       try {
         const untracked = await gitUntrackedFiles(repoPath);
         for (const u of untracked) {
@@ -521,66 +549,70 @@ export async function gitDiff(repoPath: string, filePath: string = "."): Promise
     }
     return parsed;
   }
-  return invoke<GitDiff>("git_diff", { repoPath, filePath });
+  return invoke<GitDiff>("git_diff", { repoPath, filePath: cleanPath });
 }
 
 export async function gitDiffStaged(repoPath: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
+  const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
     const args = ["diff", "--cached"];
-    if (filePath && filePath !== ".") args.push("--", filePath);
+    if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
     let out = await execGit(repoPath, ...args);
 
     // Fallback: If empty and specific file requested, check unstaged diff
-    if ((!out || !out.trim()) && filePath && filePath !== ".") {
+    if ((!out || !out.trim()) && cleanPath && cleanPath !== ".") {
       try {
-        const unstagedArgs = ["diff", "--", filePath];
+        const unstagedArgs = ["diff", "--", cleanPath];
         out = await execGit(repoPath, ...unstagedArgs);
       } catch {}
     }
     return parseDiff(out);
   }
-  return invoke<GitDiff>("git_diff_staged", { repoPath, filePath });
+  return invoke<GitDiff>("git_diff_staged", { repoPath, filePath: cleanPath });
 }
 
 export async function gitDiffCommit(repoPath: string, commitHash: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
+  const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
     let out = "";
     try {
       const args = ["show", "-m", "--patch", "--format=", commitHash];
-      if (filePath && filePath !== ".") args.push("--", filePath);
+      if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
       out = await execGit(repoPath, ...args);
     } catch {
       const args = ["diff", `${commitHash}~1`, commitHash];
-      if (filePath && filePath !== ".") args.push("--", filePath);
+      if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
       out = await execGit(repoPath, ...args);
     }
     return parseDiff(out);
   }
-  return invoke<GitDiff>("git_diff_commit", { repoPath, commitHash, filePath });
+  return invoke<GitDiff>("git_diff_commit", { repoPath, commitHash, filePath: cleanPath });
 }
 
 export async function gitDiffBetween(repoPath: string, fromHash: string, toHash: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
+  const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
     const args = ["diff", fromHash, toHash];
-    if (filePath && filePath !== ".") args.push("--", filePath);
+    if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
     const out = await execGit(repoPath, ...args);
     return parseDiff(out);
   }
-  return invoke<GitDiff>("git_diff_between", { repoPath, fromHash, toHash, filePath });
+  return invoke<GitDiff>("git_diff_between", { repoPath, fromHash, toHash, filePath: cleanPath });
 }
 
 export async function gitDiffCommitWithWorkingTree(repoPath: string, commitHash: string, filePath: string = "."): Promise<GitDiff> {
   const Command = getShell();
+  const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
     const args = ["diff", commitHash];
-    if (filePath && filePath !== ".") args.push("--", filePath);
+    if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
     const out = await execGit(repoPath, ...args);
     return parseDiff(out);
   }
-  return invoke<GitDiff>("git_diff_between", { repoPath, fromHash: commitHash, toHash: "", filePath });
+  return invoke<GitDiff>("git_diff_between", { repoPath, fromHash: commitHash, toHash: "", filePath: cleanPath });
 }
 
 // ---- Graph ----

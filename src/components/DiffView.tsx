@@ -81,7 +81,7 @@ export function DiffView() {
   const normSelectedFile = createMemo(() => {
     const f = ctx.selectedDiffFile();
     if (!f) return null;
-    return f.replace(/^\.\//, "");
+    return f.replace(/^\.\//, "").replace(/\\/g, "/");
   });
 
   const allFiles = createMemo(() => {
@@ -106,11 +106,18 @@ export function DiffView() {
   const filesToDisplay = createMemo(() => {
     const files = allFiles();
     const sel = normSelectedFile();
-    if (sel && files.length > 1) {
+    if (sel && files.length > 0) {
       const match = files.find((f) => {
-        const np = (f.newPath || "").replace(/^\.\//, "");
-        const op = (f.oldPath || "").replace(/^\.\//, "");
-        return np === sel || op === sel || np.endsWith("/" + sel) || op.endsWith("/" + sel);
+        const np = (f.newPath || "").replace(/^\.\//, "").replace(/\\/g, "/");
+        const op = (f.oldPath || "").replace(/^\.\//, "").replace(/\\/g, "/");
+        return (
+          np === sel ||
+          op === sel ||
+          np.endsWith("/" + sel) ||
+          op.endsWith("/" + sel) ||
+          sel.endsWith("/" + np) ||
+          sel.endsWith("/" + op)
+        );
       });
       if (match) return [match];
     }
