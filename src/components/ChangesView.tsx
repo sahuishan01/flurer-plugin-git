@@ -3,7 +3,6 @@ import { useGit } from "../context";
 import { statusColor } from "../utils";
 import { Badge, Button, Card, EmptyState } from "./shared";
 import { S } from "../styles";
-import type { GitChange, DiffHunk } from "../types";
 
 const CONVENTIONAL_TYPES = [
   { prefix: "feat:", label: "feat", color: "#38bdf8" },
@@ -19,7 +18,6 @@ export function ChangesView() {
   const ctx = useGit();
   const [commitMsg, setCommitMsg] = createSignal("");
   const [searchQuery, setSearchQuery] = createSignal("");
-  const [inspectingFile, setInspectingFile] = createSignal<{ path: string; staged: boolean } | null>(null);
   const [discardTarget, setDiscardTarget] = createSignal<{ path: string; isUntracked: boolean } | null>(null);
 
   const allChanges = createMemo(() => ctx.status()?.changes ?? []);
@@ -50,16 +48,10 @@ export function ChangesView() {
       await ctx.commit(msg);
     }
     setCommitMsg("");
-    setInspectingFile(null);
   }
 
   function handleFileSelect(path: string, staged: boolean) {
-    if (inspectingFile()?.path === path && inspectingFile()?.staged === staged) {
-      setInspectingFile(null);
-    } else {
-      setInspectingFile({ path, staged });
-      ctx.loadDiff(path, staged ? "staged" : "unstaged", undefined, false);
-    }
+    ctx.loadDiff(path, staged ? "staged" : "unstaged");
   }
 
   function handleApplyPrefix(prefix: string) {
@@ -110,12 +102,12 @@ export function ChangesView() {
 
   return (
     <div style={{ display: "flex", height: "100%", width: "100%", overflow: "hidden", "box-sizing": "border-box" }}>
-      {/* Left List of Changes */}
+      {/* Main List of Changes Workspace */}
       <div
         style={{
-          flex: inspectingFile() ? "1" : "1",
-          "max-width": inspectingFile() ? "480px" : "1000px",
-          margin: inspectingFile() ? "0" : "0 auto",
+          flex: 1,
+          "max-width": "1000px",
+          margin: "0 auto",
           width: "100%",
           padding: "16px 20px",
           overflow: "auto",
@@ -123,7 +115,6 @@ export function ChangesView() {
           "flex-direction": "column",
           gap: "14px",
           "box-sizing": "border-box",
-          "border-right": inspectingFile() ? "1px solid rgba(255, 255, 255, 0.08)" : "none",
         }}
       >
         {/* Search & Filter Bar */}
@@ -167,44 +158,41 @@ export function ChangesView() {
               </div>
               <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
                 <For each={conflictedFiles()}>
-                  {(f) => {
-                    const isInspecting = () => inspectingFile()?.path === f.path;
-                    return (
-                      <div style={{ ...S.fileRow, background: isInspecting() ? "rgba(239, 68, 68, 0.15)" : "rgba(255, 255, 255, 0.02)", border: isInspecting() ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid transparent", "border-radius": "8px", padding: "8px 12px" }}>
-                        <span
-                          style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
-                          onClick={() => handleFileSelect(f.path, false)}
-                          title="Click to inspect conflict diff"
-                        >
-                          <span style={{ "font-size": "10px", "font-weight": 700, padding: "2px 6px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.25)", color: "#fca5a5", "font-family": "Space Mono, monospace", "margin-right": "8px" }}>
-                            CONFLICT
-                          </span>
-                          <span style={{ "font-size": "12.5px", "font-weight": 700, color: "#fca5a5" }}>{f.path}</span>
+                  {(f) => (
+                    <div style={{ ...S.fileRow, background: "rgba(255, 255, 255, 0.02)", border: "1px solid transparent", "border-radius": "8px", padding: "8px 12px" }}>
+                      <span
+                        style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
+                        onClick={() => handleFileSelect(f.path, false)}
+                        title="Click to view diff in Diff tab"
+                      >
+                        <span style={{ "font-size": "10px", "font-weight": 700, padding: "2px 6px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.25)", color: "#fca5a5", "font-family": "Space Mono, monospace", "margin-right": "8px" }}>
+                          CONFLICT
                         </span>
-                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                          <button
-                            type="button"
-                            onClick={() => ctx.resolveConflict(f.path, "ours")}
-                            style={{ padding: "4px 8px", "font-size": "11px", "border-radius": "4px", background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "#38bdf8", cursor: "pointer", "font-weight": 600 }}
-                            title="Keep Current (Ours / HEAD)"
-                          >
-                            Accept Ours
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => ctx.resolveConflict(f.path, "theirs")}
-                            style={{ padding: "4px 8px", "font-size": "11px", "border-radius": "4px", background: "rgba(192, 132, 252, 0.15)", border: "1px solid rgba(192, 132, 252, 0.3)", color: "#c084fc", cursor: "pointer", "font-weight": 600 }}
-                            title="Keep Incoming (Theirs / Remote)"
-                          >
-                            Accept Theirs
-                          </button>
-                          <Button size="sm" onClick={() => ctx.resolveConflict(f.path, "mark")}>
-                            ✓ Resolved
-                          </Button>
-                        </div>
+                        <span style={{ "font-size": "12.5px", "font-weight": 700, color: "#fca5a5" }}>{f.path}</span>
+                      </span>
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <button
+                          type="button"
+                          onClick={() => ctx.resolveConflict(f.path, "ours")}
+                          style={{ padding: "4px 8px", "font-size": "11px", "border-radius": "4px", background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "#38bdf8", cursor: "pointer", "font-weight": 600 }}
+                          title="Keep Current (Ours / HEAD)"
+                        >
+                          Accept Ours
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ctx.resolveConflict(f.path, "theirs")}
+                          style={{ padding: "4px 8px", "font-size": "11px", "border-radius": "4px", background: "rgba(192, 132, 252, 0.15)", border: "1px solid rgba(192, 132, 252, 0.3)", color: "#c084fc", cursor: "pointer", "font-weight": 600 }}
+                          title="Keep Incoming (Theirs / Remote)"
+                        >
+                          Accept Theirs
+                        </button>
+                        <Button size="sm" onClick={() => ctx.resolveConflict(f.path, "mark")}>
+                          ✓ Resolved
+                        </Button>
                       </div>
-                    );
-                  }}
+                    </div>
+                  )}
                 </For>
               </div>
             </Card>
@@ -222,50 +210,47 @@ export function ChangesView() {
               </div>
               <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
                 <For each={stagedFiles()}>
-                  {(f) => {
-                    const isInspecting = () => inspectingFile()?.path === f.path && inspectingFile()?.staged === true;
-                    return (
-                      <div
-                        style={{
-                          ...S.fileRow,
-                          background: isInspecting() ? "rgba(56, 189, 248, 0.14)" : "rgba(255, 255, 255, 0.02)",
-                          border: isInspecting() ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid transparent",
-                          "border-radius": "8px",
-                          padding: "6px 10px",
-                          margin: "2px 0",
-                          transition: "all 0.15s ease",
-                        }}
+                  {(f) => (
+                    <div
+                      style={{
+                        ...S.fileRow,
+                        background: "rgba(255, 255, 255, 0.02)",
+                        border: "1px solid transparent",
+                        "border-radius": "8px",
+                        padding: "6px 10px",
+                        margin: "2px 0",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <span
+                        style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
+                        onClick={() => handleFileSelect(f.path, true)}
+                        title="Click to view diff in Diff tab"
                       >
-                        <span
-                          style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
-                          onClick={() => handleFileSelect(f.path, true)}
-                          title="Click to preview diff"
+                        {renderStatusBadge(f.status)}
+                        <span style={{ "font-size": "12.5px", "font-weight": 500 }}>{f.path}</span>
+                      </span>
+                      <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                        <button
+                          type="button"
+                          onClick={() => ctx.openFileLog(f.path)}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="View File History"
                         >
-                          {renderStatusBadge(f.status)}
-                          <span style={{ "font-size": "12.5px", "font-weight": isInspecting() ? 700 : 500 }}>{f.path}</span>
-                        </span>
-                        <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
-                          <button
-                            type="button"
-                            onClick={() => ctx.openFileLog(f.path)}
-                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
-                            title="View File History"
-                          >
-                            📜
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => ctx.openBlame(f.path)}
-                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
-                            title="View Git Blame"
-                          >
-                            🔍
-                          </button>
-                          <Button size="sm" onClick={() => ctx.unstage(f.path)}>Unstage</Button>
-                        </div>
+                          📜
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ctx.openBlame(f.path)}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="View Git Blame"
+                        >
+                          🔍
+                        </button>
+                        <Button size="sm" onClick={() => ctx.unstage(f.path)}>Unstage</Button>
                       </div>
-                    );
-                  }}
+                    </div>
+                  )}
                 </For>
               </div>
             </Card>
@@ -283,58 +268,55 @@ export function ChangesView() {
               </div>
               <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
                 <For each={unstagedFiles()}>
-                  {(f) => {
-                    const isInspecting = () => inspectingFile()?.path === f.path && inspectingFile()?.staged === false;
-                    return (
-                      <div
-                        style={{
-                          ...S.fileRow,
-                          background: isInspecting() ? "rgba(56, 189, 248, 0.14)" : "rgba(255, 255, 255, 0.02)",
-                          border: isInspecting() ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid transparent",
-                          "border-radius": "8px",
-                          padding: "6px 10px",
-                          margin: "2px 0",
-                          transition: "all 0.15s ease",
-                        }}
+                  {(f) => (
+                    <div
+                      style={{
+                        ...S.fileRow,
+                        background: "rgba(255, 255, 255, 0.02)",
+                        border: "1px solid transparent",
+                        "border-radius": "8px",
+                        padding: "6px 10px",
+                        margin: "2px 0",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <span
+                        style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
+                        onClick={() => handleFileSelect(f.path, false)}
+                        title="Click to view diff in Diff tab"
                       >
-                        <span
-                          style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
-                          onClick={() => handleFileSelect(f.path, false)}
-                          title="Click to preview diff"
+                        {renderStatusBadge(f.status)}
+                        <span style={{ "font-size": "12.5px", "font-weight": 500 }}>{f.path}</span>
+                      </span>
+                      <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                        <button
+                          type="button"
+                          onClick={() => ctx.openFileLog(f.path)}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="View File History"
                         >
-                          {renderStatusBadge(f.status)}
-                          <span style={{ "font-size": "12.5px", "font-weight": isInspecting() ? 700 : 500 }}>{f.path}</span>
-                        </span>
-                        <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
-                          <button
-                            type="button"
-                            onClick={() => ctx.openFileLog(f.path)}
-                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
-                            title="View File History"
-                          >
-                            📜
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => ctx.openBlame(f.path)}
-                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
-                            title="View Git Blame"
-                          >
-                            🔍
-                          </button>
-                          <Button variant="primary" size="sm" onClick={() => ctx.stage(f.path)}>Stage</Button>
-                          <button
-                            type="button"
-                            onClick={() => setDiscardTarget({ path: f.path, isUntracked: false })}
-                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
-                            title="Discard file changes"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                          📜
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ctx.openBlame(f.path)}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="View Git Blame"
+                        >
+                          🔍
+                        </button>
+                        <Button variant="primary" size="sm" onClick={() => ctx.stage(f.path)}>Stage</Button>
+                        <button
+                          type="button"
+                          onClick={() => setDiscardTarget({ path: f.path, isUntracked: false })}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="Discard file changes"
+                        >
+                          🗑️
+                        </button>
                       </div>
-                    );
-                  }}
+                    </div>
+                  )}
                 </For>
               </div>
             </Card>
@@ -351,42 +333,39 @@ export function ChangesView() {
               </div>
               <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
                 <For each={untrackedFiles()}>
-                  {(f) => {
-                    const isInspecting = () => inspectingFile()?.path === f.path;
-                    return (
-                      <div
-                        style={{
-                          ...S.fileRow,
-                          background: isInspecting() ? "rgba(56, 189, 248, 0.14)" : "rgba(255, 255, 255, 0.02)",
-                          border: isInspecting() ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid transparent",
-                          "border-radius": "8px",
-                          padding: "6px 10px",
-                          margin: "2px 0",
-                          transition: "all 0.15s ease",
-                        }}
+                  {(f) => (
+                    <div
+                      style={{
+                        ...S.fileRow,
+                        background: "rgba(255, 255, 255, 0.02)",
+                        border: "1px solid transparent",
+                        "border-radius": "8px",
+                        padding: "6px 10px",
+                        margin: "2px 0",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <span
+                        style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
+                        onClick={() => handleFileSelect(f.path, false)}
+                        title="Click to view diff in Diff tab"
                       >
-                        <span
-                          style={{ cursor: "pointer", flex: 1, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", display: "flex", "align-items": "center" }}
-                          onClick={() => handleFileSelect(f.path, false)}
-                          title="Click to preview diff"
+                        {renderStatusBadge("?")}
+                        <span style={{ "font-size": "12.5px", "font-weight": 500 }}>{f.path}</span>
+                      </span>
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <Button variant="primary" size="sm" onClick={() => ctx.stage(f.path)}>Stage</Button>
+                        <button
+                          type="button"
+                          onClick={() => setDiscardTarget({ path: f.path, isUntracked: true })}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="Delete untracked file"
                         >
-                          {renderStatusBadge("?")}
-                          <span style={{ "font-size": "12.5px", "font-weight": isInspecting() ? 700 : 500 }}>{f.path}</span>
-                        </span>
-                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                          <Button variant="primary" size="sm" onClick={() => ctx.stage(f.path)}>Stage</Button>
-                          <button
-                            type="button"
-                            onClick={() => setDiscardTarget({ path: f.path, isUntracked: true })}
-                            style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
-                            title="Delete untracked file"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                          🗑️
+                        </button>
                       </div>
-                    );
-                  }}
+                    </div>
+                  )}
                 </For>
               </div>
             </Card>
@@ -474,114 +453,6 @@ export function ChangesView() {
         </Show>
       </div>
 
-      {/* Right Side Instant Split Diff Preview */}
-      <Show when={inspectingFile()}>
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            "flex-direction": "column",
-            background: "rgba(10, 14, 23, 0.6)",
-            overflow: "hidden",
-          }}
-        >
-          {/* Header */}
-          <div style={{ padding: "12px 16px", background: "rgba(15, 23, 42, 0.85)", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-            <div style={{ display: "flex", "align-items": "center", gap: "8px", overflow: "hidden" }}>
-              <span style={{ "font-size": "13px", "font-weight": 700, color: "#38bdf8", "font-family": "Space Mono, monospace", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
-                📄 {inspectingFile()!.path}
-              </span>
-              <span style={{ "font-size": "10.5px", padding: "2px 6px", "border-radius": "4px", background: inspectingFile()!.staged ? "rgba(52, 211, 153, 0.2)" : "rgba(96, 165, 250, 0.2)", color: inspectingFile()!.staged ? "#34d399" : "#60a5fa", "font-weight": 700, "font-family": "Space Mono, monospace" }}>
-                {inspectingFile()!.staged ? "STAGED" : "UNSTAGED"}
-              </span>
-            </div>
-
-            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-              <Button size="sm" onClick={() => ctx.switchView("diff")}>
-                Full Diff View ↗
-              </Button>
-              <button
-                type="button"
-                onClick={() => setInspectingFile(null)}
-                style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", "font-size": "14px", padding: "4px" }}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* Diff Content Preview */}
-          <div style={{ flex: 1, overflow: "auto", padding: "12px 16px" }}>
-            <Show when={ctx.diffResult()} fallback={<div style={{ padding: "24px", color: "rgba(255,255,255,0.4)" }}>Loading preview...</div>}>
-              <For each={ctx.diffResult()?.files || (ctx.diffResult()?.hunks ? [{ hunks: ctx.diffResult()!.hunks }] : [])}>
-                {(file) => (
-                  <div>
-                    <For each={file.hunks}>
-                      {(hunk) => {
-                        let oldLine = hunk.old_start;
-                        let newLine = hunk.new_start;
-                        const currentFile = inspectingFile();
-                        return (
-                          <div style={{ "margin-bottom": "12px", border: "1px solid rgba(255, 255, 255, 0.08)", "border-radius": "6px", overflow: "hidden" }}>
-                            <div style={{ ...S.diffHunkHeader, display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "6px" }}>
-                              <span>@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@</span>
-                              <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                                <Show when={currentFile && !currentFile.staged}>
-                                  <button
-                                    type="button"
-                                    onClick={() => ctx.stageHunk(currentFile!.path, hunk)}
-                                    style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(52, 211, 153, 0.2)", border: "1px solid rgba(52, 211, 153, 0.4)", color: "#34d399", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
-                                    title="Stage this specific hunk"
-                                  >
-                                    + Stage Hunk
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => ctx.discardHunk(currentFile!.path, hunk)}
-                                    style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(239, 68, 68, 0.2)", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#f87171", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
-                                    title="Discard this hunk"
-                                  >
-                                    🗑️ Discard Hunk
-                                  </button>
-                                </Show>
-                                <Show when={currentFile && currentFile.staged}>
-                                  <button
-                                    type="button"
-                                    onClick={() => ctx.unstageHunk(currentFile!.path, hunk)}
-                                    style={{ padding: "2px 8px", "font-size": "10.5px", "border-radius": "4px", background: "rgba(245, 158, 11, 0.2)", border: "1px solid rgba(245, 158, 11, 0.4)", color: "#fbbf24", cursor: "pointer", "font-weight": 600, "font-family": "Space Mono, monospace" }}
-                                    title="Unstage this specific hunk"
-                                  >
-                                    - Unstage Hunk
-                                  </button>
-                                </Show>
-                              </div>
-                            </div>
-                            <For each={hunk.lines}>
-                              {(line) => {
-                                const old = line.origin !== "+" ? oldLine++ : null;
-                                const newL = line.origin !== "-" ? newLine++ : null;
-                                const style = line.origin === "+" ? S.diffAdded : line.origin === "-" ? S.diffRemoved : S.diffContext;
-                                return (
-                                  <div style={{ ...S.diffLine, ...style, "font-size": "11.5px", "line-height": "19px" }}>
-                                    <span style={{ ...S.diffGutter, width: "32px" }}>{old ?? ""}</span>
-                                    <span style={{ ...S.diffGutter, width: "32px" }}>{newL ?? ""}</span>
-                                    <span style={{ flex: 1, "white-space": "pre-wrap", "word-break": "break-all" }}>{line.content}</span>
-                                  </div>
-                                );
-                              }}
-                            </For>
-                          </div>
-                        );
-                      }}
-                    </For>
-                  </div>
-                )}
-              </For>
-            </Show>
-          </div>
-        </div>
-      </Show>
-
       {/* Discard Confirmation Modal */}
       <Show when={discardTarget()}>
         <div
@@ -625,7 +496,6 @@ export function ChangesView() {
                 onClick={async () => {
                   const target = discardTarget()!;
                   setDiscardTarget(null);
-                  if (inspectingFile()?.path === target.path) setInspectingFile(null);
                   await ctx.discardFile(target.path, target.isUntracked);
                 }}
               >

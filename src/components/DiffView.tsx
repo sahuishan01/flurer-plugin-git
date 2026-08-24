@@ -295,6 +295,11 @@ export function DiffView() {
         {/* Top Diff Header & Controls */}
         <div style={{ "margin-bottom": "14px", display: "flex", "align-items": "center", "justify-content": "space-between", "flex-wrap": "wrap", gap: "12px" }}>
           <div style={{ display: "flex", "align-items": "center", gap: "10px", "flex-wrap": "wrap" }}>
+            <Show when={ctx.diffMode() === "staged" || ctx.diffMode() === "unstaged"}>
+              <Button size="sm" onClick={() => ctx.switchView("changes")} title="Return to Changes & Commit workspace">
+                📝 Back to Changes
+              </Button>
+            </Show>
             <Show when={ctx.selectedDiffFile()}>
               <Button size="sm" onClick={() => ctx.selectDiffFile(null)}>← All Files</Button>
             </Show>
