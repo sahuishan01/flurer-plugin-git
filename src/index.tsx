@@ -59,13 +59,24 @@ function GitPanel(props: any) {
     saveActiveTab(active ? active.path : null);
   });
 
-  // Automatically open or switch to the folder currently open in Flurer Explorer
+  // Automatically open directly if no repo is open, else ask using a popup modal
+  const [pendingExplorerPath, setPendingExplorerPath] = createSignal<string | null>(null);
   let lastHandledPath: string | null = null;
   createEffect(() => {
     const p = props.currentPath;
     if (!p || p === lastHandledPath) return;
     lastHandledPath = p;
-    openRepo(p);
+
+    const activeTab = tabs().find((t) => t.id === activeTabId());
+    if (activeTab && activeTab.path === p) return;
+
+    if (tabs().length === 0) {
+      // No repo is currently opened -> open folder directly
+      openRepo(p);
+    } else {
+      // One or more repos are already opened -> ask using a popup
+      setPendingExplorerPath(p);
+    }
   });
 
   // Apply saved plugin settings
@@ -233,6 +244,92 @@ function GitPanel(props: any) {
           </Show>
         )}
       </For>
+      {/* Explorer Prompt Modal — shown when repos are already open and user browsed a new folder in Explorer */}
+      <Show when={pendingExplorerPath()}>
+        {(path) => {
+          const isAlreadyTab = () => tabs().some((t) => t.path === path());
+          return (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.65)",
+                "backdrop-filter": "blur(12px)",
+                "-webkit-backdrop-filter": "blur(12px)",
+                display: "flex",
+                "align-items": "center",
+                "justify-content": "center",
+                "z-index": 100000,
+              }}
+              onClick={() => setPendingExplorerPath(null)}
+            >
+              <div
+                style={{
+                  ...getThemeStyles(currentTheme()),
+                  background: "var(--panel-bg, #0f172a)",
+                  border: "1px solid var(--border-color, rgba(255, 255, 255, 0.15))",
+                  "border-radius": "12px",
+                  "max-width": "420px",
+                  width: "90%",
+                  padding: "20px 24px",
+                  "box-shadow": "0 20px 50px rgba(0,0,0,0.75)",
+                  color: "var(--text-primary, #f8fafc)",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "8px" }}>
+                  <div style={{ "font-size": "15px", "font-weight": 700 }}>
+                    📁 Open Folder in Git Operations?
+                  </div>
+                </div>
+                <div style={{ "font-size": "13px", color: "var(--text-secondary, #94a3b8)", "line-height": "1.5", "margin-bottom": "12px" }}>
+                  Flurer Explorer is currently viewing:
+                </div>
+                <div style={{ background: "rgba(0,0,0,0.35)", padding: "8px 12px", "border-radius": "6px", border: "1px solid rgba(255,255,255,0.08)", "margin-bottom": "20px", "word-break": "break-all", "font-family": "Space Mono, monospace", "font-size": "12px", color: "var(--accent-default, #38bdf8)" }}>
+                  {path()}
+                </div>
+                <div style={{ display: "flex", gap: "10px", "justify-content": "flex-end", "flex-wrap": "wrap" }}>
+                  <button
+                    type="button"
+                    style={{
+                      padding: "6px 14px",
+                      "font-size": "12px",
+                      "font-weight": 600,
+                      "border-radius": "8px",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "var(--text-secondary, #cbd5e1)",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setPendingExplorerPath(null)}
+                  >
+                    ✕ Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      padding: "6px 14px",
+                      "font-size": "12px",
+                      "font-weight": 600,
+                      "border-radius": "8px",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      background: "var(--btn-primary-bg, #1e293b)",
+                      color: "var(--btn-primary-text, #f8fafc)",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      openRepo(path());
+                      setPendingExplorerPath(null);
+                    }}
+                  >
+                    {isAlreadyTab() ? "🔀 Switch to Tab" : "➕ Open in New Tab"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }}
+      </Show>
     </div>
   );
 }
