@@ -43,6 +43,23 @@ const initialTabState = initRestoredTabs();
 const [globalTabs, setGlobalTabs] = createRoot(() => createSignal<OpenTab[]>(initialTabState.tabs));
 const [globalActiveTabId, setGlobalActiveTabId] = createRoot(() => createSignal<string | null>(initialTabState.activeId));
 const [globalShowDashManual, setGlobalShowDashManual] = createRoot(() => createSignal(false));
+const [switchedFromExplorer, setSwitchedFromExplorer] = createRoot(() => createSignal(false));
+
+function wasExplorerActive(): boolean {
+  try {
+    const activeRail = document.querySelector(".view-rail-item.active");
+    if (activeRail) {
+      const title = activeRail.getAttribute("title") || activeRail.getAttribute("aria-label");
+      if (title === "Explorer") return true;
+      if (title && title !== "Explorer") return false;
+    }
+    const explorerPane = document.querySelector(".explorer-view");
+    if (explorerPane && window.getComputedStyle(explorerPane).display !== "none") {
+      return true;
+    }
+  } catch {}
+  return false;
+}
 
 import { currentTheme, getThemeStyles } from "./theme";
 
@@ -59,12 +76,23 @@ function GitPanel(props: any) {
     saveActiveTab(active ? active.path : null);
   });
 
-  // Automatically open directly if no repo is open, else ask using a popup modal
+  // Automatically open directly if no repo is open, else ask using a popup modal (ONLY when switching from Explorer view)
   const [pendingExplorerPath, setPendingExplorerPath] = createSignal<string | null>(null);
   let lastHandledPath: string | null = null;
   createEffect(() => {
     const p = props.currentPath;
-    if (!p || p === lastHandledPath) return;
+    const isActive = props.active;
+    if (!isActive || !p) return;
+
+    const fromExplorer = switchedFromExplorer();
+    if (!fromExplorer && tabs().length > 0) {
+      // Coming from another plugin or settings with open tabs -> preserve current tabs as-is!
+      return;
+    }
+
+    if (fromExplorer) setSwitchedFromExplorer(false);
+
+    if (p === lastHandledPath) return;
     lastHandledPath = p;
 
     const activeTab = tabs().find((t) => t.id === activeTabId());
@@ -74,7 +102,7 @@ function GitPanel(props: any) {
       // No repo is currently opened -> open folder directly
       openRepo(p);
     } else {
-      // One or more repos are already opened -> ask using a popup
+      // Repos are already opened -> ask using a popup modal
       setPendingExplorerPath(p);
     }
   });
@@ -350,7 +378,14 @@ window.registerPlugin({
       classList={{ active: props.active }}
       title="Git operations"
       aria-label="Git operations"
-      onClick={props.onClick}
+      onClick={() => {
+        if (wasExplorerActive()) {
+          setSwitchedFromExplorer(true);
+        } else {
+          setSwitchedFromExplorer(false);
+        }
+        props.onClick();
+      }}
     >
       <GitIcon size={19} />
     </button>
