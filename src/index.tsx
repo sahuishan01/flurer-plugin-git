@@ -85,12 +85,12 @@ function GitPanel(props: any) {
     if (!isActive || !p) return;
 
     const fromExplorer = switchedFromExplorer();
-    if (!fromExplorer && tabs().length > 0) {
-      // Coming from another plugin or settings with open tabs -> preserve current tabs as-is!
+    if (!fromExplorer) {
+      // Must ONLY process props.currentPath if the user explicitly switched from Explorer view
       return;
     }
 
-    if (fromExplorer) setSwitchedFromExplorer(false);
+    setSwitchedFromExplorer(false);
 
     if (p === lastHandledPath) return;
     lastHandledPath = p;
@@ -148,6 +148,7 @@ function GitPanel(props: any) {
     if (remaining.length === 0) {
       setGlobalActiveTabId(null);
       saveActiveTab(null);
+      setGlobalShowDashManual(true);
     } else if (activeTabId() === id) {
       const idx = tabs().findIndex((t) => t.id === id);
       const nextIdx = Math.min(idx, remaining.length - 1);
