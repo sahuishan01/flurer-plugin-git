@@ -59,20 +59,13 @@ function GitPanel(props: any) {
     saveActiveTab(active ? active.path : null);
   });
 
-  // If the user navigated to a path that is a known recent repo and no tabs are open, pre-open it
-  const initialPath = createMemo(() => {
-    const p = props.currentPath;
-    if (!p) return null;
-    const recent = getRecentRepos().some((r) => r.path === p);
-    if (!recent) return null;
-    if (tabs().some((t) => t.path === p)) return null;
-    if (tabs().length > 0) return null; // Preserve existing open tabs
-    return p;
-  });
-
+  // Automatically open or switch to the folder currently open in Flurer Explorer
+  let lastHandledPath: string | null = null;
   createEffect(() => {
-    const p = initialPath();
-    if (p) openRepo(p);
+    const p = props.currentPath;
+    if (!p || p === lastHandledPath) return;
+    lastHandledPath = p;
+    openRepo(p);
   });
 
   // Apply saved plugin settings
