@@ -161,20 +161,27 @@ function GitPanel(props: any) {
 
   function closeTab(id: string, e: MouseEvent) {
     e.stopPropagation();
-    const tab = tabs().find((t) => t.id === id);
-    if (!tab) return;
-    const remaining = tabs().filter((t) => t.id !== id);
+    const currentTabs = tabs();
+    const idx = currentTabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+
+    const remaining = currentTabs.filter((t) => t.id !== id);
     setGlobalTabs(remaining);
+
     if (remaining.length === 0) {
       setGlobalActiveTabId(null);
       saveActiveTab(null);
       setGlobalShowDashManual(true);
     } else if (activeTabId() === id) {
-      const idx = tabs().findIndex((t) => t.id === id);
       const nextIdx = Math.min(idx, remaining.length - 1);
       const nextTab = remaining[nextIdx];
-      setGlobalActiveTabId(nextTab.id);
-      saveActiveTab(nextTab.path);
+      if (nextTab) {
+        setGlobalActiveTabId(nextTab.id);
+        saveActiveTab(nextTab.path);
+      } else {
+        setGlobalActiveTabId(null);
+        saveActiveTab(null);
+      }
     }
   }
 
