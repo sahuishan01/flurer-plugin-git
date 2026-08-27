@@ -437,12 +437,50 @@ export function parseRef(ref: string): ParsedRef {
   return { raw: clean, label: clean, isTag: false, isHead: false, isRemote };
 }
 
-export async function openExternalUrl(url: string): Promise<boolean> {
+export async function openExternalUrl(url: string, hostOpenUrl?: (url: string) => void): Promise<boolean> {
   if (!url) return false;
   const win = window as any;
 
-  // 1. Try Tauri v2 plugin:opener via invoke
+  // 1. Pass to main app host callback if provided
+  if (typeof hostOpenUrl === "function") {
+    try {
+      hostOpenUrl(url);
+      return true;
+    } catch {}
+  }
+
+  // 2. Pass to main app global window methods if defined by host app
+  if (typeof win.openUrl === "function") {
+    try {
+      win.openUrl(url);
+      return true;
+    } catch {}
+  }
+
+  if (typeof win.Flurer?.openUrl === "function") {
+    try {
+      win.Flurer.openUrl(url);
+      return true;
+    } catch {}
+  }
+
+  if (typeof win.FlurerApp?.openUrl === "function") {
+    try {
+      win.FlurerApp.openUrl(url);
+      return true;
+    } catch {}
+  }
+
+  // 3. Pass to main app's Tauri backend invoke handlers
   if (win.TauriCore?.invoke) {
+    try {
+      await win.TauriCore.invoke("open_url", { url });
+      return true;
+    } catch {}
+    try {
+      await win.TauriCore.invoke("open_external", { url });
+      return true;
+    } catch {}
     try {
       await win.TauriCore.invoke("plugin:opener|open_url", { href: url });
       return true;
@@ -453,7 +491,7 @@ export async function openExternalUrl(url: string): Promise<boolean> {
     } catch {}
   }
 
-  // 2. Try TauriOpener global
+  // 4. Try TauriOpener / TauriShell open APIs if exposed by host
   if (win.TauriOpener?.openUrl) {
     try {
       await win.TauriOpener.openUrl(url);
@@ -461,7 +499,6 @@ export async function openExternalUrl(url: string): Promise<boolean> {
     } catch {}
   }
 
-  // 3. Try TauriShell.open global if present
   if (win.TauriShell?.open) {
     try {
       await win.TauriShell.open(url);
@@ -469,35 +506,10 @@ export async function openExternalUrl(url: string): Promise<boolean> {
     } catch {}
   }
 
-  // 4. Try system CLI open commands via TauriShell Command
-  const Command = win.TauriShell?.Command || win.__TAURI_PLUGIN_SHELL__?.Command || win.__TAURI__?.shell?.Command;
-  if (Command) {
-    try {
-      const isWin = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
-      const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
-      if (isWin) {
-        await Command.create("cmd", ["/c", "start", "", url]).execute({ windowsHide: true });
-        return true;
-      } else if (isMac) {
-        await Command.create("open", [url]).execute({ windowsHide: true });
-        return true;
-      } else {
-        await Command.create("xdg-open", [url]).execute({ windowsHide: true });
-        return true;
-      }
-    } catch {}
-  }
-
-  // 5. Fallback to browser window.open
+  // 5. Standard browser window.open (intercepted by Flurer main app defaults)
   try {
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    const opened = window.open(url, "_blank");
     if (opened) return true;
-  } catch {}
-
-  // 6. Direct location fallback
-  try {
-    window.location.href = url;
-    return true;
   } catch {}
 
   return false;
