@@ -41,6 +41,18 @@ function stripAnsi(output: string): string {
   return output.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
 }
 
+export async function checkGitAvailable(): Promise<{ installed: boolean; version: string }> {
+  const Command = getShell();
+  if (!Command) return { installed: false, version: "" };
+  try {
+    const res = await Command.create("git", ["--version"]).execute({ windowsHide: true });
+    if (res.code === 0 && (res.stdout || "").toLowerCase().includes("git version")) {
+      return { installed: true, version: res.stdout.trim() };
+    }
+  } catch {}
+  return { installed: false, version: "" };
+}
+
 export async function addSafeDirectory(repoPath: string): Promise<boolean> {
   const Command = getShell();
   if (!Command) return false;

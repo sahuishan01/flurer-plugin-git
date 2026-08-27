@@ -10,6 +10,7 @@ import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
 import { RepoView } from "./components/RepoView";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { checkGitAvailable } from "./git";
 
 interface OpenTab {
   id: string;
@@ -67,6 +68,25 @@ function GitPanel(props: any) {
   const tabs = globalTabs;
   const activeTabId = globalActiveTabId;
   const showDashManual = globalShowDashManual;
+
+  const [gitStatus, setGitStatus] = createSignal<{ checking: boolean; installed: boolean; version: string }>({
+    checking: true,
+    installed: true,
+    version: "",
+  });
+  const [copiedCommand, setCopiedCommand] = createSignal(false);
+
+  async function verifyGitInstallation() {
+    setGitStatus({ checking: true, installed: true, version: "" });
+    const res = await checkGitAvailable();
+    setGitStatus({ checking: false, installed: res.installed, version: res.version });
+  }
+
+  createEffect(() => {
+    if (props.active) {
+      verifyGitInstallation();
+    }
+  });
 
   // Persist open tabs and active tab whenever they change
   createEffect(() => {
@@ -358,6 +378,152 @@ function GitPanel(props: any) {
             </div>
           );
         }}
+      </Show>
+      {/* Git Missing / Download Required Modal */}
+      <Show when={!gitStatus().checking && !gitStatus().installed}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            "backdrop-filter": "blur(16px)",
+            "-webkit-backdrop-filter": "blur(16px)",
+            display: "flex",
+            "align-items": "center",
+            "justify-content": "center",
+            "z-index": 100099,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              ...getThemeStyles(currentTheme()),
+              background: "var(--panel-bg, #0f172a)",
+              border: "1px solid rgba(239, 68, 68, 0.4)",
+              "border-radius": "16px",
+              "max-width": "520px",
+              width: "100%",
+              padding: "28px 32px",
+              "box-shadow": "0 25px 60px rgba(0, 0, 0, 0.85)",
+              color: "var(--text-primary, #f8fafc)",
+              display: "flex",
+              "flex-direction": "column",
+              gap: "18px",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "14px" }}>
+              <div style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "12px", "border-radius": "12px", display: "flex" }}>
+                <GitIcon size={32} style={{ color: "#ef4444" }} />
+              </div>
+              <div>
+                <div style={{ "font-size": "19px", "font-weight": 700, color: "#f8fafc" }}>
+                  Git CLI Required
+                </div>
+                <div style={{ "font-size": "13px", color: "var(--text-secondary, #94a3b8)", "margin-top": "2px" }}>
+                  Git Operations requires Git installed on your system to work.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: "rgba(0, 0, 0, 0.35)", padding: "14px 16px", "border-radius": "10px", border: "1px solid rgba(255, 255, 255, 0.08)", "font-size": "13px", "line-height": "1.6", color: "var(--text-secondary, #cbd5e1)" }}>
+              We could not find <code style={{ color: "#38bdf8", background: "rgba(56, 189, 248, 0.12)", padding: "2px 6px", "border-radius": "4px", "font-family": "Space Mono, monospace" }}>git</code> in your system PATH. Please install Git using one of the options below and click <strong>Re-check Git</strong>.
+            </div>
+
+            <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+              <div style={{ "font-size": "12px", "font-weight": 600, color: "var(--text-secondary, #94a3b8)" }}>
+                Quick Terminal Install:
+              </div>
+              <div style={{ background: "#090d16", padding: "10px 14px", "border-radius": "8px", border: "1px solid rgba(255,255,255,0.12)", "font-family": "Space Mono, monospace", "font-size": "12px", color: "#38bdf8", display: "flex", "justify-content": "space-between", "align-items": "center", gap: "10px" }}>
+                <span style={{ "word-break": "break-all" }}>
+                  {typeof navigator !== "undefined" && navigator.userAgent.includes("Windows")
+                    ? "winget install --id Git.Git -e --source winget"
+                    : typeof navigator !== "undefined" && navigator.userAgent.includes("Macintosh")
+                    ? "brew install git"
+                    : "sudo apt install git"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isWin = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+                    const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Macintosh");
+                    const cmd = isWin ? "winget install --id Git.Git -e --source winget" : isMac ? "brew install git" : "sudo apt install git";
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(cmd);
+                    }
+                    setCopiedCommand(true);
+                    setTimeout(() => setCopiedCommand(false), 2000);
+                  }}
+                  style={{
+                    background: copiedCommand() ? "rgba(52, 211, 153, 0.2)" : "rgba(255,255,255,0.1)",
+                    border: copiedCommand() ? "1px solid rgba(52, 211, 153, 0.4)" : "1px solid rgba(255,255,255,0.15)",
+                    color: copiedCommand() ? "#34d399" : "#fff",
+                    padding: "4px 10px",
+                    "border-radius": "6px",
+                    cursor: "pointer",
+                    "font-size": "11px",
+                    "font-weight": 600,
+                    "white-space": "nowrap",
+                  }}
+                >
+                  {copiedCommand() ? "✓ Copied!" : "📋 Copy"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", "margin-top": "6px", "justify-content": "flex-end", "flex-wrap": "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const win = window as any;
+                  const dlUrl = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows")
+                    ? "https://git-scm.com/download/win"
+                    : typeof navigator !== "undefined" && navigator.userAgent.includes("Macintosh")
+                    ? "https://git-scm.com/download/mac"
+                    : "https://git-scm.com/downloads";
+                  if (win.TauriShell?.open) {
+                    win.TauriShell.open(dlUrl);
+                  } else {
+                    window.open(dlUrl, "_blank");
+                  }
+                }}
+                style={{
+                  padding: "8px 18px",
+                  "font-size": "13px",
+                  "font-weight": 600,
+                  "border-radius": "8px",
+                  background: "#1e293b",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  color: "#f8fafc",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  "align-items": "center",
+                  gap: "6px",
+                }}
+              >
+                🌐 Open Git Download Page
+              </button>
+              <button
+                type="button"
+                onClick={() => verifyGitInstallation()}
+                style={{
+                  padding: "8px 18px",
+                  "font-size": "13px",
+                  "font-weight": 600,
+                  "border-radius": "8px",
+                  background: "var(--accent-default, #38bdf8)",
+                  border: "none",
+                  color: "#0f172a",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  "align-items": "center",
+                  gap: "6px",
+                }}
+              >
+                🔄 Re-check Git
+              </button>
+            </div>
+          </div>
+        </div>
       </Show>
     </div>
   );
