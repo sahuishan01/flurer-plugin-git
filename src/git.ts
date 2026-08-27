@@ -871,19 +871,71 @@ async function applyPatchPosix(Command: any, repoPath: string, applyFlag: string
   throw lastError || new Error("Failed to apply hunk patch on POSIX shell");
 }
 
+async function applyPatchDirect(Command: any, repoPath: string, applyFlag: string, patch: string): Promise<void> {
+  const normRepo = repoPath.replace(/\\/g, "/");
+  const flagArgs = applyFlag.split(" ").filter(Boolean);
+  const args = [
+    "-C", normRepo,
+    "-c", "color.ui=never",
+    "-c", "safe.directory=*",
+    "apply",
+    ...flagArgs,
+    "--whitespace=nowarn",
+    "-"
+  ];
+
+  return new Promise<void>(async (resolve, reject) => {
+    try {
+      const cmd = Command.create("git", args);
+      let stderr = "";
+
+      cmd.on("error", (err: any) => {
+        reject(new Error(String(err)));
+      });
+
+      cmd.on("close", (data: any) => {
+        if (data.code === 0) {
+          resolve();
+        } else {
+          reject(new Error(stderr.trim() || `git apply exited with code ${data.code}`));
+        }
+      });
+
+      if (cmd.stderr) {
+        cmd.stderr.on("data", (chunk: string) => {
+          stderr += chunk;
+        });
+      }
+
+      const child = await cmd.spawn();
+      if (child && typeof child.write === "function") {
+        await child.write(patch);
+      }
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 export async function gitApplyHunk(repoPath: string, filePath: string, hunk: DiffHunk, mode: "stage" | "unstage" | "discard"): Promise<void> {
   const patch = createHunkPatch(filePath, hunk);
   const Command = getShell();
   if (Command) {
-    const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
     const applyFlag = mode === "stage" ? "--cached" : (mode === "unstage" ? "--cached --reverse" : "--reverse");
-
-    if (isWindows) {
-      await applyPatchWindows(Command, repoPath, applyFlag, patch);
+    try {
+      // 1. Direct execution via git binary + stdin (No shell required!)
+      await applyPatchDirect(Command, repoPath, applyFlag, patch);
       return;
-    } else {
-      await applyPatchPosix(Command, repoPath, applyFlag, patch);
-      return;
+    } catch (directErr) {
+      // 2. Fallback to shell invocation if direct stdin piping fails
+      const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+      if (isWindows) {
+        await applyPatchWindows(Command, repoPath, applyFlag, patch);
+        return;
+      } else {
+        await applyPatchPosix(Command, repoPath, applyFlag, patch);
+        return;
+      }
     }
   }
   await invoke("git_apply_hunk", { repoPath, filePath, hunk, mode });
