@@ -10,7 +10,7 @@ import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
 import { RepoView } from "./components/RepoView";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { checkGitAvailable } from "./git";
+import { checkGitAvailable, isGitRepo } from "./git";
 
 interface OpenTab {
   id: string;
@@ -96,7 +96,7 @@ function GitPanel(props: any) {
     saveActiveTab(active ? active.path : null);
   });
 
-  // Automatically open directly if no repo is open, else ask using a popup modal (ONLY when switching from Explorer view)
+  // Automatically open directly if no repo is open, else ask using a popup modal (ONLY when switching from Explorer view AND if the folder is a git repo)
   const [pendingExplorerPath, setPendingExplorerPath] = createSignal<string | null>(null);
   let lastHandledPath: string | null = null;
   createEffect(() => {
@@ -118,13 +118,18 @@ function GitPanel(props: any) {
     const activeTab = tabs().find((t) => t.id === activeTabId());
     if (activeTab && activeTab.path === p) return;
 
-    if (tabs().length === 0) {
-      // No repo is currently opened -> open folder directly
-      openRepo(p);
-    } else {
-      // Repos are already opened -> ask using a popup modal
-      setPendingExplorerPath(p);
-    }
+    // Only process the folder if it is a valid Git repository
+    isGitRepo(p).then((isGit) => {
+      if (!isGit) return;
+
+      if (tabs().length === 0) {
+        // No repo is currently opened -> open folder directly
+        openRepo(p);
+      } else {
+        // Repos are already opened -> ask using a popup modal
+        setPendingExplorerPath(p);
+      }
+    });
   });
 
   // Apply saved plugin settings

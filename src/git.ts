@@ -152,6 +152,15 @@ function parsePorcelainStatus(output: string): GitChange[] {
 
 // ---- Public API ----
 
+export async function isGitRepo(repoPath: string): Promise<boolean> {
+  try {
+    const res = await execGit(repoPath, "rev-parse", "--is-inside-work-tree");
+    return res.trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
 export async function gitRepoStatus(repoPath: string): Promise<GitStatus> {
   const Command = getShell();
   if (Command) {
