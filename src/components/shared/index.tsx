@@ -692,7 +692,6 @@ const menuBtnStyle = {
 export function BranchMultiSelect() {
   const ctx = useGit();
   const [open, setOpen] = createSignal(false);
-  const [coords, setCoords] = createSignal<{ top: number; right: number } | null>(null);
 
   const labelText = createMemo(() => {
     if (ctx.isAllBranchesSelected()) return "Branches: All";
@@ -700,19 +699,6 @@ export function BranchMultiSelect() {
     if (selected.length === 1) return `Branch: ${selected[0]}`;
     return `Branches: (${selected.length}) ${selected.join(", ")}`;
   });
-
-  function toggleOpen(e: MouseEvent) {
-    if (!open()) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setCoords({
-        top: rect.bottom + 6,
-        right: Math.max(12, window.innerWidth - rect.right),
-      });
-      setOpen(true);
-    } else {
-      setOpen(false);
-    }
-  }
 
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
@@ -723,8 +709,8 @@ export function BranchMultiSelect() {
           "align-items": "center",
           gap: "6px",
           padding: "5px 12px",
-          background: "rgba(255, 255, 255, 0.06)",
-          border: "1px solid rgba(255, 255, 255, 0.12)",
+          background: "var(--btn-secondary-bg, rgba(255, 255, 255, 0.06))",
+          border: "1px solid var(--border-color, rgba(255, 255, 255, 0.12))",
           "border-radius": "999px",
           "font-size": "12px",
           "font-weight": 600,
@@ -733,7 +719,7 @@ export function BranchMultiSelect() {
           transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
           "backdrop-filter": "blur(8px)",
         }}
-        onClick={toggleOpen}
+        onClick={() => setOpen(!open())}
         title="Filter graph & history by specific branches"
       >
         <BranchIcon size={14} />
@@ -750,17 +736,18 @@ export function BranchMultiSelect() {
           onClick={() => setOpen(false)}
         />
 
-        {/* Dropdown Menu — top-level fixed position */}
+        {/* Dropdown Menu — relative absolute anchor directly under button */}
         <div
           style={{
-            position: "fixed",
-            top: `${coords()?.top ?? 60}px`,
-            right: `${coords()?.right ?? 16}px`,
-            background: "var(--panel-bg, #0f172a)",
-            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.18))",
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            background: "var(--panel-bg, var(--bg-primary, #0f172a))",
+            color: "var(--text-primary, #f8fafc)",
+            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.15))",
             "border-radius": "10px",
             padding: "8px",
-            "box-shadow": "0 20px 48px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+            "box-shadow": "0 16px 40px rgba(0, 0, 0, 0.65)",
             "backdrop-filter": "blur(16px)",
             "-webkit-backdrop-filter": "blur(16px)",
             "min-width": "230px",
@@ -774,7 +761,7 @@ export function BranchMultiSelect() {
             "font-size": "12px",
           }}
         >
-          <div style={{ "font-size": "10.5px", "font-weight": 700, color: "rgba(255, 255, 255, 0.5)", "text-transform": "uppercase", padding: "4px 8px", "letter-spacing": "0.6px", "font-family": "Space Mono, monospace" }}>
+          <div style={{ "font-size": "10.5px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", padding: "4px 8px", "letter-spacing": "0.6px", "font-family": "Space Mono, monospace" }}>
             Filter History by Branch
           </div>
 
@@ -787,8 +774,8 @@ export function BranchMultiSelect() {
               padding: "6px 8px",
               "border-radius": "6px",
               cursor: "pointer",
-              background: ctx.isAllBranchesSelected() ? "var(--accent-bg-soft, rgba(96, 205, 255, 0.15))" : "transparent",
-              color: ctx.isAllBranchesSelected() ? "var(--accent-default, #60cdff)" : "var(--text-primary, var(--text-color))",
+              background: ctx.isAllBranchesSelected() ? "var(--btn-secondary-bg, rgba(255, 255, 255, 0.12))" : "transparent",
+              color: ctx.isAllBranchesSelected() ? "var(--accent-default, #60cdff)" : "var(--text-primary, #f8fafc)",
               "font-weight": ctx.isAllBranchesSelected() ? 600 : 400,
               transition: "background 0.15s",
             }}
@@ -805,7 +792,7 @@ export function BranchMultiSelect() {
             <span style={{ flex: 1 }}>All Branches (--all)</span>
           </div>
 
-          <div style={{ height: "1px", background: "var(--glass-border, rgba(255, 255, 255, 0.08))", margin: "4px 0" }} />
+          <div style={{ height: "1px", background: "var(--border-color, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
 
           {/* Individual Branches */}
           <For each={ctx.branches()}>
@@ -820,8 +807,8 @@ export function BranchMultiSelect() {
                     padding: "6px 8px",
                     "border-radius": "6px",
                     cursor: "pointer",
-                    background: isSelected() ? "var(--accent-bg-soft, rgba(96, 205, 255, 0.15))" : "transparent",
-                    color: isSelected() ? "var(--accent-default, #60cdff)" : "var(--text-primary, var(--text-color))",
+                    background: isSelected() ? "var(--btn-secondary-bg, rgba(255, 255, 255, 0.12))" : "transparent",
+                    color: isSelected() ? "var(--accent-default, #60cdff)" : "var(--text-primary, #f8fafc)",
                     "font-weight": isSelected() ? 600 : 400,
                     transition: "background 0.15s",
                   }}
@@ -854,22 +841,6 @@ export function BranchMultiSelect() {
 export function ToolsMenu() {
   const ctx = useGit();
   const [open, setOpen] = createSignal(false);
-  const [coords, setCoords] = createSignal<{ top: number; left: number } | null>(null);
-
-  function toggleOpen(e: MouseEvent) {
-    if (!open()) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const width = 250;
-      const left = Math.min(rect.left, window.innerWidth - width - 16);
-      setCoords({
-        top: rect.bottom + 6,
-        left: Math.max(12, left),
-      });
-      setOpen(true);
-    } else {
-      setOpen(false);
-    }
-  }
 
   function handleAction(fn: () => void) {
     setOpen(false);
@@ -885,8 +856,8 @@ export function ToolsMenu() {
           "align-items": "center",
           gap: "6px",
           padding: "5px 12px",
-          background: "rgba(255, 255, 255, 0.08)",
-          border: "1px solid rgba(255, 255, 255, 0.15)",
+          background: "var(--btn-secondary-bg, rgba(255, 255, 255, 0.08))",
+          border: "1px solid var(--border-color, rgba(255, 255, 255, 0.15))",
           "border-radius": "8px",
           "font-size": "12px",
           "font-weight": 600,
@@ -894,7 +865,7 @@ export function ToolsMenu() {
           cursor: "pointer",
           transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
-        onClick={toggleOpen}
+        onClick={() => setOpen(!open())}
         title="Git Operations & Tools"
       >
         <span>⚡ Tools</span>
@@ -908,26 +879,28 @@ export function ToolsMenu() {
           onClick={() => setOpen(false)}
         />
 
-        {/* Dropdown Menu rendered at top-level window fixed position */}
+        {/* Dropdown Menu — relative absolute anchor directly under button */}
         <div
           style={{
-            position: "fixed",
-            top: `${coords()?.top ?? 60}px`,
-            left: `${coords()?.left ?? 16}px`,
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
             width: "250px",
-            background: "#0f172a",
-            color: "#f8fafc",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
+            background: "var(--panel-bg, var(--bg-primary, #0f172a))",
+            color: "var(--text-primary, #f8fafc)",
+            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.15))",
             "border-radius": "12px",
             padding: "8px",
-            "box-shadow": "0 24px 60px rgba(0, 0, 0, 0.95)",
+            "box-shadow": "0 16px 40px rgba(0, 0, 0, 0.65)",
+            "backdrop-filter": "blur(16px)",
+            "-webkit-backdrop-filter": "blur(16px)",
             "z-index": 100095,
             display: "flex",
             "flex-direction": "column",
             gap: "2px",
           }}
         >
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "#94a3b8", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
             History & Debugging
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openReflogModal)}>
@@ -940,9 +913,9 @@ export function ToolsMenu() {
             🔍 Bisect Regression
           </button>
 
-          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
+          <div style={{ height: "1px", background: "var(--border-color, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
 
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "#94a3b8", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
             Workspace & Remotes
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openWorkspaceOverview)}>
@@ -958,9 +931,9 @@ export function ToolsMenu() {
             🪝 Client Pre-commit Hooks
           </button>
 
-          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
+          <div style={{ height: "1px", background: "var(--border-color, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
 
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "#94a3b8", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
             Storage & Export
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openStorageModal)}>
