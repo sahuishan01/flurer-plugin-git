@@ -1,7 +1,7 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup, type JSX } from "solid-js";
 import { useGit } from "../../context";
 import { S } from "../../styles";
-import { buttonBg, formatTimestamp, formatRelativeDate, getSavedOpenTabs, getMaxDiscoveredReposCap } from "../../utils";
+import { buttonBg, formatTimestamp, formatRelativeDate, getSavedOpenTabs, getMaxDiscoveredReposCap, openExternalUrl } from "../../utils";
 import type { GitRebaseTodoItem, DiscoveredRepo } from "../../types";
 import { SearchableRepoDropdown } from "../SearchableRepoDropdown";
 import { scanDirectoryForGitRepos } from "../../git";
@@ -655,12 +655,7 @@ export function CommitContextMenu(props: {
             }}
             onClick={() => {
               const url = ctx.remoteWebLinks()!.commitUrl(props.hash);
-              const win = window as any;
-              if (win.TauriShell?.open) {
-                win.TauriShell.open(url);
-              } else {
-                window.open(url, "_blank");
-              }
+              openExternalUrl(url);
               props.onClose();
             }}
           >
@@ -2284,14 +2279,28 @@ export function RemotesConfigModal() {
                             {r.fetchUrl}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => ctx.removeRemote(r.name)}
-                          style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#f87171", padding: "3px 8px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
-                          title="Remove remote"
-                        >
-                          Remove
-                        </button>
+                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                          <Show when={git.parseRemoteWebLinks(r.fetchUrl)}>
+                            {(links) => (
+                              <button
+                                type="button"
+                                onClick={() => openExternalUrl(links().repoWebUrl)}
+                                style={{ background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "#38bdf8", padding: "3px 8px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer", display: "inline-flex", "align-items": "center", gap: "4px" }}
+                                title="Open remote repository in browser"
+                              >
+                                🌐 Open Web ↗
+                              </button>
+                            )}
+                          </Show>
+                          <button
+                            type="button"
+                            onClick={() => ctx.removeRemote(r.name)}
+                            style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#f87171", padding: "3px 8px", "border-radius": "4px", "font-size": "10.5px", cursor: "pointer" }}
+                            title="Remove remote"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     )}
                   </For>

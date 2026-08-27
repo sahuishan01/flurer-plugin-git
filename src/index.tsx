@@ -4,7 +4,7 @@ import {
   getRecentRepos, basename, setSurfaceOpacity, setSurfaceBlur, setButtonTintOpacity,
   setGraphPanSpeed, setGraphZoomSpeed, setGraphRotateSpeed,
   setGraphFocusZoomStep, setGraphFocusTransitionTime,
-  getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab,
+  getSavedOpenTabs, saveOpenTabs, getSavedActiveTab, saveActiveTab, openExternalUrl,
 } from "./utils";
 import { GitIcon, CloseIcon, PlusIcon, Toast } from "./components/shared";
 import { DashboardView } from "./components/DashboardView";
@@ -486,17 +486,12 @@ function GitPanel(props: any) {
               <button
                 type="button"
                 onClick={() => {
-                  const win = window as any;
                   const dlUrl = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows")
                     ? "https://git-scm.com/download/win"
                     : typeof navigator !== "undefined" && navigator.userAgent.includes("Macintosh")
                     ? "https://git-scm.com/download/mac"
                     : "https://git-scm.com/downloads";
-                  if (win.TauriShell?.open) {
-                    win.TauriShell.open(dlUrl);
-                  } else {
-                    window.open(dlUrl, "_blank");
-                  }
+                  openExternalUrl(dlUrl);
                 }}
                 style={{
                   padding: "8px 18px",

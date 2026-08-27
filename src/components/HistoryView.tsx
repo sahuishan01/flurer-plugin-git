@@ -1,6 +1,6 @@
 import { createSignal, createMemo, For, Show, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
-import { formatTimestamp, parseRef } from "../utils";
+import { formatTimestamp, parseRef, openExternalUrl } from "../utils";
 import { Card, EmptyState, Button, CommitContextMenu, BranchMultiSelect } from "./shared";
 import { S } from "../styles";
 
@@ -368,12 +368,7 @@ export function HistoryView() {
                         style={{ background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.35)", color: "#38bdf8", padding: "2px 8px", "border-radius": "4px", "font-size": "11px", "font-family": "Space Mono, monospace", cursor: "pointer" }}
                         onClick={() => {
                           const url = ctx.remoteWebLinks()!.commitUrl(detail.hash);
-                          const win = window as any;
-                          if (win.TauriShell?.open) {
-                            win.TauriShell.open(url);
-                          } else {
-                            window.open(url, "_blank");
-                          }
+                          openExternalUrl(url);
                         }}
                       >
                         🌐 Open in {ctx.remoteWebLinks()!.service.toUpperCase()} ↗

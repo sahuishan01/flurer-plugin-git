@@ -1,7 +1,7 @@
 import { Show, Switch, Match, For, createMemo, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
 import { THEMES } from "../theme";
-import { basename } from "../utils";
+import { basename, openExternalUrl } from "../utils";
 import {
   GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon,
   BranchIcon, Button, TabBar, BranchMultiSelect, ToolsMenu, DiffCompareModal,
@@ -204,6 +204,19 @@ export function RepoView(props: RepoViewProps) {
                 </Button>
 
                 <ToolsMenu />
+
+                <Show when={ctx.remoteWebLinks()}>
+                  {(links) => (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openExternalUrl(links().repoWebUrl)}
+                      title={`Open ${links().service} repository in browser`}
+                    >
+                      🌐 {links().service === "github" ? "GitHub ↗" : links().service === "gitlab" ? "GitLab ↗" : "Web ↗"}
+                    </Button>
+                  )}
+                </Show>
 
                 <select
                   value={ctx.theme()}

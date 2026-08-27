@@ -1505,15 +1505,27 @@ export function parseRemoteWebLinks(remoteUrl: string): GitRemoteWebLinks | null
   let host = "";
   let userRepo = "";
 
-  const sshMatch = clean.match(/^(?:ssh:\/\/)?git@([^:]+):(.+)$/);
-  if (sshMatch) {
-    host = sshMatch[1].toLowerCase();
-    userRepo = sshMatch[2].replace(/^\/+/, "");
+  // Strip protocol and credentials if present (e.g. https://token@github.com/owner/repo)
+  const stripped = clean
+    .replace(/^https?:\/\/[^@]+@/, "https://")
+    .replace(/^ssh:\/\/[^@]+@/, "ssh://")
+    .replace(/^git:\/\//, "");
+
+  const gitAtMatch = stripped.match(/^git@([^:/]+)[:/](.+)$/);
+  if (gitAtMatch) {
+    host = gitAtMatch[1].toLowerCase();
+    userRepo = gitAtMatch[2].replace(/^\/+/, "");
   } else {
-    const httpMatch = clean.match(/^https?:\/\/([^/]+)\/(.+)$/);
+    const httpMatch = stripped.match(/^https?:\/\/([^/:]+)(?::\d+)?\/(.+)$/);
     if (httpMatch) {
       host = httpMatch[1].toLowerCase();
       userRepo = httpMatch[2].replace(/^\/+/, "");
+    } else {
+      const directMatch = stripped.match(/^([^/:]+)[:/](.+)$/);
+      if (directMatch) {
+        host = directMatch[1].toLowerCase();
+        userRepo = directMatch[2].replace(/^\/+/, "");
+      }
     }
   }
 

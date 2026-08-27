@@ -436,3 +436,69 @@ export function parseRef(ref: string): ParsedRef {
   const isRemote = clean.startsWith("origin/") || clean.startsWith("upstream/");
   return { raw: clean, label: clean, isTag: false, isHead: false, isRemote };
 }
+
+export async function openExternalUrl(url: string): Promise<boolean> {
+  if (!url) return false;
+  const win = window as any;
+
+  // 1. Try Tauri v2 plugin:opener via invoke
+  if (win.TauriCore?.invoke) {
+    try {
+      await win.TauriCore.invoke("plugin:opener|open_url", { href: url });
+      return true;
+    } catch {}
+    try {
+      await win.TauriCore.invoke("plugin:shell|open", { path: url });
+      return true;
+    } catch {}
+  }
+
+  // 2. Try TauriOpener global
+  if (win.TauriOpener?.openUrl) {
+    try {
+      await win.TauriOpener.openUrl(url);
+      return true;
+    } catch {}
+  }
+
+  // 3. Try TauriShell.open global if present
+  if (win.TauriShell?.open) {
+    try {
+      await win.TauriShell.open(url);
+      return true;
+    } catch {}
+  }
+
+  // 4. Try system CLI open commands via TauriShell Command
+  const Command = win.TauriShell?.Command || win.__TAURI_PLUGIN_SHELL__?.Command || win.__TAURI__?.shell?.Command;
+  if (Command) {
+    try {
+      const isWin = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+      const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
+      if (isWin) {
+        await Command.create("cmd", ["/c", "start", "", url]).execute({ windowsHide: true });
+        return true;
+      } else if (isMac) {
+        await Command.create("open", [url]).execute({ windowsHide: true });
+        return true;
+      } else {
+        await Command.create("xdg-open", [url]).execute({ windowsHide: true });
+        return true;
+      }
+    } catch {}
+  }
+
+  // 5. Fallback to browser window.open
+  try {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (opened) return true;
+  } catch {}
+
+  // 6. Direct location fallback
+  try {
+    window.location.href = url;
+    return true;
+  } catch {}
+
+  return false;
+}
