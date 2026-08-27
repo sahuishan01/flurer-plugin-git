@@ -851,6 +851,128 @@ export function BranchMultiSelect() {
   );
 }
 
+export function ToolsMenu() {
+  const ctx = useGit();
+  const [open, setOpen] = createSignal(false);
+  const [coords, setCoords] = createSignal<{ top: number; right: number } | null>(null);
+
+  function toggleOpen(e: MouseEvent) {
+    if (!open()) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setCoords({
+        top: rect.bottom + 6,
+        right: Math.max(12, window.innerWidth - rect.right),
+      });
+      setOpen(true);
+    } else {
+      setOpen(false);
+    }
+  }
+
+  function handleAction(fn: () => void) {
+    setOpen(false);
+    fn();
+  }
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        style={{
+          display: "inline-flex",
+          "align-items": "center",
+          gap: "6px",
+          padding: "5px 12px",
+          background: "rgba(255, 255, 255, 0.08)",
+          border: "1px solid rgba(255, 255, 255, 0.15)",
+          "border-radius": "8px",
+          "font-size": "12px",
+          "font-weight": 600,
+          color: "var(--text-primary, #f8fafc)",
+          cursor: "pointer",
+          transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
+          "backdrop-filter": "blur(8px)",
+        }}
+        onClick={toggleOpen}
+        title="Git Operations & Tools"
+      >
+        <span>⚡ Tools</span>
+        <span style={{ "font-size": "10px", opacity: 0.7 }}>{open() ? "▲" : "▼"}</span>
+      </button>
+
+      <Show when={open()}>
+        <div
+          style={{ position: "fixed", inset: 0, "z-index": 100090 }}
+          onClick={() => setOpen(false)}
+        />
+
+        <div
+          style={{
+            position: "fixed",
+            top: `${coords()?.top ?? 60}px`,
+            right: `${coords()?.right ?? 16}px`,
+            width: "250px",
+            background: "var(--panel-bg, #0f172a)",
+            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.18))",
+            "border-radius": "12px",
+            padding: "8px",
+            "box-shadow": "0 20px 48px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+            "backdrop-filter": "blur(16px)",
+            "-webkit-backdrop-filter": "blur(16px)",
+            "z-index": 100095,
+            display: "flex",
+            "flex-direction": "column",
+            gap: "2px",
+          }}
+        >
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+            History & Debugging
+          </div>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openReflogModal)}>
+            🕒 Reflog Time Machine
+          </button>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openPickaxeModal)}>
+            🔎 Pickaxe Deep Search
+          </button>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openBisectModal)}>
+            🔍 Bisect Regression
+          </button>
+
+          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
+
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+            Workspace & Remotes
+          </div>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openWorkspaceOverview)}>
+            🌐 Multi-Repo Workspace
+          </button>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openRemotesModal)}>
+            🌐 Remotes & Authors
+          </button>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openSubmodulesModal)}>
+            🧩 Submodules Manager
+          </button>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openHooksModal)}>
+            🪝 Client Pre-commit Hooks
+          </button>
+
+          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
+
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+            Storage & Export
+          </div>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openStorageModal)}>
+            🗄️ Storage & Git LFS
+          </button>
+          <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(() => ctx.openPatchModal())}>
+            📦 Export Patch Archive
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 const modalOptionStyle = {
   padding: "12px 14px",
   background: "var(--control-bg, rgba(255, 255, 255, 0.05))",

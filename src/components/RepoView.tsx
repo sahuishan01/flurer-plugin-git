@@ -3,7 +3,7 @@ import { useGit } from "../context";
 import { basename } from "../utils";
 import {
   GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon,
-  BranchIcon, Button, TabBar, BranchMultiSelect, DiffCompareModal,
+  BranchIcon, Button, TabBar, BranchMultiSelect, ToolsMenu, DiffCompareModal,
   Toast, ComparisonBar, GlobalLoadingOverlay, StatusBar, ShortcutsModal,
   CommandConsoleModal, TagManagementModal, FileLogModal, BlameModal,
   RemotesConfigModal, ResetModal, BisectModal, StorageInspectorModal, PatchArchiveModal,
@@ -201,37 +201,13 @@ export function RepoView(props: RepoViewProps) {
                 <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()} title="Fetch remote branches">
                   <FetchIcon size={13} /> Fetch
                 </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openReflogModal} disabled={ctx.loading()} title="Git Reflog Time Machine">
-                  🕒 Reflog
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openPickaxeModal} disabled={ctx.loading()} title="Pickaxe Deep History Search">
-                  🔎 Pickaxe
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openSubmodulesModal} disabled={ctx.loading()} title="Git Submodules Manager">
-                  🧩 Submodules
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openHooksModal} disabled={ctx.loading()} title="Client Pre-commit Hooks">
-                  🪝 Hooks
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openStorageModal} disabled={ctx.loading()} title="Inspect Large Files & Git LFS">
-                  🗄️ Storage
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openBisectModal} disabled={ctx.loading()} title="Git Bisect Regression Debugger">
-                  🔍 Bisect
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => ctx.openPatchModal()} disabled={ctx.loading()} title="Export Patch or Snapshot Archive">
-                  📦 Export
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openWorkspaceOverview} disabled={ctx.loading()} title="Multi-Repository Workspace Aggregator">
-                  🌐 Workspace
-                </Button>
-                <Button variant="secondary" size="sm" onClick={ctx.openRemotesModal} disabled={ctx.loading()} title="Manage Remotes & Author Profile">
-                  🌐 Remotes
-                </Button>
+
+                <ToolsMenu />
+
                 <select
                   value={ctx.theme()}
                   onChange={(e) => ctx.setTheme(e.currentTarget.value as any)}
-                  style={{ ...S.select, padding: "4px 8px", "font-size": "11.5px", background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+                  style={{ ...S.select, padding: "5px 10px", "font-size": "12px", "border-radius": "8px", background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "var(--text-primary, #f8fafc)", cursor: "pointer", "font-weight": 600 }}
                   title="Switch visual theme"
                 >
                   <option value="minimal-dark">🎨 Minimal Dark</option>
