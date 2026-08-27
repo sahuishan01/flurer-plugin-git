@@ -1,5 +1,6 @@
-import { Show, Switch, Match, createMemo, onMount, onCleanup } from "solid-js";
+import { Show, Switch, Match, For, createMemo, onMount, onCleanup } from "solid-js";
 import { useGit } from "../context";
+import { THEMES } from "../theme";
 import { basename } from "../utils";
 import {
   GitIcon, RefreshIcon, PullIcon, PushIcon, FetchIcon, CloseIcon,
@@ -207,13 +208,12 @@ export function RepoView(props: RepoViewProps) {
                 <select
                   value={ctx.theme()}
                   onChange={(e) => ctx.setTheme(e.currentTarget.value as any)}
-                  style={{ ...S.select, padding: "5px 10px", "font-size": "12px", "border-radius": "8px", background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "var(--text-primary, #f8fafc)", cursor: "pointer", "font-weight": 600 }}
+                  style={{ ...S.select, padding: "5px 10px", "font-size": "12px", "border-radius": "8px", background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "var(--text-primary, #f8fafc)", cursor: "pointer", "font-weight": 500 }}
                   title="Switch visual theme"
                 >
-                  <option value="minimal-dark">🎨 Minimal Dark</option>
-                  <option value="midnight-oled">🖤 Midnight OLED</option>
-                  <option value="grounded-warmth">🪴 Grounded Warmth</option>
-                  <option value="nord-slate">❄️ Nord Slate</option>
+                  <For each={Object.values(THEMES)}>
+                    {(t) => <option value={t.id}>🎨 {t.name}</option>}
+                  </For>
                 </select>
                 <Button variant="secondary" size="sm" onClick={ctx.refresh} disabled={ctx.loading()} title="Refresh git status">
                   <RefreshIcon size={13} />

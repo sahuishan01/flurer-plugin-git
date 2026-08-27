@@ -900,7 +900,7 @@ export function ToolsMenu() {
             gap: "2px",
           }}
         >
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 600, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.06em", "font-family": "Space Mono, monospace" }}>
             History & Debugging
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openReflogModal)}>
@@ -915,7 +915,7 @@ export function ToolsMenu() {
 
           <div style={{ height: "1px", background: "var(--border-color, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
 
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 600, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.06em", "font-family": "Space Mono, monospace" }}>
             Workspace & Remotes
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openWorkspaceOverview)}>
@@ -933,7 +933,7 @@ export function ToolsMenu() {
 
           <div style={{ height: "1px", background: "var(--border-color, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
 
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 600, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.06em", "font-family": "Space Mono, monospace" }}>
             Storage & Export
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openStorageModal)}>
