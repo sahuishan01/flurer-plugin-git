@@ -806,26 +806,83 @@ export function createHunkPatch(filePath: string, hunk: DiffHunk): string {
   return patch;
 }
 
+async function applyPatchWindows(Command: any, repoPath: string, applyFlag: string, patch: string): Promise<void> {
+  const normRepo = repoPath.replace(/\\/g, "/");
+  const psCommand = `$p = @'\n${patch}\n'@; $p | git -C "${normRepo}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -`;
+
+  const attempts = [
+    { cmd: "powershell", args: ["-NoProfile", "-NonInteractive", "-Command", psCommand] },
+    { cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", psCommand] },
+    { cmd: "pwsh", args: ["-NoProfile", "-NonInteractive", "-Command", psCommand] },
+    { cmd: "pwsh.exe", args: ["-NoProfile", "-NonInteractive", "-Command", psCommand] },
+    { cmd: "sh", args: ["-c", `cat << 'FLURER_EOF' | git -C "${normRepo}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -\n${patch}\nFLURER_EOF`] },
+    { cmd: "bash", args: ["-c", `cat << 'FLURER_EOF' | git -C "${normRepo}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -\n${patch}\nFLURER_EOF`] },
+  ];
+
+  let lastError: any = null;
+  for (const attempt of attempts) {
+    try {
+      const res = await Command.create(attempt.cmd, attempt.args).execute({ windowsHide: true });
+      if (res.code === 0) return;
+      lastError = new Error(res.stderr || `Exit code ${res.code} from ${attempt.cmd}`);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  // Fallback: Use cmd.exe with certutil base64 decoding to apply patch cleanly
+  try {
+    const patchPath = `${normRepo}/.git/flurer_hunk_${Date.now()}.patch`;
+    const b64 = btoa(unescape(encodeURIComponent(patch)));
+    const cmdScript = `echo ${b64} > "${patchPath}.b64" && certutil -decode "${patchPath}.b64" "${patchPath}" >nul 2>&1 && git -C "${normRepo}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn "${patchPath}" & del "${patchPath}" "${patchPath}.b64" >nul 2>&1`;
+
+    const res = await Command.create("cmd.exe", ["/c", cmdScript]).execute({ windowsHide: true });
+    if (res.code === 0) return;
+    if (res.stderr) lastError = new Error(res.stderr);
+  } catch (err) {
+    lastError = err;
+  }
+
+  throw lastError || new Error("Failed to apply hunk patch on Windows (no accessible shell found)");
+}
+
+async function applyPatchPosix(Command: any, repoPath: string, applyFlag: string, patch: string): Promise<void> {
+  const normRepo = repoPath.replace(/\\/g, "/");
+  const shScript = `cat << 'FLURER_EOF' | git -C "${normRepo}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -\n${patch}\nFLURER_EOF`;
+
+  const attempts = [
+    { cmd: "sh", args: ["-c", shScript] },
+    { cmd: "bash", args: ["-c", shScript] },
+    { cmd: "/bin/sh", args: ["-c", shScript] },
+    { cmd: "/bin/bash", args: ["-c", shScript] },
+  ];
+
+  let lastError: any = null;
+  for (const attempt of attempts) {
+    try {
+      const res = await Command.create(attempt.cmd, attempt.args).execute({ windowsHide: true });
+      if (res.code === 0) return;
+      lastError = new Error(res.stderr || `Exit code ${res.code}`);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Failed to apply hunk patch on POSIX shell");
+}
+
 export async function gitApplyHunk(repoPath: string, filePath: string, hunk: DiffHunk, mode: "stage" | "unstage" | "discard"): Promise<void> {
   const patch = createHunkPatch(filePath, hunk);
   const Command = getShell();
   if (Command) {
-    const isWindows = navigator.userAgent.includes("Windows");
+    const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
     const applyFlag = mode === "stage" ? "--cached" : (mode === "unstage" ? "--cached --reverse" : "--reverse");
 
-    if (!isWindows) {
-      await Command.create("sh", [
-        "-c",
-        `cat << 'FLURER_EOF' | git -C "${repoPath}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -\n${patch}\nFLURER_EOF`
-      ]).execute({ windowsHide: true });
+    if (isWindows) {
+      await applyPatchWindows(Command, repoPath, applyFlag, patch);
       return;
     } else {
-      await Command.create("powershell", [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        `$p = @'\n${patch}\n'@; $p | git -C "${repoPath}" -c safe.directory=* apply ${applyFlag} --whitespace=nowarn -`
-      ]).execute({ windowsHide: true });
+      await applyPatchPosix(Command, repoPath, applyFlag, patch);
       return;
     }
   }
