@@ -854,20 +854,6 @@ export function BranchMultiSelect() {
 export function ToolsMenu() {
   const ctx = useGit();
   const [open, setOpen] = createSignal(false);
-  const [coords, setCoords] = createSignal<{ top: number; right: number } | null>(null);
-
-  function toggleOpen(e: MouseEvent) {
-    if (!open()) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setCoords({
-        top: rect.bottom + 6,
-        right: Math.max(12, window.innerWidth - rect.right),
-      });
-      setOpen(true);
-    } else {
-      setOpen(false);
-    }
-  }
 
   function handleAction(fn: () => void) {
     setOpen(false);
@@ -891,9 +877,8 @@ export function ToolsMenu() {
           color: "var(--text-primary, #f8fafc)",
           cursor: "pointer",
           transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
-          "backdrop-filter": "blur(8px)",
         }}
-        onClick={toggleOpen}
+        onClick={() => setOpen(!open())}
         title="Git Operations & Tools"
       >
         <span>⚡ Tools</span>
@@ -901,31 +886,32 @@ export function ToolsMenu() {
       </button>
 
       <Show when={open()}>
+        {/* Backdrop overlay */}
         <div
           style={{ position: "fixed", inset: 0, "z-index": 100090 }}
           onClick={() => setOpen(false)}
         />
 
+        {/* Dropdown Menu anchored directly beneath the Tools button */}
         <div
           style={{
-            position: "fixed",
-            top: `${coords()?.top ?? 60}px`,
-            right: `${coords()?.right ?? 16}px`,
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
             width: "250px",
-            background: "var(--panel-bg, #0f172a)",
-            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.18))",
+            background: "var(--panel-bg-solid, #0f172a)",
+            color: "#f8fafc",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
             "border-radius": "12px",
             padding: "8px",
-            "box-shadow": "0 20px 48px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
-            "backdrop-filter": "blur(16px)",
-            "-webkit-backdrop-filter": "blur(16px)",
+            "box-shadow": "0 20px 50px rgba(0, 0, 0, 0.95)",
             "z-index": 100095,
             display: "flex",
             "flex-direction": "column",
             gap: "2px",
           }}
         >
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "#94a3b8", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
             History & Debugging
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openReflogModal)}>
@@ -938,9 +924,9 @@ export function ToolsMenu() {
             🔍 Bisect Regression
           </button>
 
-          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
+          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
 
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "#94a3b8", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
             Workspace & Remotes
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openWorkspaceOverview)}>
@@ -956,9 +942,9 @@ export function ToolsMenu() {
             🪝 Client Pre-commit Hooks
           </button>
 
-          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
+          <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
 
-          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "var(--text-secondary, #94a3b8)", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
+          <div style={{ padding: "6px 8px 4px", "font-size": "10px", "font-weight": 700, color: "#94a3b8", "text-transform": "uppercase", "letter-spacing": "0.12em", "font-family": "Space Mono, monospace" }}>
             Storage & Export
           </div>
           <button type="button" style={S.toolsMenuItem} onClick={() => handleAction(ctx.openStorageModal)}>
