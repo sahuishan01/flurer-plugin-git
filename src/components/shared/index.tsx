@@ -854,6 +854,22 @@ export function BranchMultiSelect() {
 export function ToolsMenu() {
   const ctx = useGit();
   const [open, setOpen] = createSignal(false);
+  const [coords, setCoords] = createSignal<{ top: number; left: number } | null>(null);
+
+  function toggleOpen(e: MouseEvent) {
+    if (!open()) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const width = 250;
+      const left = Math.min(rect.left, window.innerWidth - width - 16);
+      setCoords({
+        top: rect.bottom + 6,
+        left: Math.max(12, left),
+      });
+      setOpen(true);
+    } else {
+      setOpen(false);
+    }
+  }
 
   function handleAction(fn: () => void) {
     setOpen(false);
@@ -878,7 +894,7 @@ export function ToolsMenu() {
           cursor: "pointer",
           transition: "all 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
-        onClick={() => setOpen(!open())}
+        onClick={toggleOpen}
         title="Git Operations & Tools"
       >
         <span>⚡ Tools</span>
@@ -892,19 +908,19 @@ export function ToolsMenu() {
           onClick={() => setOpen(false)}
         />
 
-        {/* Dropdown Menu anchored directly beneath the Tools button */}
+        {/* Dropdown Menu rendered at top-level window fixed position */}
         <div
           style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            left: 0,
+            position: "fixed",
+            top: `${coords()?.top ?? 60}px`,
+            left: `${coords()?.left ?? 16}px`,
             width: "250px",
-            background: "var(--panel-bg-solid, #0f172a)",
+            background: "#0f172a",
             color: "#f8fafc",
             border: "1px solid rgba(255, 255, 255, 0.2)",
             "border-radius": "12px",
             padding: "8px",
-            "box-shadow": "0 20px 50px rgba(0, 0, 0, 0.95)",
+            "box-shadow": "0 24px 60px rgba(0, 0, 0, 0.95)",
             "z-index": 100095,
             display: "flex",
             "flex-direction": "column",
