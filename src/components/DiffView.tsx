@@ -245,6 +245,7 @@ export function DiffView() {
                   const isSel = () => normSelectedFile() === path.replace(/^\.\//, "");
                   const fileName = path.split("/").pop() || path;
                   const dirPath = path.includes("/") ? path.substring(0, path.lastIndexOf("/")) : "";
+                  const isRename = file.oldPath && file.newPath && file.oldPath !== file.newPath;
 
                   return (
                     <div
@@ -264,7 +265,10 @@ export function DiffView() {
                     >
                       <div style={{ flex: 1, overflow: "hidden", "min-width": 0 }}>
                         <div style={{ "font-size": "12px", "font-weight": isSel() ? 700 : 500, color: isSel() ? "#38bdf8" : "var(--text-primary, #f8fafc)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
-                          {fileName}
+                          {isRename ? `${file.oldPath.split("/").pop()} → ${fileName}` : fileName}
+                          <Show when={isRename}>
+                            <span style={{ "margin-left": "6px", "font-size": "9.5px", padding: "1px 5px", "border-radius": "4px", background: "rgba(251, 191, 36, 0.2)", color: "#fbbf24", "font-weight": 700, "vertical-align": "middle" }}>RENAMED</span>
+                          </Show>
                         </div>
                         <Show when={dirPath}>
                           <div style={{ "font-size": "10px", color: "rgba(255, 255, 255, 0.4)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
@@ -312,6 +316,52 @@ export function DiffView() {
           </div>
 
           <div style={{ display: "flex", "align-items": "center", gap: "10px", "flex-wrap": "wrap" }}>
+            {/* Whitespace & Rename Detection Toggles */}
+            <div style={{ display: "inline-flex", background: "rgba(10, 14, 23, 0.6)", border: "1px solid rgba(255, 255, 255, 0.12)", "border-radius": "8px", padding: "2px", gap: "2px" }}>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 10px",
+                  "font-size": "11px",
+                  "font-weight": 600,
+                  border: "none",
+                  "border-radius": "6px",
+                  cursor: "pointer",
+                  background: ctx.diffIgnoreWhitespace() ? "var(--accent-default, #38bdf8)" : "transparent",
+                  color: ctx.diffIgnoreWhitespace() ? "#000" : "var(--text-primary, #f8fafc)",
+                  transition: "all 0.15s ease",
+                }}
+                onClick={() => {
+                  ctx.setDiffIgnoreWhitespace(!ctx.diffIgnoreWhitespace());
+                  ctx.loadDiff(ctx.selectedDiffFile() ?? ".", ctx.diffMode(), ctx.diffCommitHash() ?? undefined, false);
+                }}
+                title="Ignore whitespace changes (-w)"
+              >
+                ␣ Whitespace
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 10px",
+                  "font-size": "11px",
+                  "font-weight": 600,
+                  border: "none",
+                  "border-radius": "6px",
+                  cursor: "pointer",
+                  background: ctx.diffDetectRenames() ? "var(--accent-default, #38bdf8)" : "transparent",
+                  color: ctx.diffDetectRenames() ? "#000" : "var(--text-primary, #f8fafc)",
+                  transition: "all 0.15s ease",
+                }}
+                onClick={() => {
+                  ctx.setDiffDetectRenames(!ctx.diffDetectRenames());
+                  ctx.loadDiff(ctx.selectedDiffFile() ?? ".", ctx.diffMode(), ctx.diffCommitHash() ?? undefined, false);
+                }}
+                title="Detect renames and copies (-M -C)"
+              >
+                ⇄ Renames
+              </button>
+            </div>
+
             {/* Split vs Unified Diff Toggle */}
             <div style={{ display: "inline-flex", background: "rgba(10, 14, 23, 0.6)", border: "1px solid rgba(255, 255, 255, 0.12)", "border-radius": "8px", padding: "2px", gap: "2px" }}>
               <button
@@ -510,7 +560,7 @@ export function DiffView() {
                                   </div>
                                 </div>
                                 <For each={hunk.lines}>
-                                  {(line) => {
+                                  {(line, idx) => {
                                     const old = line.origin !== "+" ? oldLine++ : null;
                                     const newL = line.origin !== "-" ? newLine++ : null;
                                     const style = line.origin === "+" ? S.diffAdded : line.origin === "-" ? S.diffRemoved : S.diffContext;
@@ -519,6 +569,16 @@ export function DiffView() {
                                         <span style={S.diffGutter}>{old ?? ""}</span>
                                         <span style={S.diffGutter}>{newL ?? ""}</span>
                                         <span style={{ flex: 1, "white-space": "pre-wrap", "word-break": "break-all" }}>{line.content}</span>
+                                        <Show when={ctx.diffMode() === "unstaged" && line.origin === "+"}>
+                                          <button
+                                            type="button"
+                                            onClick={() => ctx.stageLines(filePath, hunk, [idx()])}
+                                            style={{ padding: "0 6px", "font-size": "10px", "border-radius": "4px", background: "rgba(52, 211, 153, 0.15)", border: "1px solid rgba(52, 211, 153, 0.35)", color: "#34d399", cursor: "pointer", "font-weight": 600, "flex-shrink": 0 }}
+                                            title="Stage just this line (including surrounding context)"
+                                          >
+                                            + Line
+                                          </button>
+                                        </Show>
                                       </div>
                                     );
                                   }}

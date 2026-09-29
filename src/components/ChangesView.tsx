@@ -1,8 +1,9 @@
-import { createSignal, createMemo, For, Show } from "solid-js";
+import { createSignal, createMemo, For, Show, onMount } from "solid-js";
 import { useGit } from "../context";
 import { statusColor } from "../utils";
 import { Badge, Button, Card, EmptyState } from "./shared";
 import { S } from "../styles";
+import * as git from "../git";
 
 const CONVENTIONAL_TYPES = [
   { prefix: "feat:", label: "feat", color: "#38bdf8" },
@@ -17,8 +18,43 @@ const CONVENTIONAL_TYPES = [
 export function ChangesView() {
   const ctx = useGit();
   const [commitMsg, setCommitMsg] = createSignal("");
+  const [commitBody, setCommitBody] = createSignal("");
+  const [showBody, setShowBody] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal("");
   const [discardTarget, setDiscardTarget] = createSignal<{ path: string; isUntracked: boolean } | null>(null);
+  const [ignoreOpen, setIgnoreOpen] = createSignal(false);
+  const [ignoreContent, setIgnoreContent] = createSignal("");
+  const [ignoreBusy, setIgnoreBusy] = createSignal(false);
+
+  async function openGitignore() {
+    setIgnoreOpen(true);
+    setIgnoreBusy(true);
+    try {
+      setIgnoreContent(await git.gitIgnoreGet(ctx.repoPath() || ""));
+    } finally {
+      setIgnoreBusy(false);
+    }
+  }
+
+  async function saveGitignore() {
+    setIgnoreBusy(true);
+    try {
+      await git.gitIgnoreSave(ctx.repoPath() || "", ignoreContent());
+      ctx.showToast(".gitignore saved", "success");
+      setIgnoreOpen(false);
+      await ctx.refresh();
+    } catch (err) {
+      ctx.showToast(`Failed to save .gitignore: ${err}`, "error");
+    } finally {
+      setIgnoreBusy(false);
+    }
+  }
+
+  function quickIgnore(path: string) {
+    const entry = `/${path}`;
+    setIgnoreContent((prev) => (prev.endsWith("\n") || prev === "" ? prev + entry + "\n" : prev + "\n" + entry + "\n"));
+    setIgnoreOpen(true);
+  }
 
   const allChanges = createMemo(() => ctx.status()?.changes ?? []);
 
@@ -40,14 +76,17 @@ export function ChangesView() {
   const untrackedFiles = createMemo(() => filteredChanges().filter((c) => c.status === "??"));
 
   async function handleCommit() {
-    const msg = commitMsg().trim();
-    if (!msg) return;
+    const subject = commitMsg().trim();
+    if (!subject) return;
+    const body = commitBody().trim();
+    const msg = body ? `${subject}\n\n${body}` : subject;
     if (ctx.isAmend()) {
       await ctx.commitAmend(msg);
     } else {
       await ctx.commit(msg);
     }
     setCommitMsg("");
+    setCommitBody("");
   }
 
   function handleFileSelect(path: string, staged: boolean) {
@@ -140,6 +179,7 @@ export function ChangesView() {
               {allChanges().length} total
             </span>
           </Show>
+          <Button size="sm" onClick={openGitignore} title="View and edit .gitignore">🙈 .gitignore</Button>
         </div>
 
         <Show when={ctx.loading() && !ctx.status()}>
@@ -154,6 +194,10 @@ export function ChangesView() {
                 <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
                   <span style={{ "font-weight": 700, color: "#f87171", "letter-spacing": "0.3px" }}>⚠️ Merge Conflicts</span>
                   <span style={{ ...S.badge, background: "rgba(239, 68, 68, 0.2)", color: "#f87171" }}>{conflictedFiles().length}</span>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <Button size="sm" onClick={ctx.mergeContinue} title="Complete the merge once all conflicts are resolved">Continue Merge</Button>
+                  <Button variant="danger" size="sm" onClick={ctx.mergeAbort} title="Abort the merge and restore pre-merge state">Abort Merge</Button>
                 </div>
               </div>
               <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
@@ -363,6 +407,14 @@ export function ChangesView() {
                         >
                           🗑️
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => quickIgnore(f.path)}
+                          style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", padding: "4px 6px", "font-size": "12px", "border-radius": "4px" }}
+                          title="Add to .gitignore"
+                        >
+                          🙈
+                        </button>
                       </div>
                     </div>
                   )}
@@ -444,14 +496,87 @@ export function ChangesView() {
                   }}
                   style={{ ...S.commitInput, flex: 1 }}
                 />
+                <Button
+                  onClick={() => setShowBody(!showBody())}
+                  title="Add extended description"
+                  style={{ padding: "10px 14px", "font-size": showBody() ? "12.5px" : "13px" }}
+                >
+                  {showBody() ? "Hide Body" : "+ Body"}
+                </Button>
                 <Button variant="primary" onClick={handleCommit} disabled={!commitMsg().trim()} style={{ padding: "10px 18px" }}>
                   {ctx.isAmend() ? "Amend" : "Commit"}
                 </Button>
               </div>
+
+              <Show when={showBody()}>
+                <textarea
+                  placeholder="Extended description (optional)... blank line between subject and body is added automatically"
+                  value={commitBody()}
+                  onInput={(e) => setCommitBody(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                      handleCommit();
+                    }
+                  }}
+                  rows={4}
+                  style={{
+                    ...S.commitInput,
+                    "margin-top": "8px",
+                    width: "100%",
+                    resize: "vertical",
+                    "min-height": "72px",
+                    "line-height": "1.5",
+                    "font-family": "inherit",
+                    "box-sizing": "border-box",
+                  }}
+                />
+                <Show when={commitBody().trim().length > 0}>
+                  <div style={{ "margin-top": "4px", "font-size": "11px", "font-family": "Space Mono, monospace", color: "#94a3b8" }}>
+                    {commitBody().trim().split("\n").length} line(s) in body
+                  </div>
+                </Show>
+              </Show>
             </Card>
           </Show>
         </Show>
       </div>
+
+      {/* .gitignore Editor Modal */}
+      <Show when={ignoreOpen()}>
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(10, 14, 23, 0.75)", "backdrop-filter": "blur(12px)",
+            display: "flex", "align-items": "center", "justify-content": "center", "z-index": 100050,
+          }}
+          onClick={() => setIgnoreOpen(false)}
+        >
+          <div
+            style={{ background: "rgba(15, 23, 42, 0.96)", border: "1px solid rgba(56, 189, 248, 0.35)", "border-radius": "12px", padding: "20px 24px", "max-width": "640px", width: "90%", "box-shadow": "0 20px 40px rgba(0,0,0,0.6)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }}>
+              <span style={{ "font-weight": 700, "font-size": "15px", color: "#f8fafc", "font-family": "Space Mono, monospace" }}>🙈 .gitignore</span>
+              <button type="button" onClick={() => setIgnoreOpen(false)} style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer", "font-size": "16px" }}>✕</button>
+            </div>
+            <Show when={!ignoreBusy()} fallback={<div style={{ padding: "20px", "font-size": "12px", color: "#94a3b8" }}>Loading...</div>}>
+              <textarea
+                placeholder={"node_modules/\ndist/\n*.log"}
+                value={ignoreContent()}
+                onInput={(e) => setIgnoreContent(e.currentTarget.value)}
+                rows={14}
+                style={{
+                  ...S.input, width: "100%", "box-sizing": "border-box", resize: "vertical",
+                  "font-family": "Space Mono, monospace", "font-size": "12px", "line-height": 1.6,
+                }}
+              />
+              <div style={{ display: "flex", "justify-content": "flex-end", gap: "10px", "margin-top": "12px" }}>
+                <Button onClick={() => setIgnoreOpen(false)}>Cancel</Button>
+                <Button variant="primary" onClick={saveGitignore}>Save .gitignore</Button>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Show>
 
       {/* Discard Confirmation Modal */}
       <Show when={discardTarget()}>

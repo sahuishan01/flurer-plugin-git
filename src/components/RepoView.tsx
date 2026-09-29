@@ -9,7 +9,7 @@ import {
   CommandConsoleModal, TagManagementModal, FileLogModal, BlameModal,
   RemotesConfigModal, ResetModal, BisectModal, StorageInspectorModal, PatchArchiveModal,
   ReflogModal, PickaxeSearchModal, SubmodulesModal, HooksManagerModal,
-  InteractiveRebaseModal, WorkspaceOverviewModal,
+  InteractiveRebaseModal, WorkspaceOverviewModal, PushPullOptionsModal,
 } from "./shared";
 import { S } from "../styles";
 import { ChangesView } from "./ChangesView";
@@ -73,6 +73,10 @@ export function RepoView(props: RepoViewProps) {
       if (e.key === "Escape") {
         if (ctx.consoleOpen()) {
           ctx.toggleConsole();
+          return;
+        }
+        if (ctx.pushPullModal()) {
+          ctx.closePushPullOptions();
           return;
         }
         if (ctx.resetModalCommit() !== null) {
@@ -199,6 +203,8 @@ export function RepoView(props: RepoViewProps) {
                 <Button variant="primary" size="sm" onClick={ctx.push} disabled={ctx.loading()} title="Push commits to remote">
                   <PushIcon size={13} /> Push
                 </Button>
+                <Button variant="secondary" size="sm" onClick={() => ctx.openPushPullOptions("pull")} disabled={ctx.loading()} title="Pull options (remote, branch, rebase)">⋯</Button>
+                <Button variant="secondary" size="sm" onClick={() => ctx.openPushPullOptions("push")} disabled={ctx.loading()} title="Push options (remote, branch, force, upstream)">⋯</Button>
                 <Button variant="secondary" size="sm" onClick={ctx.fetchRemote} disabled={ctx.loading()} title="Fetch remote branches">
                   <FetchIcon size={13} /> Fetch
                 </Button>
@@ -207,14 +213,30 @@ export function RepoView(props: RepoViewProps) {
 
                 <Show when={ctx.remoteWebLinks()}>
                   {(links) => (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => openExternalUrl(links().repoWebUrl)}
-                      title={`Open ${links().service} repository in browser`}
-                    >
-                      🌐 {links().service === "github" ? "GitHub ↗" : links().service === "gitlab" ? "GitLab ↗" : "Web ↗"}
-                    </Button>
+                    <>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => openExternalUrl(links().repoWebUrl)}
+                        title={`Open ${links().service} repository in browser`}
+                      >
+                        🌐 {links().service === "github" ? "GitHub ↗" : links().service === "gitlab" ? "GitLab ↗" : "Web ↗"}
+                      </Button>
+                      <Show when={ctx.status()?.branch && ctx.status()?.branch !== "HEAD"}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            const branch = ctx.status()!.branch;
+                            const base = ctx.branches().find((b) => b.upstream?.startsWith("origin/"))?.upstream?.replace(/^origin\//, "") || "main";
+                            openExternalUrl(links().prUrl(base, branch));
+                          }}
+                          title={`Create a pull request / merge request on ${links().service}`}
+                        >
+                          ⇪ New PR
+                        </Button>
+                      </Show>
+                    </>
                   )}
                 </Show>
 
@@ -291,6 +313,7 @@ export function RepoView(props: RepoViewProps) {
       <HooksManagerModal />
       <InteractiveRebaseModal />
       <WorkspaceOverviewModal />
+      <PushPullOptionsModal />
       <GlobalLoadingOverlay />
       <Toast />
     </div>

@@ -3,6 +3,7 @@ import { getRecentRepos, removeRecentRepo, formatTimestamp } from "../utils";
 import { GitIcon, FolderIcon, TrashIcon, Button } from "./shared";
 import { DirectoryPickerModal } from "./DirectoryPickerModal";
 import { S } from "../styles";
+import { gitClone, gitInit } from "../git";
 
 type DashboardViewProps = {
   onOpenRepo: (path: string) => void;
@@ -13,6 +14,14 @@ export function DashboardView(props: DashboardViewProps) {
   const [openPath, setOpenPath] = createSignal("");
   const [showInput, setShowInput] = createSignal(false);
   const [showPicker, setShowPicker] = createSignal(false);
+  const [pickerMode, setPickerMode] = createSignal<"open" | "clone-dest" | "init">("open");
+  const [showClone, setShowClone] = createSignal(false);
+  const [cloneUrl, setCloneUrl] = createSignal("");
+  const [cloneName, setCloneName] = createSignal("");
+  const [cloneDest, setCloneDest] = createSignal("");
+  const [cloneBusy, setCloneBusy] = createSignal(false);
+  const [cloneError, setCloneError] = createSignal("");
+  const [cloneDone, setCloneDone] = createSignal("");
 
   function handleOpen(path: string) {
     props.onOpenRepo(path);
@@ -32,7 +41,54 @@ export function DashboardView(props: DashboardViewProps) {
   }
 
   function handleBrowseFolder() {
+    setPickerMode("open");
     setShowPicker(true);
+  }
+
+  function handlePickerSelect(path: string) {
+    setShowPicker(false);
+    const mode = pickerMode();
+    if (mode === "open") {
+      props.onOpenRepo(path);
+    } else if (mode === "clone-dest") {
+      setCloneDest(path);
+      void handleClone(path);
+    } else if (mode === "init") {
+      void handleInit(path);
+    }
+  }
+
+  async function handleClone(dest?: string) {
+    const url = cloneUrl().trim();
+    const target = dest ?? cloneDest();
+    setCloneError("");
+    setCloneDone("");
+    if (!url || !target) return;
+    setCloneBusy(true);
+    try {
+      const repoPath = await gitClone(url, target, cloneName() || undefined);
+      setCloneDone(repoPath);
+      setRepos(getRecentRepos());
+      setCloneUrl("");
+      setCloneName("");
+      setCloneDest("");
+      setShowClone(false);
+      props.onOpenRepo(repoPath);
+    } catch (err) {
+      setCloneError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setCloneBusy(false);
+    }
+  }
+
+  async function handleInit(path: string) {
+    setCloneError("");
+    try {
+      await gitInit(path);
+      props.onOpenRepo(path);
+    } catch (err) {
+      setCloneError(String(err instanceof Error ? err.message : err));
+    }
   }
 
   return (
@@ -68,6 +124,12 @@ export function DashboardView(props: DashboardViewProps) {
                 Enter Path...
               </Button>
             </Show>
+            <Button
+              onClick={() => { setShowClone(!showClone()); setCloneError(""); setCloneDone(""); }}
+              style={{ padding: "10px 16px", "font-size": "13px" }}
+            >
+              Clone URL...
+            </Button>
           </div>
 
           <Show when={showInput()}>
@@ -86,6 +148,52 @@ export function DashboardView(props: DashboardViewProps) {
               </div>
             </div>
           </Show>
+
+          <Show when={showClone()}>
+            <div style={{ "margin-top": "12px", display: "flex", "flex-direction": "column", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder="https://github.com/user/repo.git"
+                value={cloneUrl()}
+                onInput={(e) => setCloneUrl(e.currentTarget.value)}
+                style={S.input}
+              />
+              <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                <input
+                  type="text"
+                  placeholder="Folder name (optional)"
+                  value={cloneName()}
+                  onInput={(e) => setCloneName(e.currentTarget.value)}
+                  style={{ ...S.input, flex: 1, "min-width": "180px" }}
+                />
+                <Button
+                  variant="primary"
+                  disabled={cloneBusy()}
+                  onClick={() => { setPickerMode("clone-dest"); setShowPicker(true); }}
+                  style={{ padding: "10px 16px", "font-size": "13px" }}
+                >
+                  {cloneBusy() ? "Cloning..." : "Choose Destination & Clone"}
+                </Button>
+                <Button onClick={() => setShowClone(false)}>Cancel</Button>
+              </div>
+            </div>
+          </Show>
+
+          <Show when={cloneDone()}>
+            <div style={{ "margin-top": "10px", "font-size": "12px", color: "#4ade80" }}>Cloned to {cloneDone()}</div>
+          </Show>
+          <Show when={cloneError()}>
+            <div style={{ "margin-top": "10px", "font-size": "12px", color: "#f87171", "white-space": "pre-wrap" }}>{cloneError()}</div>
+          </Show>
+
+          <div style={{ "margin-top": "12px" }}>
+            <Button
+              onClick={() => { setPickerMode("init"); setShowPicker(true); }}
+              style={{ padding: "8px 14px", "font-size": "12.5px" }}
+            >
+              Initialize New Repository...
+            </Button>
+          </div>
         </div>
 
         <Show when={repos().length > 0}>
@@ -139,7 +247,7 @@ export function DashboardView(props: DashboardViewProps) {
 
       <DirectoryPickerModal
         open={showPicker()}
-        onSelect={(path) => props.onOpenRepo(path)}
+        onSelect={handlePickerSelect}
         onClose={() => setShowPicker(false)}
       />
     </div>

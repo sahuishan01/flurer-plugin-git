@@ -14,6 +14,14 @@ import type {
   GitReflogEntry, GitSubmodule, GitHook, GitRebaseTodoItem, MultiRepoStatus,
 } from "./types";
 
+export type PushPullOptions = {
+  remote?: string;
+  branch?: string;
+  force?: boolean;
+  setUpstream?: boolean;
+  rebase?: boolean;
+};
+
 interface GitContextValue {
   theme: Accessor<ThemeId>;
   setTheme: (id: ThemeId) => void;
@@ -43,6 +51,10 @@ interface GitContextValue {
   selectDiffFile: (path: string | null) => void;
   diffResult: Accessor<GitDiff | null>;
   diffMode: Accessor<"staged" | "unstaged" | "commit" | "compare">;
+  diffIgnoreWhitespace: Accessor<boolean>;
+  setDiffIgnoreWhitespace: (v: boolean) => void;
+  diffDetectRenames: Accessor<boolean>;
+  setDiffDetectRenames: (v: boolean) => void;
   diffCommitHash: Accessor<string | null>;
   compareSourceHash: Accessor<string | null>;
   setCompareSourceHash: (hash: string | null) => void;
@@ -63,6 +75,7 @@ interface GitContextValue {
   stageAll: () => Promise<void>;
   unstageAll: () => Promise<void>;
   stageHunk: (filePath: string, hunk: DiffHunk) => Promise<void>;
+  stageLines: (filePath: string, hunk: DiffHunk, lineIdx: number[]) => Promise<void>;
   unstageHunk: (filePath: string, hunk: DiffHunk) => Promise<void>;
   discardHunk: (filePath: string, hunk: DiffHunk) => Promise<void>;
   discardFile: (path: string, isUntracked?: boolean) => Promise<void>;
@@ -70,13 +83,17 @@ interface GitContextValue {
   commitAmend: (message?: string) => Promise<void>;
   isAmend: Accessor<boolean>;
   setIsAmend: (val: boolean) => void;
-  push: () => Promise<void>;
-  pull: () => Promise<void>;
+  push: (opts?: PushPullOptions) => Promise<void>;
+  pull: (opts?: PushPullOptions) => Promise<void>;
   fetchRemote: () => Promise<void>;
   createBranch: (name: string, start_point?: string) => Promise<void>;
-  deleteBranch: (name: string) => Promise<void>;
+  deleteBranch: (name: string, force?: boolean) => Promise<void>;
+  renameBranch: (oldName: string, newName: string) => Promise<void>;
+  setUpstream: (branch: string, upstream: string) => Promise<void>;
   checkout: (branch: string) => Promise<void>;
   merge: (branch: string) => Promise<void>;
+  mergeAbort: () => Promise<void>;
+  mergeContinue: () => Promise<void>;
   cherryPick: (commitHash: string) => Promise<void>;
   revertCommit: (commitHash: string) => Promise<void>;
   resetBranch: (commitHash: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
@@ -148,8 +165,9 @@ interface GitContextValue {
   multiRepoStatuses: Accessor<MultiRepoStatus[]>;
   loadMultiRepoStatuses: (repoPaths: string[]) => Promise<void>;
   batchFetchAllRepos: (repoPaths: string[]) => Promise<void>;
-  stash: (message?: string) => Promise<void>;
+  stash: (message?: string, includeUntracked?: boolean) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
+  stashApply: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
   loadStashDiff: (index: number) => Promise<GitDiff | null>;
   addWorktree: (path: string, branch?: string) => Promise<void>;
@@ -204,6 +222,9 @@ interface GitContextValue {
   trustRepository: () => Promise<void>;
   shortcutsOpen: Accessor<boolean>;
   openShortcuts: () => void;
+  pushPullModal: Accessor<null | { kind: "push" | "pull" }>;
+  openPushPullOptions: (kind: "push" | "pull") => void;
+  closePushPullOptions: () => void;
   closeShortcuts: () => void;
   toggleShortcuts: () => void;
 }
@@ -262,6 +283,12 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
   const [shellAvail, setShellAvail] = createSignal(false);
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const openShortcuts = () => setShortcutsOpen(true);
+  const [pushPullModal, setPushPullModal] = createSignal<null | { kind: "push" | "pull" }>(null);
+  const openPushPullOptions = (kind: "push" | "pull") => {
+    void loadRemotes();
+    setPushPullModal({ kind });
+  };
+  const closePushPullOptions = () => setPushPullModal(null);
   const closeShortcuts = () => setShortcutsOpen(false);
   const toggleShortcuts = () => setShortcutsOpen((prev) => !prev);
 
@@ -375,6 +402,19 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
       openRepo(props.initialPath);
     }
     setShellAvail(git.hasShellPlugin());
+
+    // Auto-refresh on window focus (debounced, skip while a busy task is running)
+    let lastFocusRefresh = 0;
+    const onWindowFocus = () => {
+      if (!repoPath()) return;
+      if (busyTask()) return;
+      const now = Date.now();
+      if (now - lastFocusRefresh < 1500) return;
+      lastFocusRefresh = now;
+      void refresh();
+    };
+    window.addEventListener("focus", onWindowFocus);
+    onCleanup(() => window.removeEventListener("focus", onWindowFocus));
   });
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -505,8 +545,11 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
     const p = repoPath();
     if (!s || !p) return;
     return withBusyTask("Staging All Changes", "Adding all modified & untracked files...", async () => {
-      for (const c of s.changes) {
-        if (!c.staged) await git.gitStage(p, c.path);
+      const paths = s.changes.filter((c) => !c.staged).map((c) => c.path);
+      if (paths.length === 1) {
+        await git.gitStage(p, paths[0]);
+      } else if (paths.length > 1) {
+        await git.gitStagePaths(p, paths);
       }
       await refresh();
     });
@@ -517,10 +560,27 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
     const p = repoPath();
     if (!s || !p) return;
     return withBusyTask("Unstaging All Changes", "Resetting staged index...", async () => {
-      for (const c of s.changes) {
-        if (c.staged) await git.gitUnstage(p, c.path);
+      const paths = s.changes.filter((c) => c.staged).map((c) => c.path);
+      if (paths.length === 1) {
+        await git.gitUnstage(p, paths[0]);
+      } else if (paths.length > 1) {
+        await git.gitUnstagePaths(p, paths);
       }
       await refresh();
+    });
+  }
+
+  async function stageLines(filePath: string, hunk: DiffHunk, lineIdx: number[]) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Staging Lines", filePath, async () => {
+      try {
+        await git.gitApplyLines(p, filePath, hunk, lineIdx);
+        showToast("Lines staged", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to stage lines: ${err}`, "error");
+      }
     });
   }
 
@@ -609,12 +669,15 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
     });
   }
 
-  async function push() {
+  async function push(opts?: PushPullOptions) {
     const p = repoPath();
     if (!p) return;
-    return withBusyTask("Pushing Commits", "Pushing local commits to remote...", async () => {
+    const label = opts && (opts.force || opts.setUpstream || opts.remote || opts.branch)
+      ? `Pushing to ${opts.remote || "origin"}${opts.branch ? ` ${opts.branch}` : ""}...`
+      : "Pushing local commits to remote...";
+    return withBusyTask("Pushing Commits", label, async () => {
       try {
-        await git.gitPush(p);
+        await git.gitPush(p, opts);
         showToast("Push completed", "success");
         await refresh();
       } catch (err) {
@@ -623,12 +686,12 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
     });
   }
 
-  async function pull() {
+  async function pull(opts?: PushPullOptions) {
     const p = repoPath();
     if (!p) return;
-    return withBusyTask("Pulling Changes", "Fetching and merging remote commits...", async () => {
+    return withBusyTask("Pulling Changes", opts?.rebase ? "Fetching and rebasing remote commits..." : "Fetching and merging remote commits...", async () => {
       try {
-        await git.gitPull(p);
+        await git.gitPull(p, opts);
         showToast("Pull completed", "success");
         await refresh();
       } catch (err) {
@@ -665,16 +728,44 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
     });
   }
 
-  async function deleteBranch(name: string) {
+  async function deleteBranch(name: string, force: boolean = false) {
     const p = repoPath();
     if (!p) return;
     return withBusyTask("Deleting Branch", `Deleting "${name}"...`, async () => {
       try {
-        await git.gitBranchDelete(p, name);
+        await git.gitBranchDelete(p, name, force);
         showToast(`Branch "${name}" deleted`, "success");
         await refresh();
       } catch (err) {
         showToast(`Failed to delete branch: ${err}`, "error");
+      }
+    });
+  }
+
+  async function renameBranch(oldName: string, newName: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Renaming Branch", `Renaming "${oldName}"...`, async () => {
+      try {
+        await git.gitBranchRename(p, oldName, newName);
+        showToast(`Branch renamed to "${newName}"`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to rename branch: ${err}`, "error");
+      }
+    });
+  }
+
+  async function setUpstream(branch: string, upstream: string) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Setting Upstream", `Setting "${branch}" → "${upstream}"...`, async () => {
+      try {
+        await git.gitBranchSetUpstream(p, branch, upstream);
+        showToast(`Upstream set for "${branch}"`, "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to set upstream: ${err}`, "error");
       }
     });
   }
@@ -703,6 +794,34 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
         await refresh();
       } catch (err) {
         showToast(`Merge failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function mergeAbort() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Aborting Merge", "Aborting current merge...", async () => {
+      try {
+        await git.gitMergeAbort(p);
+        showToast("Merge aborted", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to abort merge: ${err}`, "error");
+      }
+    });
+  }
+
+  async function mergeContinue() {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Continuing Merge", "Completing merge...", async () => {
+      try {
+        await git.gitMergeContinue(p);
+        showToast("Merge completed", "success");
+        await refresh();
+      } catch (err) {
+        showToast(`Failed to continue merge: ${err}`, "error");
       }
     });
   }
@@ -799,13 +918,13 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
     });
   }
 
-  async function stash(message?: string) {
+  async function stash(message?: string, includeUntracked: boolean = false) {
     const p = repoPath();
     if (!p) return;
     return withBusyTask("Stashing Changes", message || "WIP on current branch", async () => {
       try {
-        await git.gitStash(p, message);
-        showToast("Changes stashed", "success");
+        await git.gitStash(p, message, includeUntracked);
+        showToast(includeUntracked ? "Changes stashed (incl. untracked)" : "Changes stashed", "success");
         await refresh();
         await loadStashes();
       } catch (err) {
@@ -825,6 +944,21 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
         await loadStashes();
       } catch (err) {
         showToast(`Stash pop failed: ${err}`, "error");
+      }
+    });
+  }
+
+  async function stashApply(index: number) {
+    const p = repoPath();
+    if (!p) return;
+    return withBusyTask("Applying Stash", `Applying stash@{${index}}...`, async () => {
+      try {
+        await git.gitStashApply(p, index);
+        showToast("Stash applied (kept in list)", "success");
+        await refresh();
+        await loadStashes();
+      } catch (err) {
+        showToast(`Stash apply failed: ${err}`, "error");
       }
     });
   }
@@ -886,6 +1020,10 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
 
   let diffReqId = 0;
 
+  const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = createSignal(false);
+  const [diffDetectRenames, setDiffDetectRenames] = createSignal(true);
+  const diffOpts = () => ({ ignoreWhitespace: diffIgnoreWhitespace(), detectRenames: diffDetectRenames() });
+
   async function loadDiff(filePath: string, mode: "staged" | "unstaged" | "commit" | "compare", commitHash?: string, switchTab: boolean = true) {
     const myReq = ++diffReqId;
     setSelectedDiffFile(filePath === "." ? null : filePath);
@@ -905,11 +1043,11 @@ export function GitProvider(props: ParentProps & { initialPath?: string | null; 
       try {
         let diff: GitDiff;
         if (mode === "commit" && commitHash) {
-          diff = await git.gitDiffCommit(p, commitHash, filePath);
+          diff = await git.gitDiffCommit(p, commitHash, filePath, diffOpts());
         } else if (mode === "staged") {
-          diff = await git.gitDiffStaged(p, filePath);
+          diff = await git.gitDiffStaged(p, filePath, diffOpts());
         } else {
-          diff = await git.gitDiff(p, filePath);
+          diff = await git.gitDiff(p, filePath, diffOpts());
         }
         if (myReq !== diffReqId) return;
         setDiffResult(diff);
@@ -1602,12 +1740,12 @@ function toggleBranchSelection(branchName: string) {
     tags, remotes, conflicts, stats,
     selectedBranches, isAllBranchesSelected, toggleBranchSelection, selectAllBranches,
     selectedDiffFile, selectDiffFile: setSelectedDiffFile,
-    diffResult, diffMode, diffCommitHash, compareSourceHash, setCompareSourceHash: handleSetCompareSourceHash, diffCompareCommits, setDiffMode,
+    diffResult, diffMode, diffIgnoreWhitespace, setDiffIgnoreWhitespace, diffDetectRenames, setDiffDetectRenames, diffCommitHash, compareSourceHash, setCompareSourceHash: handleSetCompareSourceHash, diffCompareCommits, setDiffMode,
     loading, busyTask, setBusyTask, error, toast, showToast, shellAvailable: shellAvail,
-    refresh, stage, unstage, stageAll, unstageAll, stageHunk, unstageHunk, discardHunk, discardFile, commit, commitAmend,
+    refresh, stage, unstage, stageAll, unstageAll, stageHunk, stageLines, unstageHunk, discardHunk, discardFile, commit, commitAmend,
     isAmend, setIsAmend,
     push, pull, fetchRemote,
-    createBranch, deleteBranch, checkout, merge, cherryPick,
+    createBranch, deleteBranch, renameBranch, setUpstream, checkout, merge, mergeAbort, mergeContinue, cherryPick,
     revertCommit, resetBranch, resetModalCommit, openResetModal, closeResetModal,
     rebaseOnto, rebaseAbort, rebaseContinue,
     bisectState, startBisect, markBisect, resetBisect, bisectModalOpen, openBisectModal, closeBisectModal,
@@ -1620,7 +1758,7 @@ function toggleBranchSelection(branchName: string) {
     hooks, loadHooks, saveHook, hooksModalOpen, openHooksModal, closeHooksModal,
     rebasePlanModalBase, openInteractiveRebaseModal, closeInteractiveRebaseModal, executeInteractiveRebase,
     workspaceOverviewOpen, openWorkspaceOverview, closeWorkspaceOverview, multiRepoStatuses, loadMultiRepoStatuses, batchFetchAllRepos,
-    stash, stashPop, stashDrop, loadStashDiff,
+    stash, stashPop, stashApply, stashDrop, loadStashDiff,
     addWorktree, removeWorktree,
     loadDiff, loadDiffCompare, loadDiffWithCurrent, loadDiffWithWorkingTree,
     diffPromptHash, openDiffPrompt, closeDiffPrompt,
@@ -1638,6 +1776,7 @@ function toggleBranchSelection(branchName: string) {
     isDubiousOwnership, trustRepository,
     theme: currentTheme, setTheme: applyTheme,
     shortcutsOpen, openShortcuts, closeShortcuts, toggleShortcuts,
+    pushPullModal, openPushPullOptions, closePushPullOptions,
   };
 
   return <GitContext.Provider value={ctx}>{props.children}</GitContext.Provider>;

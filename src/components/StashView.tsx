@@ -9,6 +9,7 @@ export function StashView() {
   const ctx = useGit();
   const [showCreate, setShowCreate] = createSignal(false);
   const [stashMsg, setStashMsg] = createSignal("");
+  const [stashUntracked, setStashUntracked] = createSignal(false);
   const [dropTarget, setDropTarget] = createSignal<number | null>(null);
   const [expandedStash, setExpandedStash] = createSignal<number | null>(null);
   const [stashDiffData, setStashDiffData] = createSignal<GitDiff | null>(null);
@@ -19,8 +20,9 @@ export function StashView() {
   });
 
   async function handleCreate() {
-    await ctx.stash(stashMsg().trim() || undefined);
+    await ctx.stash(stashMsg().trim() || undefined, stashUntracked());
     setStashMsg("");
+    setStashUntracked(false);
     setShowCreate(false);
   }
 
@@ -63,15 +65,24 @@ export function StashView() {
         </div>
 
         <Show when={showCreate()}>
-          <div style={{ display: "flex", gap: "8px", "margin-bottom": "14px", "padding-bottom": "14px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)" }}>
+          <div style={{ display: "flex", gap: "8px", "margin-bottom": "14px", "padding-bottom": "14px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-wrap": "wrap", "align-items": "center" }}>
             <input
               type="text"
               placeholder="Stash message (optional)"
               value={stashMsg()}
               onInput={(e) => setStashMsg(e.currentTarget.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              style={{ ...S.input, flex: 1 }}
+              style={{ ...S.input, flex: 1, "min-width": "180px" }}
             />
+            <label style={{ display: "inline-flex", "align-items": "center", gap: "6px", "font-size": "12px", color: "var(--text-secondary, #94a3b8)", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={stashUntracked()}
+                onChange={(e) => setStashUntracked(e.currentTarget.checked)}
+                style={{ cursor: "pointer", "accent-color": "var(--accent-default, #38bdf8)" }}
+              />
+              Include untracked (-u)
+            </label>
             <Button variant="primary" onClick={handleCreate}>Save Stash</Button>
           </div>
         </Show>
@@ -117,6 +128,7 @@ export function StashView() {
 
                     <div style={{ display: "flex", gap: "6px" }}>
                       <Button variant="primary" size="sm" onClick={() => ctx.stashPop(stash.index)}>Pop</Button>
+                      <Button size="sm" onClick={() => ctx.stashApply(stash.index)} title="Apply without removing from stash list">Apply</Button>
                       <Button variant="danger" size="sm" onClick={() => setDropTarget(stash.index)}>Drop</Button>
                     </div>
                   </div>

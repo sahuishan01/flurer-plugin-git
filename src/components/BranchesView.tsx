@@ -10,7 +10,13 @@ export function BranchesView() {
   const [newBranchName, setNewBranchName] = createSignal("");
   const [searchQuery, setSearchQuery] = createSignal("");
   const [deleteTarget, setDeleteTarget] = createSignal<string | null>(null);
+  const [deleteForce, setDeleteForce] = createSignal(false);
   const [mergeTarget, setMergeTarget] = createSignal<string | null>(null);
+  const [renameTarget, setRenameTarget] = createSignal<string | null>(null);
+  const [renameValue, setRenameValue] = createSignal("");
+  const [upstreamTarget, setUpstreamTarget] = createSignal<string | null>(null);
+  const [upstreamValue, setUpstreamValue] = createSignal("");
+  const [startPoint, setStartPoint] = createSignal("");
 
   const currentBranch = createMemo(() => ctx.branches().find((b) => b.is_current));
 
@@ -23,15 +29,33 @@ export function BranchesView() {
   async function handleCreate() {
     const name = newBranchName().trim();
     if (!name) return;
-    await ctx.createBranch(name);
+    await ctx.createBranch(name, startPoint().trim() || undefined);
     setNewBranchName("");
+    setStartPoint("");
     setShowCreate(false);
   }
 
   async function handleDelete() {
     const name = deleteTarget();
-    if (name) await ctx.deleteBranch(name);
+    if (name) await ctx.deleteBranch(name, deleteForce());
     setDeleteTarget(null);
+    setDeleteForce(false);
+  }
+
+  async function handleRename() {
+    const oldName = renameTarget();
+    const newName = renameValue().trim();
+    if (oldName && newName && newName !== oldName) await ctx.renameBranch(oldName, newName);
+    setRenameTarget(null);
+    setRenameValue("");
+  }
+
+  async function handleSetUpstream() {
+    const branch = upstreamTarget();
+    const upstream = upstreamValue().trim();
+    if (branch && upstream) await ctx.setUpstream(branch, upstream);
+    setUpstreamTarget(null);
+    setUpstreamValue("");
   }
 
   async function handleCheckout(name: string) {
@@ -163,14 +187,22 @@ export function BranchesView() {
         </div>
 
         <Show when={showCreate()}>
-          <div style={{ display: "flex", gap: "8px", "margin-bottom": "14px", "padding-bottom": "14px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)" }}>
+          <div style={{ display: "flex", gap: "8px", "margin-bottom": "14px", "padding-bottom": "14px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "flex-wrap": "wrap" }}>
             <input
               type="text"
               placeholder="Branch name (e.g. feature/new-ui)"
               value={newBranchName()}
               onInput={(e) => setNewBranchName(e.currentTarget.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              style={{ ...S.input, flex: 1 }}
+              style={{ ...S.input, flex: 2, "min-width": "180px" }}
+            />
+            <input
+              type="text"
+              placeholder="Start point (optional, e.g. origin/main)"
+              value={startPoint()}
+              onInput={(e) => setStartPoint(e.currentTarget.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              style={{ ...S.input, flex: 1, "min-width": "160px" }}
             />
             <Button variant="primary" onClick={handleCreate}>Create Branch</Button>
           </div>
@@ -221,10 +253,56 @@ export function BranchesView() {
                     <Show when={!branch.is_current}>
                       <Button size="sm" onClick={() => handleCheckout(branch.name)}>Checkout</Button>
                       <Button size="sm" onClick={() => setMergeTarget(branch.name)}>Merge</Button>
-                      <Button variant="danger" size="sm" onClick={() => setDeleteTarget(branch.name)}>Delete</Button>
+                    </Show>
+                    <Button
+                      size="sm"
+                      onClick={() => { setRenameTarget(renameTarget() === branch.name ? null : branch.name); setRenameValue(branch.name); }}
+                      title="Rename branch"
+                    >
+                      Rename
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => { setUpstreamTarget(upstreamTarget() === branch.name ? null : branch.name); setUpstreamValue(branch.upstream || `origin/${branch.name}`); }}
+                      title="Set upstream tracking branch"
+                    >
+                      Upstream
+                    </Button>
+                    <Show when={!branch.is_current}>
+                      <Button variant="danger" size="sm" onClick={() => { setDeleteTarget(branch.name); setDeleteForce(false); }}>Delete</Button>
                     </Show>
                   </div>
                 </div>
+
+                <Show when={renameTarget() === branch.name}>
+                  <div style={{ display: "flex", gap: "8px", "padding-top": "6px", "border-top": "1px solid rgba(255, 255, 255, 0.05)" }}>
+                    <input
+                      type="text"
+                      placeholder="New branch name"
+                      value={renameValue()}
+                      onInput={(e) => setRenameValue(e.currentTarget.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                      style={{ ...S.input, flex: 1 }}
+                    />
+                    <Button variant="primary" size="sm" onClick={handleRename}>Rename</Button>
+                    <Button size="sm" onClick={() => setRenameTarget(null)}>Cancel</Button>
+                  </div>
+                </Show>
+
+                <Show when={upstreamTarget() === branch.name}>
+                  <div style={{ display: "flex", gap: "8px", "padding-top": "6px", "border-top": "1px solid rgba(255, 255, 255, 0.05)" }}>
+                    <input
+                      type="text"
+                      placeholder="Upstream (e.g. origin/main)"
+                      value={upstreamValue()}
+                      onInput={(e) => setUpstreamValue(e.currentTarget.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSetUpstream()}
+                      style={{ ...S.input, flex: 1 }}
+                    />
+                    <Button variant="primary" size="sm" onClick={handleSetUpstream}>Set Upstream</Button>
+                    <Button size="sm" onClick={() => setUpstreamTarget(null)}>Cancel</Button>
+                  </div>
+                </Show>
 
                 <Show when={branch.lastCommit}>
                   <div style={{
@@ -276,12 +354,28 @@ export function BranchesView() {
       <ConfirmDialog
         open={deleteTarget() !== null}
         title="Delete Branch"
-        message={`Are you sure you want to delete branch "${deleteTarget()}"? This operation cannot be undone.`}
-        confirmLabel="Delete"
+        message={
+          deleteForce()
+            ? `Force delete branch "${deleteTarget()}"? Unmerged commits may be lost. This operation cannot be undone.`
+            : `Are you sure you want to delete branch "${deleteTarget()}"? This operation cannot be undone.`
+        }
+        confirmLabel={deleteForce() ? "Force Delete" : "Delete"}
         variant="danger"
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
-      />
+        onCancel={() => { setDeleteTarget(null); setDeleteForce(false); }}
+      >
+        <Show when={!deleteForce()}>
+          <div style={{ "margin-top": "-8px", "margin-bottom": "10px", "text-align": "right" }}>
+            <button
+              type="button"
+              onClick={() => setDeleteForce(true)}
+              style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", "font-size": "12px", "text-decoration": "underline" }}
+            >
+              Branch has unmerged commits? Force delete (-D)
+            </button>
+          </div>
+        </Show>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={mergeTarget() !== null}

@@ -161,6 +161,23 @@ export async function isGitRepo(repoPath: string): Promise<boolean> {
   }
 }
 
+function defaultCloneDirName(url: string): string {
+  const cleaned = url.trim().replace(/\/+$/, "");
+  const last = cleaned.split(/[\/\\]/).pop() || "repo";
+  return last.replace(/\.git$/i, "") || "repo";
+}
+
+export async function gitClone(url: string, parentPath: string, name?: string): Promise<string> {
+  const dirName = name?.trim() || defaultCloneDirName(url);
+  const parent = parentPath.replace(/[\/\\]+$/, "");
+  await execGit(parent, "clone", url.trim(), dirName);
+  return `${parent}/${dirName}`;
+}
+
+export async function gitInit(repoPath: string): Promise<void> {
+  await execGit(repoPath, "init", ".");
+}
+
 export async function gitRepoStatus(repoPath: string): Promise<GitStatus> {
   const Command = getShell();
   if (Command) {
@@ -217,6 +234,14 @@ export async function gitStage(repoPath: string, filePath: string): Promise<void
   await invoke("git_stage", { repoPath, filePath });
 }
 
+export async function gitStagePaths(repoPath: string, filePaths: string[]): Promise<void> {
+  await execGit(repoPath, "add", "--", ...filePaths);
+}
+
+export async function gitUnstagePaths(repoPath: string, filePaths: string[]): Promise<void> {
+  await execGit(repoPath, "reset", "-q", "HEAD", "--", ...filePaths);
+}
+
 export async function gitUnstage(repoPath: string, filePath: string): Promise<void> {
   const Command = getShell();
   if (Command) {
@@ -235,19 +260,32 @@ export async function gitCommit(repoPath: string, message: string): Promise<void
   await invoke("git_commit", { repoPath, message });
 }
 
-export async function gitPush(repoPath: string): Promise<void> {
+export async function gitPush(
+  repoPath: string,
+  opts?: { remote?: string; branch?: string; force?: boolean; setUpstream?: boolean }
+): Promise<void> {
   const Command = getShell();
   if (Command) {
-    await execGit(repoPath, "push");
+    const args = ["push"];
+    if (opts?.force) args.push("--force-with-lease");
+    if (opts?.setUpstream) args.push("-u");
+    if (opts?.remote) args.push(opts.remote);
+    if (opts?.branch) args.push(opts.branch);
+    if (opts?.remote && !opts?.branch) args.push("HEAD");
+    await execGit(repoPath, ...args);
     return;
   }
   await invoke("git_push", { repoPath });
 }
 
-export async function gitPull(repoPath: string): Promise<void> {
+export async function gitPull(repoPath: string, opts?: { remote?: string; branch?: string; rebase?: boolean }): Promise<void> {
   const Command = getShell();
   if (Command) {
-    await execGit(repoPath, "pull");
+    const args = ["pull"];
+    if (opts?.rebase) args.push("--rebase");
+    if (opts?.remote) args.push(opts.remote);
+    if (opts?.branch) args.push(opts.branch);
+    await execGit(repoPath, ...args);
     return;
   }
   await invoke("git_pull", { repoPath });
@@ -324,13 +362,26 @@ export async function gitBranchCreate(repoPath: string, name: string, startPoint
   await invoke("git_branch_create", { repoPath, name, startPoint: startPoint ?? null });
 }
 
-export async function gitBranchDelete(repoPath: string, name: string): Promise<void> {
+export async function gitBranchDelete(repoPath: string, name: string, force: boolean = false): Promise<void> {
   const Command = getShell();
   if (Command) {
-    await execGit(repoPath, "branch", "-d", name);
+    await execGit(repoPath, "branch", force ? "-D" : "-d", name);
     return;
   }
   await invoke("git_branch_delete", { repoPath, name });
+}
+
+export async function gitBranchRename(repoPath: string, oldName: string, newName: string): Promise<void> {
+  await execGit(repoPath, "branch", "-m", oldName, newName);
+}
+
+export async function gitBranchSetUpstream(repoPath: string, branch: string, upstream: string): Promise<void> {
+  await execGit(repoPath, "branch", "-u", upstream, branch);
+}
+
+export async function gitBranchListRemote(repoPath: string): Promise<string[]> {
+  const out = await execGit(repoPath, "branch", "-r", "--format=%(refname:short)");
+  return out.trim().split("\n").filter(Boolean);
 }
 
 export async function gitCheckout(repoPath: string, branch: string): Promise<void> {
@@ -349,6 +400,14 @@ export async function gitMerge(repoPath: string, branch: string): Promise<void> 
     return;
   }
   await invoke("git_merge", { repoPath, branch });
+}
+
+export async function gitMergeAbort(repoPath: string): Promise<void> {
+  await execGit(repoPath, "merge", "--abort");
+}
+
+export async function gitMergeContinue(repoPath: string): Promise<void> {
+  await execGit(repoPath, "merge", "--continue");
 }
 
 export async function gitRebase(repoPath: string, branch: string): Promise<void> {
@@ -510,11 +569,21 @@ export async function gitUntrackedFiles(repoPath: string): Promise<string[]> {
   return invoke<string[]>("git_untracked_files", { repoPath });
 }
 
-export async function gitDiff(repoPath: string, filePath: string = "."): Promise<GitDiff> {
+export type GitDiffOptions = { ignoreWhitespace?: boolean; detectRenames?: boolean };
+
+function diffOptionArgs(opts?: GitDiffOptions): string[] {
+  const args: string[] = [];
+  if (opts?.ignoreWhitespace) args.push("-w", "--ignore-blank-lines");
+  if (opts?.detectRenames) args.push("-M", "-C");
+  return args;
+}
+
+export async function gitDiff(repoPath: string, filePath: string = ".", opts?: GitDiffOptions): Promise<GitDiff> {
   const Command = getShell();
   const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
-    const args = ["diff"];
+    const extra = diffOptionArgs(opts);
+    const args = ["diff", ...extra];
     if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
     let out = await execGit(repoPath, ...args);
 
@@ -573,11 +642,11 @@ export async function gitDiff(repoPath: string, filePath: string = "."): Promise
   return invoke<GitDiff>("git_diff", { repoPath, filePath: cleanPath });
 }
 
-export async function gitDiffStaged(repoPath: string, filePath: string = "."): Promise<GitDiff> {
+export async function gitDiffStaged(repoPath: string, filePath: string = ".", opts?: GitDiffOptions): Promise<GitDiff> {
   const Command = getShell();
   const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
-    const args = ["diff", "--cached"];
+    const args = ["diff", "--cached", ...diffOptionArgs(opts)];
     if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
     let out = await execGit(repoPath, ...args);
 
@@ -593,17 +662,18 @@ export async function gitDiffStaged(repoPath: string, filePath: string = "."): P
   return invoke<GitDiff>("git_diff_staged", { repoPath, filePath: cleanPath });
 }
 
-export async function gitDiffCommit(repoPath: string, commitHash: string, filePath: string = "."): Promise<GitDiff> {
+export async function gitDiffCommit(repoPath: string, commitHash: string, filePath: string = ".", opts?: GitDiffOptions): Promise<GitDiff> {
   const Command = getShell();
   const cleanPath = (filePath || ".").replace(/\\/g, "/");
   if (Command) {
+    const extra = diffOptionArgs(opts);
     let out = "";
     try {
-      const args = ["show", "-m", "--patch", "--format=", commitHash];
+      const args = ["show", "-m", "--patch", "--format=", ...extra, commitHash];
       if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
       out = await execGit(repoPath, ...args);
     } catch {
-      const args = ["diff", `${commitHash}~1`, commitHash];
+      const args = ["diff", ...extra, `${commitHash}~1`, commitHash];
       if (cleanPath && cleanPath !== ".") args.push("--", cleanPath);
       out = await execGit(repoPath, ...args);
     }
@@ -666,14 +736,13 @@ export async function gitGraph(
 
 // ---- Stash ----
 
-export async function gitStash(repoPath: string, message?: string): Promise<void> {
+export async function gitStash(repoPath: string, message?: string, includeUntracked: boolean = false): Promise<void> {
   const Command = getShell();
   if (Command) {
-    if (message) {
-      await execGit(repoPath, "stash", "push", "-m", message);
-    } else {
-      await execGit(repoPath, "stash");
-    }
+    const args = ["stash", "push"];
+    if (includeUntracked) args.push("-u");
+    if (message) args.push("-m", message);
+    await execGit(repoPath, ...args);
     return;
   }
   await invoke("git_stash", { repoPath, message: message ?? null });
@@ -700,6 +769,10 @@ export async function gitStashPop(repoPath: string, index: number): Promise<void
     return;
   }
   await invoke("git_stash_pop", { repoPath, index });
+}
+
+export async function gitStashApply(repoPath: string, index: number): Promise<void> {
+  await execGit(repoPath, "stash", "apply", `stash@{${index}}`);
 }
 
 export async function gitStashDrop(repoPath: string, index: number): Promise<void> {
@@ -825,6 +898,45 @@ export function createHunkPatch(filePath: string, hunk: DiffHunk): string {
     patch += `${line.origin}${line.content}\n`;
   }
   return patch;
+}
+
+// Partial patch: keeps all context/deleted lines but only the selected added lines.
+export function createLinePatch(filePath: string, hunk: DiffHunk, selectedLineIdx: number[]): string {
+  const normPath = filePath.replace(/^\.\//, "");
+  const wanted = new Set(selectedLineIdx);
+  const kept = hunk.lines.filter((line, i) => line.origin !== "+" || wanted.has(i));
+
+  // old side = context + deleted lines; new side = context + selected added lines
+  const oldCount = kept.filter((l) => l.origin === " " || l.origin === "-").length;
+  const newCount = kept.filter((l) => l.origin === " " || l.origin === "+").length;
+
+  // If no added line is selected there is nothing to apply
+  if (!kept.some((l) => l.origin === "+")) return "";
+
+  let patch = `--- a/${normPath}\n+++ b/${normPath}\n@@ -${hunk.old_start},${oldCount} +${hunk.new_start},${newCount} @@\n`;
+  for (const line of kept) {
+    patch += `${line.origin}${line.content}\n`;
+  }
+  return patch;
+}
+
+export async function gitApplyLines(repoPath: string, filePath: string, hunk: DiffHunk, selectedLineIdx: number[]): Promise<void> {
+  const patch = createLinePatch(filePath, hunk, selectedLineIdx);
+  if (!patch) return;
+  const Command = getShell();
+  if (Command) {
+    try {
+      await applyPatchDirect(Command, repoPath, "--cached", patch);
+      return;
+    } catch {
+      const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+      if (isWindows) {
+        await applyPatchWindows(Command, repoPath, "--cached", patch);
+      } else {
+        await applyPatchPosix(Command, repoPath, "--cached", patch);
+      }
+    }
+  }
 }
 
 async function applyPatchWindows(Command: any, repoPath: string, applyFlag: string, patch: string): Promise<void> {
@@ -1254,6 +1366,50 @@ export async function gitRepoStats(repoPath: string): Promise<GitRepoStats> {
       }
     }
 
+    // 2. Contributor additions/deletions from numstat (capped to keep it fast)
+    let weeklyActivity: Array<{ week: number; count: number }> = [];
+    try {
+      const numstatOut = await execGit(repoPath, "log", "--all", "--numstat", "--format=%x01%an%x1f%ae", "--max-count=1000");
+      const addMap = new Map<string, { a: number; d: number }>();
+      let currentEmail = "";
+      for (const line of numstatOut.trim().split("\n").filter(Boolean)) {
+        if (line.startsWith("\x01")) {
+          const meta = line.substring(1).split("\x1f");
+          currentEmail = meta[1] || "";
+          continue;
+        }
+        const parts = line.split("\t");
+        if (parts.length >= 3 && currentEmail) {
+          const a = parseInt(parts[0], 10) || 0;
+          const d = parseInt(parts[1], 10) || 0;
+          const entry = addMap.get(currentEmail) || { a: 0, d: 0 };
+          entry.a += a;
+          entry.d += d;
+          addMap.set(currentEmail, entry);
+        }
+      }
+      for (const c of contributors) {
+        const s = addMap.get(c.email);
+        c.additions = s?.a ?? 0;
+        c.deletions = s?.d ?? 0;
+      }
+
+      // 2b. Weekly activity (last 52 weeks) from commit timestamps
+      const weeklyOut = await execGit(repoPath, "log", "--all", "--format=%at", "--since=52.weeks");
+      const weekMap = new Map<number, number>();
+      for (const line of weeklyOut.trim().split("\n").filter(Boolean)) {
+        const ts = parseInt(line, 10);
+        if (!ts) continue;
+        const week = Math.floor(ts / (7 * 24 * 3600));
+        weekMap.set(week, (weekMap.get(week) || 0) + 1);
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const thisWeek = Math.floor(now / (7 * 24 * 3600));
+      for (let w = thisWeek - 51; w <= thisWeek; w++) {
+        weeklyActivity.push({ week: w, count: weekMap.get(w) || 0 });
+      }
+    } catch {}
+
     // 3. Languages from git ls-files
     const filesOut = await execGit(repoPath, "ls-files");
     const langMap = new Map<string, { count: number; lines: number }>();
@@ -1282,7 +1438,7 @@ export async function gitRepoStats(repoPath: string): Promise<GitRepoStats> {
       totalContributors: contributors.length,
       contributors,
       punchcard,
-      weeklyActivity: [],
+      weeklyActivity,
       languages,
     };
   }
@@ -1573,6 +1729,14 @@ export function parseRemoteWebLinks(remoteUrl: string): GitRemoteWebLinks | null
       if (service === "gitlab") return `${baseUrl}/-/compare/${base}...${head}`;
       return `${baseUrl}/compare/${base}...${head}`;
     },
+    prUrl: (base: string, head: string) => {
+      if (service === "gitlab") {
+        return `${baseUrl}/-/merge_requests/new?merge_request[source_branch]=${encodeURIComponent(head)}&merge_request[target_branch]=${encodeURIComponent(base)}`;
+      }
+      if (service === "bitbucket") return `${baseUrl}/pull-requests/new?source=${encodeURIComponent(head)}&dest=${encodeURIComponent(base)}`;
+      if (service === "gitea" || service === "codeberg") return `${baseUrl}/compare/${base}...${head}`;
+      return `${baseUrl}/compare/${base}...${head}?expand=1`;
+    },
   };
 }
 
@@ -1792,6 +1956,37 @@ export async function gitHookSave(repoPath: string, hookName: string, content: s
         await shCmd.execute();
       }
     }
+  }
+}
+
+export async function gitIgnoreGet(repoPath: string): Promise<string> {
+  const Command = getShell();
+  if (Command) {
+    try {
+      const out = await execGit(repoPath, "rev-parse", "--show-toplevel");
+      const root = out.trim();
+      if (!root) return "";
+      const shCmd = new Command("sh", ["-c", `cat "${root}/.gitignore" 2>/dev/null || true`]);
+      const res = await shCmd.execute();
+      return (res.stdout || "").replace(/\r\n/g, "\n");
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+export async function gitIgnoreSave(repoPath: string, content: string): Promise<void> {
+  const Command = getShell();
+  if (!Command) throw new Error("Shell plugin not available");
+  const out = await execGit(repoPath, "rev-parse", "--show-toplevel");
+  const root = out.trim();
+  if (!root) throw new Error("Cannot determine repository root");
+  const b64 = btoa(unescape(encodeURIComponent(content)));
+  const shCmd = new Command("sh", ["-c", `echo "${b64}" | base64 -d > "${root}/.gitignore"`]);
+  const res = await shCmd.execute();
+  if (res.code !== 0) {
+    throw new Error(res.stderr || "Failed to write .gitignore");
   }
 }
 

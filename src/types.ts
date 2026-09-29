@@ -201,6 +201,7 @@ export interface GitRemoteWebLinks {
   fileUrl: (path: string, ref?: string) => string;
   blameUrl: (path: string, ref?: string) => string;
   compareUrl: (base: string, head: string) => string;
+  prUrl: (base: string, head: string) => string;
 }
 
 export interface GitReflogEntry {

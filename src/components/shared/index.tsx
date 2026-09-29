@@ -401,6 +401,7 @@ export function ConfirmDialog(props: {
   danger?: boolean;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
+  children?: JSX.Element;
 }) {
   return (
     <Show when={props.open}>
@@ -414,6 +415,7 @@ export function ConfirmDialog(props: {
           <div style={{ "font-size": "13.5px", "font-weight": 400, "line-height": "1.5", "margin-bottom": "20px", color: "var(--text-secondary, #94a3b8)" }}>
             {props.message}
           </div>
+          {props.children}
           <div style={{ display: "flex", gap: "10px", "justify-content": "flex-end" }}>
             <Button onClick={props.onCancel}>Cancel</Button>
             <Button variant={props.variant || (props.danger ? "danger" : "primary")} onClick={() => props.onConfirm()}>
@@ -4284,5 +4286,150 @@ export function WorkspaceOverviewModal() {
       </div>
     </Show>
   );
+}
+
+export function PushPullOptionsModal() {
+ const ctx = useGit();
+ const [remote, setRemote] = createSignal("origin");
+ const [branch, setBranch] = createSignal(ctx.status()?.branch || "");
+ const [force, setForce] = createSignal(false);
+ const [setUpstream, setUpstreamSet] = createSignal(false);
+ const [rebase, setRebase] = createSignal(false);
+ const [lastKind, setLastKind] = createSignal<"push" | "pull" | null>(null);
+
+ createEffect(() => {
+   const modal = ctx.pushPullModal();
+   if (modal && modal.kind !== lastKind()) {
+     setLastKind(modal.kind);
+     setForce(false);
+     setUpstreamSet(false);
+     setRebase(false);
+     setBranch(ctx.status()?.branch || "");
+   }
+ });
+
+ const remotesList = () => ctx.remotes().map((r) => r.name);
+
+ function handleApply() {
+   const modal = ctx.pushPullModal();
+   if (!modal) return;
+   if (modal.kind === "push") {
+     void ctx.push({
+       remote: remote() || undefined,
+       branch: branch() || undefined,
+       force: force(),
+       setUpstream: setUpstream(),
+     });
+   } else {
+     void ctx.pull({
+       remote: remote() || undefined,
+       branch: branch() || undefined,
+       rebase: rebase(),
+     });
+   }
+   ctx.closePushPullOptions();
+ }
+
+ return (
+   <Show when={ctx.pushPullModal()}>
+     {(modal) => (
+       <div
+         style={{
+           position: "fixed", inset: 0, background: "rgba(10, 14, 23, 0.75)",
+           "backdrop-filter": "blur(16px)", "-webkit-backdrop-filter": "blur(16px)",
+           display: "flex", "align-items": "center", "justify-content": "center", "z-index": 100100,
+           animation: "fadeIn 0.15s ease",
+         }}
+         onClick={ctx.closePushPullOptions}
+       >
+         <div
+           style={{
+             background: "rgba(15, 23, 42, 0.95)",
+             border: "1px solid rgba(56, 189, 248, 0.35)",
+             "border-radius": "16px", padding: "24px 28px",
+             "max-width": "440px", width: "90%",
+             "box-shadow": "0 24px 60px rgba(0,0,0,0.7), 0 0 35px rgba(56, 189, 248, 0.15)",
+           }}
+           onClick={(e) => e.stopPropagation()}
+         >
+           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "16px", "border-bottom": "1px solid rgba(255, 255, 255, 0.08)", "padding-bottom": "12px" }}>
+             <span style={{ "font-weight": 700, "font-size": "15px", color: "var(--text-primary, #f8fafc)", "font-family": "Space Mono, monospace" }}>
+               {modal().kind === "push" ? "Push Options" : "Pull Options"}
+             </span>
+             <button
+               type="button"
+               onClick={ctx.closePushPullOptions}
+               style={{ background: "transparent", border: "none", color: "var(--text-secondary, #94a3b8)", cursor: "pointer", "font-size": "16px", padding: "4px" }}
+             >
+               ✕
+             </button>
+           </div>
+
+           <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+             <label style={{ display: "flex", "flex-direction": "column", gap: "5px", "font-size": "12px", color: "var(--text-secondary, #94a3b8)" }}>
+               Remote
+               <Show
+                 when={remotesList().length > 0}
+                 fallback={
+                   <input
+                     type="text"
+                     placeholder="origin"
+                     value={remote()}
+                     onInput={(e) => setRemote(e.currentTarget.value)}
+                     style={S.input}
+                   />
+                 }
+               >
+                 <select
+                   value={remote()}
+                   onChange={(e) => setRemote(e.currentTarget.value)}
+                   style={{ ...S.input, "font-size": "13px" }}
+                 >
+                   <For each={remotesList()}>{(r) => <option value={r}>{r}</option>}</For>
+                 </select>
+               </Show>
+             </label>
+
+             <label style={{ display: "flex", "flex-direction": "column", gap: "5px", "font-size": "12px", color: "var(--text-secondary, #94a3b8)" }}>
+               Branch
+               <input
+                 type="text"
+                 placeholder={ctx.status()?.branch || "branch name"}
+                 value={branch()}
+                 onInput={(e) => setBranch(e.currentTarget.value)}
+                 style={S.input}
+               />
+             </label>
+
+             <Show when={modal().kind === "push"}>
+               <label style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "12.5px", color: "var(--text-secondary, #94a3b8)", cursor: "pointer" }}>
+                 <input type="checkbox" checked={setUpstream()} onInput={(e) => setUpstreamSet(e.currentTarget.checked)} />
+                 Set upstream (-u)
+               </label>
+               <label style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "12.5px", color: "var(--text-secondary, #94a3b8)", cursor: "pointer" }}>
+                 <input type="checkbox" checked={force()} onInput={(e) => setForce(e.currentTarget.checked)} />
+                 Force push (--force-with-lease)
+               </label>
+             </Show>
+
+             <Show when={modal().kind === "pull"}>
+               <label style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "12.5px", color: "var(--text-secondary, #94a3b8)", cursor: "pointer" }}>
+                 <input type="checkbox" checked={rebase()} onInput={(e) => setRebase(e.currentTarget.checked)} />
+                 Rebase instead of merge (--rebase)
+               </label>
+             </Show>
+
+             <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end", "margin-top": "4px" }}>
+               <Button onClick={ctx.closePushPullOptions}>Cancel</Button>
+               <Button variant="primary" onClick={handleApply}>
+                 {modal().kind === "push" ? "Push" : "Pull"}
+               </Button>
+             </div>
+           </div>
+         </div>
+       </div>
+     )}
+   </Show>
+ );
 }
 
