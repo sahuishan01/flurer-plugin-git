@@ -1,6 +1,12 @@
 # Progress & Roadmap
 
-Last updated: 2026-09-29
+Last updated: 2026-09-29 (v0.18.0)
+
+## v0.18.0 — Explorer view type integration
+- [x] Registered `explorerViewTypes: [{ id: "git", label: "Git", icon, render }]` — "Git" now appears in the explorer's view-type selector (alongside Details/Grid) using Flurer's plugin-extensible view-type API (Flurer aa0cd41)
+- [x] `ExplorerGitView` derives the listed directory from `ctx.files` and mounts the full GitPanel with `autoOpen`, so selecting the Git view type shows git for the current folder and follows navigation
+- [x] `GitPanel` accepts an `autoOpen` prop (bypasses the explorer-switch DOM sniff for auto-opening the current folder)
+- [ ] Empty-folder limitation: the directory can't be detected from an empty listing — shows a hint instead (host ctx exposes no cwd; upstream improvement candidate)
 
 ## Legend
 - [ ] todo · [~] in progress · [x] done · [~] partial

@@ -104,13 +104,15 @@ function GitPanel(props: any) {
     const isActive = props.active;
     if (!isActive || !p) return;
 
-    const fromExplorer = switchedFromExplorer();
+    const fromExplorer = props.autoOpen === true || switchedFromExplorer();
     if (!fromExplorer) {
       // Must ONLY process props.currentPath if the user explicitly switched from Explorer view
       return;
     }
 
-    setSwitchedFromExplorer(false);
+    if (props.autoOpen !== true) {
+      setSwitchedFromExplorer(false);
+    }
 
     if (p === lastHandledPath) return;
     lastHandledPath = p;
@@ -538,6 +540,49 @@ function GitPanel(props: any) {
 
 declare const __VERSION__: string;
 
+// Derive the directory being listed from the explorer listing context. Falls
+// back to null for empty folders (no entries to infer the path from).
+function dirFromCtx(ctx: any): string | null {
+  try {
+    const files = typeof ctx?.files === "function" ? ctx.files() : ctx?.files;
+    const first = files && files.length > 0 ? files[0] : null;
+    const p: string | undefined = first?.path;
+    if (!p) return null;
+    const norm = String(p).replace(/[\\/]+$/, "");
+    const idx = Math.max(norm.lastIndexOf("/"), norm.lastIndexOf("\\"));
+    return idx > 0 ? norm.slice(0, idx) : null;
+  } catch {
+    return null;
+  }
+}
+
+function ExplorerGitView(props: { ctx: any }) {
+  const dir = () => dirFromCtx(props.ctx);
+  return (
+    <Show
+      when={dir()}
+      fallback={
+        <div style={{ padding: "32px 24px", "font-size": "13px", color: "var(--text-muted, #94a3b8)" }}>
+          Git view needs a non-empty folder to detect the repository. Navigate to a folder containing files.
+        </div>
+      }
+    >
+      <GitPanel
+        currentPath={dir()!}
+        active={true}
+        autoOpen={true}
+        navigateTo={() => {}}
+        searchQuery=""
+        focusPath={null}
+        dataBgLightness={null}
+        settingsLoaded={true}
+        pluginSettings={{}}
+        onPluginSettingsChange={() => {}}
+      />
+    </Show>
+  );
+}
+
 window.registerPlugin({
   id: "git",
   name: "Git Operations",
@@ -545,6 +590,14 @@ window.registerPlugin({
   version: __VERSION__,
   author: "Algosculptor",
   hasCustomAppearanceSettings: true,
+  explorerViewTypes: [
+    {
+      id: "git",
+      label: "Git",
+      icon: GitIcon,
+      render: ({ ctx }: any) => <ExplorerGitView ctx={ctx} />,
+    },
+  ],
   viewRailButton: (props: any) => (
     <button
       type="button"
